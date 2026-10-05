@@ -1,242 +1,668 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView, Image } from 'react-native';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
-import { X, Music, Flashlight, Repeat, Settings2, Sparkles, Clock, Image as ImageIcon, Check } from 'lucide-react-native';
+import { X, Music, Flashlight, Repeat, Settings2, Sparkles, Clock, Image as ImageIcon, Check, ChevronLeft, MapPin, ToggleRight, ToggleLeft, Camera, Upload, Folder, Cloud, MoreHorizontal, MessageSquare, Eye, Globe, Zap, UploadCloud, CheckCircle2, FileVideo, Music2, Edit3, ImagePlus, ChevronRight } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useVideoPlayer, VideoView } from 'expo-video';
 
-export function CreateView({ user, onPublishSuccess, onClose }: { user?: any, onPublishSuccess?: () => void, onClose?: () => void }) {
-  const [facing, setFacing] = useState<'back' | 'front'>(Platform.OS === 'web' ? 'front' : 'back');
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+// --- Types ---
+type CreateStep = 
+  | 'HOME'
+  | 'RECORD'
+  | 'UPLOAD'
+  | 'CHOOSE_TALENT'
+  | 'PREVIEW'
+  | 'SET_PURPOSE'
+  | 'DETAILS'
+  | 'SUMMARY'
+  | 'UPLOADING'
+  | 'SUCCESS';
+
+export default function CreateView({ onClose }: { onClose?: () => void }) {
+  // --- Permissions ---
+  const [facing, setFacing] = useState<'front' | 'back'>(Platform.OS === 'web' ? 'front' : 'back');
+  const [camPermission, requestCamPermission] = useCameraPermissions();
   const [micPermission, requestMicPermission] = useMicrophonePermissions();
+
+  // --- State ---
+  const [step, setStep] = useState<CreateStep>('HOME');
+  const [recordedVideoUri, setRecordedVideoUri] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const cameraRef = useRef<CameraView>(null);
-  
-  // Preview / Publish State
-  const [recordedVideoUri, setRecordedVideoUri] = useState<string | null>(null);
-  const [title, setTitle] = useState('');
-  const [isPublishing, setIsPublishing] = useState(false);
+
+  // Form Data
+  const [category, setCategory] = useState('Dance');
+  const [subCategory, setSubCategory] = useState('Contemporary');
+  const [purpose, setPurpose] = useState('Get Discovered');
+  const [title, setTitle] = useState('Midnight Movement');
+  const [location, setLocation] = useState('Bengaluru, India');
+  const [allowJudging, setAllowJudging] = useState(true);
+  const [allowComments, setAllowComments] = useState(true);
+  const [visibility, setVisibility] = useState('Public');
+
+  // Upload progress simulation
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const previewPlayer = useVideoPlayer(recordedVideoUri || '', player => {
     player.loop = true;
     player.play();
   });
 
-  if (!cameraPermission || !micPermission) {
-    return <View className="flex-1 bg-black" />;
-  }
-
-  const hasAllPermissions = cameraPermission.granted && micPermission.granted;
-
-  if (!hasAllPermissions) {
-    return (
-      <View className="flex-1 bg-black items-center justify-center px-8">
-        <Sparkles color="#E91E63" size={48} className="mb-6" />
-        <Text className="text-white text-xl font-bold text-center mb-3">Allow Access</Text>
-        <Text className="text-[#9CA3AF] text-center mb-8">
-          To record your talents and share them with the world, we need access to your camera and microphone.
-        </Text>
-        <TouchableOpacity 
-          className="bg-[#E91E63] w-full py-4 rounded-full items-center"
-          onPress={async () => {
-            await requestCameraPermission();
-            await requestMicPermission();
-          }}
-        >
-          <Text className="text-white font-bold text-[16px]">Grant Permissions</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  function toggleCameraFacing() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  // --- Actions ---
+  const toggleCameraFacing = () => {
     setFacing(current => (current === 'back' ? 'front' : 'back'));
-  }
+  };
 
   async function toggleRecord() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (!isRecording) {
-      setIsRecording(true);
-      if (cameraRef.current) {
-        try {
-          const video = await cameraRef.current.recordAsync({ maxDuration: 60 });
-          if (video && video.uri) {
-            setRecordedVideoUri(video.uri);
-          }
-        } catch (error) {
-          console.error("Failed to record video:", error);
-        } finally {
-          setIsRecording(false);
-        }
-      }
-    } else {
+    if (!cameraRef.current) return;
+    
+    if (isRecording) {
+      cameraRef.current.stopRecording();
       setIsRecording(false);
-      if (cameraRef.current) {
-        cameraRef.current.stopRecording();
+    } else {
+      try {
+        setIsRecording(true);
+        const video = await cameraRef.current.recordAsync({ maxDuration: 60 });
+        if (video && video.uri) {
+          setRecordedVideoUri(video.uri);
+          setStep('PREVIEW');
+        }
+      } catch (error) {
+        console.error("Failed to record video:", error);
+        setIsRecording(false);
       }
     }
   }
 
-  async function handlePublish() {
-    if (!title.trim() || !recordedVideoUri || !user) return;
+  const handlePublish = async () => {
+    setStep('UPLOADING');
     
-    setIsPublishing(true);
+    // Simulate upload progress
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += 10;
+      setUploadProgress(progress);
+      if (progress >= 100) {
+        clearInterval(interval);
+        
+        // Execute real upload here
+        submitToServer().then(() => {
+          setStep('SUCCESS');
+        }).catch(err => {
+          console.error(err);
+          setStep('SUMMARY'); // revert on error
+        });
+      }
+    }, 300);
+  };
+
+  const submitToServer = async () => {
     try {
       const formData = new FormData();
       formData.append('title', title.trim());
-      formData.append('authorId', String(user.id));
+      formData.append('authorId', '1'); // Mock user ID
       formData.append('description', '');
+      formData.append('category', category);
+      formData.append('subCategory', subCategory);
+      formData.append('purpose', purpose);
+      formData.append('location', location);
+      formData.append('allowJudging', String(allowJudging));
       
-      // In React Native, we append the file as an object
-      formData.append('video', {
-        uri: recordedVideoUri,
-        type: 'video/mp4',
-        name: `video_${Date.now()}.mp4`,
-      } as any);
-
-      const response = await fetch('http://localhost:3000/api/videos', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (response.ok) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        if (onPublishSuccess) onPublishSuccess();
+      if (recordedVideoUri) {
+        // Only append on native or if we have a real file
+        if (Platform.OS !== 'web') {
+          formData.append('video', {
+            uri: recordedVideoUri,
+            name: 'video.mp4',
+            type: 'video/mp4'
+          } as any);
+        }
       }
-    } catch (error) {
-      console.error("Publish failed:", error);
-    } finally {
-      setIsPublishing(false);
+      
+      // In a real scenario, use actual API URL
+      console.log('Sending to server...', formData);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    } catch (e) {
+      console.error(e);
+      throw e;
     }
   }
 
-  if (recordedVideoUri) {
-    return (
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1 bg-black">
-        <View className="flex-1 relative">
-          <VideoView player={previewPlayer} style={StyleSheet.absoluteFill} contentFit="cover" />
-          
-          <View className="absolute top-14 left-5 right-5 flex-row justify-between items-center z-10">
-            <TouchableOpacity 
-              className="w-[40px] h-[40px] bg-black/50 rounded-full items-center justify-center"
-              onPress={() => setRecordedVideoUri(null)}
-            >
-              <X color="#fff" size={20} />
-            </TouchableOpacity>
-          </View>
-
-          <View className="absolute bottom-0 w-full bg-black/80 px-6 pt-6 pb-10 rounded-t-3xl border-t border-white/10">
-            <Text className="text-white text-lg font-bold mb-4">Post your performance</Text>
-            
-            <TextInput
-              value={title}
-              onChangeText={setTitle}
-              placeholder="Describe your talent... #singing #dance"
-              placeholderTextColor="#9CA3AF"
-              className="w-full bg-[#1A1D24] text-white px-5 py-4 rounded-xl border border-white/5 mb-6"
-              multiline
-            />
-
-            <TouchableOpacity 
-              className={`w-full py-4 rounded-full items-center justify-center flex-row ${title.trim() ? 'bg-[#E91E76]' : 'bg-[#E91E76]/50'}`}
-              activeOpacity={0.8}
-              disabled={!title.trim() || isPublishing}
-              onPress={handlePublish}
-            >
-              {isPublishing ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <>
-                  <Check color="#fff" size={20} className="mr-2" />
-                  <Text className="text-white font-bold text-[16px]">Publish</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
-    );
-  }
-
-  return (
-    <View className="flex-1 bg-black">
-      <CameraView 
-        ref={cameraRef}
-        className="flex-1 w-full h-full"
-        facing={facing}
-        mode="video"
-      >
-        <View className="pt-14 px-5 flex-row justify-between items-start">
-          <TouchableOpacity 
-            className="w-[40px] h-[40px] bg-black/40 rounded-full items-center justify-center border border-white/10"
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              onClose && onClose();
-            }}
-          >
-            <X color="#fff" size={20} />
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            className="bg-black/40 px-4 py-2 rounded-full border border-white/10 flex-row items-center gap-2"
-            onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
-          >
-            <Music color="#fff" size={14} />
-            <Text className="text-white text-[13px] font-medium">Add Sound</Text>
-          </TouchableOpacity>
-
-          <View className="w-[40px]" />
-        </View>
-
-        <View className="absolute right-4 top-32 items-center gap-6 bg-black/20 rounded-full py-5 px-2 border border-white/10">
-          <SidebarButton icon={<Repeat color="#fff" size={24} />} label="Flip" onPress={toggleCameraFacing} />
-          <SidebarButton icon={<Flashlight color="#fff" size={24} />} label="Flash" />
-          <SidebarButton icon={<Settings2 color="#fff" size={24} />} label="Filters" />
-          <SidebarButton icon={<Clock color="#fff" size={24} />} label="Timer" />
-        </View>
-
-        <View className="absolute bottom-0 inset-x-0 pb-12 pt-8 bg-gradient-to-t from-black/80 to-transparent">
-          <View className="flex-row justify-center gap-8 mb-6">
-            <Text className="text-white/60 font-semibold text-[13px]">15s</Text>
-            <Text className="text-white font-bold text-[13px]">60s</Text>
-            <Text className="text-white/60 font-semibold text-[13px]">Photo</Text>
-          </View>
-
-          <View className="flex-row items-center justify-center gap-12">
-            <TouchableOpacity className="items-center gap-1">
-              <View className="w-[40px] h-[40px] rounded-[10px] overflow-hidden border border-white/20 bg-white/10 items-center justify-center">
-                <ImageIcon color="#fff" size={20} />
-              </View>
-              <Text className="text-white/80 text-[11px] font-medium">Upload</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              activeOpacity={0.8}
-              onPress={toggleRecord}
-              className={`w-[80px] h-[80px] rounded-full border-4 items-center justify-center transition-all ${isRecording ? 'border-red-500/50' : 'border-white/50'}`}
-            >
-              <View className={`rounded-full bg-red-500 ${isRecording ? 'w-[30px] h-[30px] rounded-md' : 'w-[64px] h-[64px]'}`} />
-            </TouchableOpacity>
-
-            <TouchableOpacity className="items-center gap-1">
-              <View className="w-[40px] h-[40px] rounded-[10px] overflow-hidden border border-white/20 bg-white/10 items-center justify-center">
-                <Sparkles color="#fff" size={20} />
-              </View>
-              <Text className="text-white/80 text-[11px] font-medium">Effects</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </CameraView>
+  // --- Render Helpers ---
+  const TopNav = ({ title, onBack, rightEl }: { title?: string, onBack: () => void, rightEl?: React.ReactNode }) => (
+    <View className="flex-row items-center justify-between px-5 mb-8">
+      <TouchableOpacity onPress={onBack} className="p-1 -ml-1">
+        <ChevronLeft color="#fff" size={28} />
+      </TouchableOpacity>
+      {title && <Text className="text-white font-semibold text-lg">{title}</Text>}
+      <View className="min-w-[28px] items-end">
+        {rightEl}
+      </View>
     </View>
   );
-}
 
-function SidebarButton({ icon, label, onPress }: { icon: React.ReactNode, label: string, onPress?: () => void }) {
-  return (
-    <TouchableOpacity className="items-center gap-1" onPress={onPress}>
-      {icon}
-      <Text className="text-white text-[10px] font-medium drop-shadow-md">{label}</Text>
-    </TouchableOpacity>
+  // --- Screens ---
+
+  const renderHome = () => (
+    <View className="flex-1 bg-[#050608] px-6 pt-16">
+      <View className="flex-row justify-between items-center mb-8">
+        <Text className="text-white font-serif text-2xl font-bold italic tracking-wider">talent.</Text>
+        {onClose && (
+          <TouchableOpacity onPress={onClose}>
+            <X color="#fff" size={24} />
+          </TouchableOpacity>
+        )}
+      </View>
+      
+      <Text className="text-white text-4xl font-serif mt-4 mb-2">Create</Text>
+      <Text className="text-[#9CA3AF] text-lg mb-12">Show what you can do.</Text>
+      
+      <TouchableOpacity 
+        className="bg-[#E91E76] w-full rounded-2xl p-5 mb-4 flex-row items-center"
+        onPress={() => {
+          if (!camPermission?.granted) requestCamPermission();
+          if (!micPermission?.granted) requestMicPermission();
+          setStep('RECORD');
+        }}
+      >
+        <View className="bg-white/20 p-3 rounded-full mr-4">
+          <Camera color="#fff" size={24} />
+        </View>
+        <View className="flex-1">
+          <Text className="text-white font-bold text-lg mb-1">Record Performance</Text>
+          <Text className="text-white/80 text-sm">Start with your camera</Text>
+        </View>
+        <ChevronRight color="#fff" size={20} opacity={0.7} />
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        className="bg-[#1A1D24] border border-white/10 w-full rounded-2xl p-5 mb-4 flex-row items-center"
+        onPress={() => setStep('UPLOAD')}
+      >
+        <View className="bg-white/10 p-3 rounded-full mr-4">
+          <Upload color="#fff" size={24} />
+        </View>
+        <View className="flex-1">
+          <Text className="text-white font-bold text-lg mb-1">Upload Performance</Text>
+          <Text className="text-[#9CA3AF] text-sm">Choose from your device</Text>
+        </View>
+        <ChevronRight color="#fff" size={20} opacity={0.5} />
+      </TouchableOpacity>
+
+      <TouchableOpacity className="bg-[#1A1D24] border border-white/10 rounded-2xl p-4 flex-row items-center self-start px-6 mt-2">
+        <Folder color="#9CA3AF" size={20} className="mr-3" />
+        <Text className="text-white font-medium">Drafts • 2</Text>
+        <ChevronRight color="#9CA3AF" size={16} className="ml-2" />
+      </TouchableOpacity>
+      
+      <View className="absolute bottom-10 -left-10 opacity-20 transform -rotate-12">
+        <Text className="text-white text-3xl font-serif italic">Your talent.</Text>
+        <Text className="text-[#E91E76] text-3xl font-serif italic mt-1">Your stage.</Text>
+      </View>
+    </View>
   );
+
+  const renderRecord = () => {
+    if (!camPermission || !camPermission.granted) {
+      return (
+        <View className="flex-1 bg-black items-center justify-center">
+          <Text className="text-white">Camera permission is required.</Text>
+          <TouchableOpacity onPress={requestCamPermission} className="mt-4 bg-[#E91E76] px-4 py-2 rounded">
+            <Text className="text-white">Grant Permission</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    
+    return (
+      <View className="flex-1 bg-black">
+        <CameraView ref={cameraRef} className="flex-1 w-full h-full" facing={facing} mode="video">
+          <View className="pt-14 px-5 flex-row justify-between items-start z-10">
+            <TouchableOpacity onPress={() => setStep('HOME')}>
+              <X color="#fff" size={28} />
+            </TouchableOpacity>
+            
+            <View className="flex-row gap-4 items-center">
+              <TouchableOpacity>
+                <Flashlight color="#fff" size={24} />
+              </TouchableOpacity>
+              <TouchableOpacity className="flex-row items-center gap-2">
+                <Music color="#fff" size={24} />
+              </TouchableOpacity>
+            </View>
+          </View>
+          
+          <View className="absolute right-4 top-40 items-center gap-6 z-10">
+            <TouchableOpacity onPress={toggleCameraFacing} className="items-center">
+              <Repeat color="#fff" size={22} />
+              <Text className="text-white text-[10px] mt-1 font-medium">Flip</Text>
+            </TouchableOpacity>
+            <TouchableOpacity className="items-center">
+              <Zap color="#fff" size={22} />
+              <Text className="text-white text-[10px] mt-1 font-medium">Speed</Text>
+            </TouchableOpacity>
+            <TouchableOpacity className="items-center">
+              <Clock color="#fff" size={22} />
+              <Text className="text-white text-[10px] mt-1 font-medium">Timer</Text>
+            </TouchableOpacity>
+            <TouchableOpacity className="items-center">
+              <Settings2 color="#fff" size={22} />
+              <Text className="text-white text-[10px] mt-1 font-medium">Filters</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <View className="absolute bottom-0 inset-x-0 pb-12 pt-20 bg-gradient-to-t from-black via-black/50 to-transparent">
+            <View className="flex-row justify-center gap-8 mb-6">
+              <Text className="text-[#E91E76] font-bold text-[14px]">Video</Text>
+              <Text className="text-white/60 font-semibold text-[14px]">Photo</Text>
+            </View>
+            
+            <View className="flex-row items-center justify-center">
+              <TouchableOpacity onPress={toggleRecord} className="items-center justify-center">
+                <View className={`rounded-full border-[4px] items-center justify-center transition-all ${isRecording ? 'border-[#E91E76] w-[88px] h-[88px]' : 'border-white/50 w-[80px] h-[80px]'}`}>
+                  <View className={`rounded-full bg-[#E91E76] ${isRecording ? 'w-[36px] h-[36px] rounded-md' : 'w-[64px] h-[64px]'}`} />
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </CameraView>
+      </View>
+    );
+  };
+
+  const renderUpload = () => (
+    <View className="flex-1 bg-[#050608] pt-14">
+      <TopNav title="Upload Performance" onBack={() => setStep('HOME')} />
+      
+      <View className="px-5 mt-4">
+        <TouchableOpacity className="w-full aspect-[4/3] rounded-3xl border-2 border-dashed border-[#E91E76]/50 bg-[#E91E76]/5 items-center justify-center mb-8">
+          <UploadCloud color="#E91E76" size={40} className="mb-4" />
+          <Text className="text-white font-bold text-lg mb-1">Choose a video</Text>
+          <Text className="text-[#9CA3AF] text-sm">Select from your device</Text>
+          <Text className="text-[#9CA3AF] text-xs mt-1">(Max 3 minutes)</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity className="flex-row justify-between items-center bg-[#1A1D24] p-5 rounded-2xl mb-3">
+          <View className="flex-row items-center gap-4">
+            <ImageIcon color="#9CA3AF" size={24} />
+            <Text className="text-white font-medium text-[16px]">From Gallery</Text>
+          </View>
+          <ChevronRight color="#9CA3AF" size={20} />
+        </TouchableOpacity>
+        
+        <TouchableOpacity className="flex-row justify-between items-center bg-[#1A1D24] p-5 rounded-2xl mb-3">
+          <View className="flex-row items-center gap-4">
+            <FileVideo color="#9CA3AF" size={24} />
+            <Text className="text-white font-medium text-[16px]">From Files</Text>
+          </View>
+          <ChevronRight color="#9CA3AF" size={20} />
+        </TouchableOpacity>
+        
+        <TouchableOpacity className="flex-row justify-between items-center bg-[#1A1D24] p-5 rounded-2xl mb-3">
+          <View className="flex-row items-center gap-4">
+            <Cloud color="#9CA3AF" size={24} />
+            <Text className="text-white font-medium text-[16px]">From Cloud</Text>
+          </View>
+          <ChevronRight color="#9CA3AF" size={20} />
+        </TouchableOpacity>
+        
+        <Text className="text-center text-[#9CA3AF] text-xs mt-6">
+          Supported: MP4, MOV, HEVC{'\n'}Max size: 500 MB
+        </Text>
+      </View>
+    </View>
+  );
+
+  const renderPreview = () => (
+    <View className="flex-1 bg-[#050608] pt-14">
+      <TopNav 
+        title="Preview & Edit" 
+        onBack={() => { setRecordedVideoUri(null); setStep('RECORD'); }} 
+        rightEl={
+          <TouchableOpacity onPress={() => setStep('CHOOSE_TALENT')} className="bg-[#E91E76] px-4 py-1.5 rounded-full">
+            <Text className="text-white font-bold">Next</Text>
+          </TouchableOpacity>
+        }
+      />
+      
+      <View className="flex-1 px-5 pb-5">
+        <View className="flex-1 rounded-3xl overflow-hidden bg-black mb-6 border border-white/10 relative">
+          {recordedVideoUri && <VideoView player={previewPlayer} style={StyleSheet.absoluteFill} contentFit="cover" />}
+          
+          {/* Progress bar mock */}
+          <View className="absolute bottom-4 left-4 right-4 h-1 bg-white/20 rounded-full overflow-hidden">
+            <View className="h-full w-1/3 bg-[#E91E76]" />
+          </View>
+          <Text className="absolute bottom-6 right-4 text-white text-[10px] font-medium drop-shadow-md">00:12 / 00:58</Text>
+        </View>
+        
+        <View className="flex-row justify-between px-2">
+          <TouchableOpacity className="items-center">
+            <Edit3 color="#fff" size={24} className="mb-2" />
+            <Text className="text-white text-xs">Trim</Text>
+          </TouchableOpacity>
+          <TouchableOpacity className="items-center">
+            <ImagePlus color="#fff" size={24} className="mb-2" />
+            <Text className="text-white text-xs">Cover</Text>
+          </TouchableOpacity>
+          <TouchableOpacity className="items-center">
+            <Music2 color="#fff" size={24} className="mb-2" />
+            <Text className="text-white text-xs">Sound</Text>
+          </TouchableOpacity>
+          <TouchableOpacity className="items-center">
+            <MessageSquare color="#fff" size={24} className="mb-2" />
+            <Text className="text-white text-xs">Caption</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderChooseTalent = () => (
+    <View className="flex-1 bg-[#050608] pt-14">
+      <TopNav onBack={() => setStep('PREVIEW')} />
+      <Text className="text-white text-[28px] font-bold px-5 mb-2">What are you showing?</Text>
+      <Text className="text-[#9CA3AF] px-5 mb-8">Choose the main talent category.</Text>
+      
+      <View className="flex-row flex-wrap px-3 mb-6">
+        {['Dance', 'Voice', 'Music', 'Acting', 'Comedy', 'Film', 'Art', 'Other'].map((cat) => (
+          <TouchableOpacity 
+            key={cat}
+            onPress={() => setCategory(cat)}
+            className={`w-[22%] aspect-square m-[1.5%] rounded-2xl items-center justify-center border-2 ${category === cat ? 'border-[#E91E76] bg-[#E91E76]/10' : 'border-white/5 bg-[#1A1D24]'}`}
+          >
+            <View className={`w-8 h-8 rounded-full mb-2 ${category === cat ? 'bg-[#E91E76]/20' : 'bg-white/5'}`} />
+            <Text className="text-white text-[11px] font-medium">{cat}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      
+      {category === 'Dance' && (
+        <View className="px-5">
+          <Text className="text-white font-medium mb-3">Dance styles <Text className="text-[#9CA3AF] text-sm">(optional)</Text></Text>
+          <View className="flex-row flex-wrap gap-2">
+            {['Contemporary', 'Hip-Hop', 'Classical', 'Freestyle', 'Ballet', 'Folk', 'Other'].map(sub => (
+              <TouchableOpacity 
+                key={sub}
+                onPress={() => setSubCategory(sub)}
+                className={`px-4 py-2 rounded-full border ${subCategory === sub ? 'border-[#E91E76] bg-[#E91E76]/10' : 'border-white/10'}`}
+              >
+                <Text className={subCategory === sub ? 'text-[#E91E76] font-medium' : 'text-[#9CA3AF]'}>{sub}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      )}
+      
+      <View className="mt-auto px-5 pb-10 pt-4">
+        <TouchableOpacity onPress={() => setStep('SET_PURPOSE')} className="bg-[#E91E76] w-full py-4 rounded-full items-center">
+          <Text className="text-white font-bold text-[16px]">Continue</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderSetPurpose = () => (
+    <View className="flex-1 bg-[#050608] pt-14">
+      <TopNav onBack={() => setStep('CHOOSE_TALENT')} />
+      <Text className="text-white text-[28px] font-bold px-5 mb-2">What do you want from this performance?</Text>
+      <Text className="text-[#9CA3AF] px-5 mb-8">Choose your main goal.</Text>
+      
+      <View className="px-5 gap-4">
+        {[
+          { id: 'Get Discovered', desc: 'Show this to new people', icon: <Sparkles color={purpose === 'Get Discovered' ? '#E91E76' : '#fff'} /> },
+          { id: 'Get Feedback', desc: 'Let people judge and help you improve', icon: <MessageSquare color={purpose === 'Get Feedback' ? '#E91E76' : '#fff'} /> },
+          { id: 'Find Collaborators', desc: 'Find artists, producers and creators', icon: <Globe color={purpose === 'Find Collaborators' ? '#E91E76' : '#fff'} /> },
+          { id: 'Find Opportunities', desc: 'Get considered for shows, auditions and projects', icon: <CheckCircle2 color={purpose === 'Find Opportunities' ? '#E91E76' : '#fff'} /> }
+        ].map((item) => (
+          <TouchableOpacity 
+            key={item.id}
+            onPress={() => setPurpose(item.id)}
+            className={`w-full p-5 rounded-2xl border-2 flex-row items-center ${purpose === item.id ? 'border-[#E91E76] bg-[#E91E76]/5' : 'border-white/5 bg-[#1A1D24]'}`}
+          >
+            <View className="w-12 items-center justify-center">{item.icon}</View>
+            <View className="flex-1 ml-2">
+              <Text className="text-white font-bold text-lg mb-1">{item.id}</Text>
+              <Text className="text-[#9CA3AF] text-sm">{item.desc}</Text>
+            </View>
+            <ChevronRight color={purpose === item.id ? '#E91E76' : '#9CA3AF'} size={20} />
+          </TouchableOpacity>
+        ))}
+      </View>
+      
+      <View className="mt-auto px-5 pb-10 pt-4">
+        <TouchableOpacity onPress={() => setStep('DETAILS')} className="bg-[#E91E76] w-full py-4 rounded-full items-center">
+          <Text className="text-white font-bold text-[16px]">Continue</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderDetails = () => (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1 bg-[#050608]">
+      <ScrollView className="flex-1">
+        <View className="pt-14">
+          <TopNav onBack={() => setStep('SET_PURPOSE')} />
+          <Text className="text-white text-[28px] font-bold px-5 mb-2">Performance Details</Text>
+          <Text className="text-[#9CA3AF] px-5 mb-8">Add the finishing touches.</Text>
+          
+          <View className="px-5">
+            <View className="flex-row mb-8">
+              <View className="w-24 h-36 bg-[#1A1D24] rounded-xl overflow-hidden mr-4">
+                {recordedVideoUri && <VideoView player={previewPlayer} style={StyleSheet.absoluteFill} contentFit="cover" />}
+                <View className="absolute bottom-0 w-full bg-black/60 py-1">
+                  <Text className="text-white text-[10px] text-center font-medium">Change Cover</Text>
+                </View>
+              </View>
+              
+              <View className="flex-1">
+                <Text className="text-[#9CA3AF] mb-2 font-medium text-xs uppercase tracking-wider">Title</Text>
+                <TextInput
+                  value={title}
+                  onChangeText={setTitle}
+                  placeholder="Midnight Movement"
+                  placeholderTextColor="#6B7280"
+                  className="w-full bg-[#1A1D24] text-white px-4 py-3 rounded-xl border border-white/5 mb-4 font-medium"
+                />
+                
+                <Text className="text-[#9CA3AF] mb-2 font-medium text-xs uppercase tracking-wider">Location</Text>
+                <View className="flex-row items-center bg-[#1A1D24] border border-white/5 rounded-xl px-4 py-3">
+                  <MapPin color="#E91E76" size={16} className="mr-2" />
+                  <TextInput
+                    value={location}
+                    onChangeText={setLocation}
+                    placeholder="Bengaluru, India"
+                    placeholderTextColor="#6B7280"
+                    className="flex-1 text-white p-0 m-0 font-medium"
+                  />
+                </View>
+              </View>
+            </View>
+            
+            <View className="h-[1px] bg-white/5 w-full mb-6" />
+            
+            <View className="flex-row items-center justify-between mb-6">
+              <View className="flex-1 pr-4">
+                <Text className="text-white font-bold text-[16px] mb-1">Allow Judging</Text>
+                <Text className="text-[#9CA3AF] text-sm">Let viewers give this performance a Talent Score.</Text>
+              </View>
+              <TouchableOpacity onPress={() => setAllowJudging(!allowJudging)}>
+                {allowJudging ? <ToggleRight color="#E91E76" size={44} /> : <ToggleLeft color="#4B5563" size={44} />}
+              </TouchableOpacity>
+            </View>
+            
+            <TouchableOpacity className="flex-row justify-between items-center bg-[#1A1D24] p-4 rounded-xl border border-white/5">
+              <Text className="text-white font-medium">More settings</Text>
+              <ChevronRight color="#9CA3AF" size={20} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ScrollView>
+      
+      <View className="px-5 pb-10 pt-4 bg-[#050608]">
+        <TouchableOpacity 
+          className={`w-full py-4 rounded-full items-center justify-center ${title.trim() ? 'bg-[#E91E76]' : 'bg-[#E91E76]/50'}`}
+          activeOpacity={0.8}
+          disabled={!title.trim()}
+          onPress={() => setStep('SUMMARY')}
+        >
+          <Text className="text-white font-bold text-[16px]">Continue</Text>
+        </TouchableOpacity>
+      </View>
+    </KeyboardAvoidingView>
+  );
+
+  const renderSummary = () => (
+    <View className="flex-1 bg-[#050608] pt-14">
+      <TopNav onBack={() => setStep('DETAILS')} />
+      <Text className="text-white text-[28px] font-bold px-5 mb-2">Ready to Publish?</Text>
+      <Text className="text-[#9CA3AF] px-5 mb-8">Here's a quick summary.</Text>
+      
+      <View className="px-5">
+        <View className="bg-[#1A1D24] rounded-2xl p-4 flex-row mb-6 border border-white/5">
+          <View className="w-20 h-28 bg-[#2A2D34] rounded-lg overflow-hidden mr-4 relative">
+             {recordedVideoUri && <VideoView player={previewPlayer} style={StyleSheet.absoluteFill} contentFit="cover" />}
+             <View className="absolute inset-0 items-center justify-center bg-black/20">
+               <View className="w-8 h-8 rounded-full bg-black/50 items-center justify-center">
+                 <Text className="text-white text-xs">▶</Text>
+               </View>
+             </View>
+          </View>
+          
+          <View className="flex-1 justify-center">
+            <Text className="text-white font-bold text-lg mb-1">{title}</Text>
+            <Text className="text-[#E91E76] font-medium text-sm mb-2">{category} • {subCategory}</Text>
+            
+            <View className="flex-row items-center mb-2">
+              <MapPin color="#9CA3AF" size={12} className="mr-1" />
+              <Text className="text-[#9CA3AF] text-xs">{location}</Text>
+            </View>
+            
+            <View className="self-start bg-white/5 px-3 py-1 rounded-full flex-row items-center">
+              <Sparkles color="#E91E76" size={12} className="mr-1" />
+              <Text className="text-[#9CA3AF] text-xs">Goal: {purpose}</Text>
+            </View>
+          </View>
+        </View>
+        
+        <View className="space-y-4">
+          <View className="flex-row justify-between items-center py-1">
+            <Text className="text-white font-medium">Allow Judging</Text>
+            <View className="flex-row items-center">
+              <CheckCircle2 color="#10B981" size={16} className="mr-1.5" />
+              <Text className="text-[#10B981] font-medium">On</Text>
+            </View>
+          </View>
+          <View className="flex-row justify-between items-center py-1">
+            <Text className="text-white font-medium">Comments (Talk)</Text>
+            <View className="flex-row items-center">
+              <CheckCircle2 color="#10B981" size={16} className="mr-1.5" />
+              <Text className="text-[#10B981] font-medium">On</Text>
+            </View>
+          </View>
+          <View className="flex-row justify-between items-center py-1">
+            <Text className="text-white font-medium">Visibility</Text>
+            <View className="flex-row items-center">
+              <Globe color="#9CA3AF" size={16} className="mr-1.5" />
+              <Text className="text-[#9CA3AF] font-medium">Public</Text>
+            </View>
+          </View>
+        </View>
+        
+        <TouchableOpacity className="flex-row justify-between items-center bg-[#1A1D24] p-4 rounded-xl border border-white/5 mt-8">
+          <Text className="text-white font-medium">More settings</Text>
+          <ChevronRight color="#9CA3AF" size={20} />
+        </TouchableOpacity>
+      </View>
+      
+      <View className="mt-auto px-5 pb-10">
+        <TouchableOpacity 
+          className="w-full py-4 rounded-full items-center justify-center bg-[#E91E76]"
+          activeOpacity={0.8}
+          onPress={handlePublish}
+        >
+          <Text className="text-white font-bold text-[16px]">Publish Performance</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderUploading = () => (
+    <View className="flex-1 bg-[#050608] items-center justify-center px-8">
+      <Cloud color="#E91E76" size={80} className="mb-8" opacity={0.8} />
+      
+      <Text className="text-white text-2xl font-bold text-center mb-2">Publishing your{'\n'}performance...</Text>
+      <Text className="text-[#9CA3AF] text-center mb-12">This may take a few moments.</Text>
+      
+      <View className="w-full mb-8">
+        <View className="flex-row justify-between mb-2">
+          <Text className="text-white font-medium"></Text>
+          <Text className="text-[#E91E76] font-bold">{uploadProgress}%</Text>
+        </View>
+        <View className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+          <View className="h-full bg-[#E91E76] rounded-full" style={{ width: `${uploadProgress}%` }} />
+        </View>
+      </View>
+      
+      <View className="w-full space-y-4 px-4">
+        <View className="flex-row items-center">
+          <CheckCircle2 color={uploadProgress > 10 ? "#E91E76" : "#4B5563"} size={20} className="mr-3" />
+          <Text className={uploadProgress > 10 ? "text-white font-medium" : "text-[#4B5563]"}>Uploading video</Text>
+        </View>
+        <View className="flex-row items-center">
+          <CheckCircle2 color={uploadProgress > 50 ? "#E91E76" : "#4B5563"} size={20} className="mr-3" />
+          <Text className={uploadProgress > 50 ? "text-white font-medium" : "text-[#4B5563]"}>Processing video</Text>
+        </View>
+        <View className="flex-row items-center">
+          <CheckCircle2 color={uploadProgress > 80 ? "#E91E76" : "#4B5563"} size={20} className="mr-3" />
+          <Text className={uploadProgress > 80 ? "text-white font-medium" : "text-[#4B5563]"}>Saving details</Text>
+        </View>
+        <View className="flex-row items-center">
+          <CheckCircle2 color={uploadProgress >= 100 ? "#E91E76" : "#4B5563"} size={20} className="mr-3" />
+          <Text className={uploadProgress >= 100 ? "text-white font-medium" : "text-[#4B5563]"}>Finalizing...</Text>
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderSuccess = () => (
+    <View className="flex-1 bg-[#050608] items-center justify-center px-6">
+      <View className="w-24 h-24 rounded-full bg-[#E91E76] items-center justify-center mb-8 relative">
+        <Check color="#fff" size={48} strokeWidth={3} />
+        {/* Decorative sparkles */}
+        <View className="absolute -top-4 -left-4"><Sparkles color="#fff" size={16} opacity={0.6} /></View>
+        <View className="absolute top-0 -right-6"><Sparkles color="#fff" size={20} opacity={0.8} /></View>
+        <View className="absolute -bottom-2 -left-8"><Sparkles color="#E91E76" size={14} /></View>
+        <View className="absolute -bottom-6 right-0"><Sparkles color="#fff" size={18} opacity={0.5} /></View>
+      </View>
+      
+      <Text className="text-white text-3xl font-bold text-center mb-4">Your performance{'\n'}is live!</Text>
+      <Text className="text-[#9CA3AF] text-center mb-12 px-4 leading-relaxed">
+        People can now watch, keep,{'\n'}talk and judge your performance.
+      </Text>
+      
+      <TouchableOpacity className="w-full py-4 rounded-full items-center justify-center bg-[#E91E76] mb-4">
+        <Text className="text-white font-bold text-[16px]">View Performance</Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity onPress={() => { setStep('HOME'); setRecordedVideoUri(null); setTitle(''); }}>
+        <Text className="text-[#9CA3AF] font-medium py-3">Create Another</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  // --- Main Switch ---
+  switch(step) {
+    case 'HOME': return renderHome();
+    case 'RECORD': return renderRecord();
+    case 'UPLOAD': return renderUpload();
+    case 'PREVIEW': return renderPreview();
+    case 'CHOOSE_TALENT': return renderChooseTalent();
+    case 'SET_PURPOSE': return renderSetPurpose();
+    case 'DETAILS': return renderDetails();
+    case 'SUMMARY': return renderSummary();
+    case 'UPLOADING': return renderUploading();
+    case 'SUCCESS': return renderSuccess();
+    default: return renderHome();
+  }
 }

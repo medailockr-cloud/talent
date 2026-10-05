@@ -26,6 +26,12 @@ model Video {
   description String?
   url         String
   
+  category     String?
+  subCategory  String?
+  purpose      String?
+  location     String?
+  allowJudging Boolean   @default(true)
+  
   authorId    Int
   author      User      @relation(fields: [authorId], references: [id])
   

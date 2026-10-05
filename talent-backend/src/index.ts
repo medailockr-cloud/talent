@@ -204,7 +204,7 @@ app.post('/api/auth/login', async (req, res) => {
 // Upload a new Video
 app.post('/api/videos', upload.single('video'), async (req, res) => {
   try {
-    const { title, description, authorId } = req.body;
+    const { title, description, authorId, category, subCategory, purpose, location, allowJudging } = req.body;
     
     if (!req.file) {
       return res.status(400).json({ error: 'No video file provided' });
@@ -217,6 +217,11 @@ app.post('/api/videos', upload.single('video'), async (req, res) => {
         title, 
         description: description || '', 
         url, 
+        category: category || null,
+        subCategory: subCategory || null,
+        purpose: purpose || null,
+        location: location || null,
+        allowJudging: allowJudging === 'false' ? false : true,
         authorId: parseInt(authorId) 
       }
     });
