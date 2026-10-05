@@ -1,358 +1,502 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Image, Alert, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, TouchableOpacity, Image, Alert, TextInput, Platform, ScrollView, Modal, Dimensions, PanResponder, KeyboardAvoidingView } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, { 
   useSharedValue, 
   useAnimatedScrollHandler, 
   useAnimatedStyle,
+  withSpring,
+  withTiming
 } from 'react-native-reanimated';
-import { Search, EyeOff, Flame, Lock, Play, Pause, Maximize2, MoreHorizontal, X, Heart, MessageCircle, Gavel } from 'lucide-react-native';
-import { useVideoPlayer, VideoView } from 'expo-video';
-import { useFeed } from '@/hooks/useFeed';
+import { Search, EyeOff, Play, Pause, Maximize2, MoreHorizontal, X, Bookmark, MessageCircle, Send, ChevronDown, ChevronRight, Gauge, MapPin, Flag, UserX, User } from 'lucide-react-native';
 
-const HEADER_HEIGHT = 175;
+const HEADER_HEIGHT = 130;
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, user }: { video: any, playingVideoId: string | null, setPlayingVideoId: (id: string | null) => void, user?: any }) {
+// 6 Dummy videos with real data
+const initialFeedData = [
+  {
+    id: '1',
+    author: 'Kiara Nair',
+    role: 'Contemporary Dancer • Kochi, India',
+    tags: ['#dance', '#contemporary', '#kerala'],
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100',
+    videoThumb: 'https://images.unsplash.com/photo-1547153760-18fc86324498?w=800&q=80',
+    duration: '0:58',
+    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    isRising: true,
+    isNearby: false,
+    isLive: false,
+    comments: [
+      { id: 'c1', user: 'Arjun Mehta', text: 'Your expression during the final section was powerful.', time: '12m', isUseful: false },
+      { id: 'c2', user: 'Riya Sharma', text: 'The ending felt slightly rushed. A longer hold on the final pose could make it stronger.', time: '20m', isFeedback: true, isUseful: false },
+      { id: 'c3', user: 'Neha Kapoor', text: 'I’m working on a dance film in Bengaluru. Would love to discuss a collaboration.', time: '1h', isOpportunity: true, isUseful: false },
+      { id: 'c4', user: 'Dev Patel', text: 'How did you train that transition?', time: '2h', isQuestion: true, isUseful: false },
+      { id: 'c5', user: 'Kiara Nair', text: 'Thank you! That section was mostly improvised.', time: '3h', isArtist: true, isUseful: false }
+    ]
+  },
+  {
+    id: '2',
+    author: 'Arjun Menon',
+    role: 'Singer-Songwriter • Bengaluru, India',
+    tags: ['#music', '#singer', '#original'],
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100',
+    videoThumb: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&q=80',
+    duration: '1:00',
+    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+    isRising: false,
+    isNearby: true,
+    isLive: true,
+    comments: []
+  },
+  {
+    id: '3',
+    author: 'Meera Rao',
+    role: 'Classical Singer • Chennai, India',
+    tags: ['#classical', '#vocals', '#carnatic'],
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100',
+    videoThumb: 'https://images.unsplash.com/photo-1505228395891-9a51e7e86bf6?w=800&q=80',
+    duration: '1:45',
+    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+    isRising: true,
+    isNearby: false,
+    isLive: false,
+    comments: []
+  },
+  {
+    id: '4',
+    author: 'Kabir Shah',
+    role: 'Beatbox Artist • Mumbai, India',
+    tags: ['#beatbox', '#hiphop', '#vocalpercussion'],
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100',
+    videoThumb: 'https://images.unsplash.com/photo-1516280440502-a2fc9977823b?w=800&q=80',
+    duration: '0:30',
+    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+    isRising: false,
+    isNearby: false,
+    isLive: true,
+    comments: []
+  },
+  {
+    id: '5',
+    author: 'Ananya Iyer',
+    role: 'Actor • Hyderabad, India',
+    tags: ['#acting', '#monologue', '#drama'],
+    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=100',
+    videoThumb: 'https://images.unsplash.com/photo-1527224857830-43a7ace8526d?w=800&q=80',
+    duration: '2:15',
+    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
+    isRising: true,
+    isNearby: true,
+    isLive: false,
+    comments: []
+  },
+  {
+    id: '6',
+    author: 'Rohan Das',
+    role: 'Guitarist • Pune, India',
+    tags: ['#guitar', '#acoustic', '#fingerstyle'],
+    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100',
+    videoThumb: 'https://images.unsplash.com/photo-1510915361894-db8b60106cb1?w=800&q=80',
+    duration: '1:10',
+    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4',
+    isRising: false,
+    isNearby: true,
+    isLive: false,
+    comments: []
+  }
+];
+
+function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { video: any, playingVideoId: string | null, setPlayingVideoId: (id: string | null) => void, onPass: () => void }) {
   const isPlaying = playingVideoId === video.id;
-  const [isLiked, setIsLiked] = useState(video.isLiked);
-  const [likesCount, setLikesCount] = useState(video.likesCount || 0);
   
-  const [isJudging, setIsJudging] = useState(false);
-  const [userRating, setUserRating] = useState<number | null>(video.userRating || null);
-  const [averageRating, setAverageRating] = useState<number>(video.averageRating || 0);
-
+  // Interactive States
+  const [isKept, setIsKept] = useState(false);
+  const [keptText, setKeptText] = useState('KEEP');
+  
   const [isCommenting, setIsCommenting] = useState(false);
   const [commentText, setCommentText] = useState('');
-  const [comments, setComments] = useState<any[]>(video.comments || []);
-  const [commentsCount, setCommentsCount] = useState(video.commentsCount || 0);
-  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [comments, setComments] = useState(video.comments || []);
+  const [attachMoment, setAttachMoment] = useState(false);
+  
+  const [showOptions, setShowOptions] = useState(false);
+  
+  // Judging States (Press + Move + Release)
+  const [judgeScore, setJudgeScore] = useState<number | null>(null);
+  const [isJudgingActive, setIsJudgingActive] = useState(false);
+  const [tempScore, setTempScore] = useState<number>(5.0);
+  const [judgedStatusText, setJudgedStatusText] = useState('');
 
-  const handleCommentSubmit = async () => {
-    if (!commentText.trim() || !user) return;
-    setIsSubmittingComment(true);
-    try {
-      const res = await fetch(`http://localhost:3000/api/videos/${video.id}/comment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, text: commentText.trim() }),
-      });
-      const data = await res.json();
-      setComments([{ ...data, author: data.user?.name || data.user?.username || user.name || user.username }, ...comments]);
-      setCommentsCount(commentsCount + 1);
-      setCommentText('');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      console.error(e);
-      Alert.alert('Error', 'Failed to submit comment.');
-    } finally {
-      setIsSubmittingComment(false);
-    }
-  };
+  // Judging PanResponder
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        setIsJudgingActive(true);
+        setTempScore(judgeScore || 5.0);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        // Move UP (negative dy) increases score, DOWN (positive dy) decreases.
+        // Sensitivity: 20 pixels = 0.1 score change
+        const delta = -gestureState.dy / 20;
+        let newScore = (judgeScore || 5.0) + delta;
+        newScore = Math.max(1.0, Math.min(10.0, newScore));
+        
+        // Haptic feedback on whole numbers
+        if (Math.floor(newScore) !== Math.floor(tempScore)) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
+        }
+        
+        setTempScore(parseFloat(newScore.toFixed(1)));
+      },
+      onPanResponderRelease: () => {
+        setIsJudgingActive(false);
+        setJudgeScore(tempScore);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setJudgedStatusText(`${tempScore.toFixed(1)} ✓`);
+        setTimeout(() => setJudgedStatusText('JUDGED'), 800);
+      },
+      onPanResponderTerminate: () => {
+        setIsJudgingActive(false);
+      }
+    })
+  ).current;
 
-  const handleRate = async (score: number) => {
+  const handleKeepToggle = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setUserRating(score);
-    setIsJudging(false);
-
-    try {
-      const res = await fetch(`http://localhost:3000/api/videos/${video.id}/rate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, score }),
-      });
-      const data = await res.json();
-      if (data.averageRating) setAverageRating(data.averageRating);
-    } catch (e) {
-      console.error(e);
-      Alert.alert('Error', 'Failed to submit rating.');
-    }
-  };
-
-  const handleLike = async () => {
-    if (!user) return Alert.alert('Login Required', 'You must be logged in to like videos.');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    
-    // Optimistic update
-    setIsLiked(!isLiked);
-    setLikesCount(isLiked ? likesCount - 1 : likesCount + 1);
-    
-    try {
-      await fetch(`http://localhost:3000/api/videos/${video.id}/like`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id }),
-      });
-    } catch (e) {
-      console.error(e);
-      // Revert on failure
-      setIsLiked(isLiked);
-      setLikesCount(isLiked ? likesCount : likesCount - 1);
-    }
-  };
-  const player = useVideoPlayer(video.url, player => {
-    player.loop = true;
-  });
-
-  React.useEffect(() => {
-    if (isPlaying) {
-      player.play();
+    if (!isKept) {
+      setIsKept(true);
+      setKeptText('KEPT ✓');
+      setTimeout(() => setKeptText('KEPT'), 1500);
     } else {
-      player.pause();
+      setIsKept(false);
+      setKeptText('KEEP');
     }
-  }, [isPlaying]);
+  };
+
+  const handlePostComment = () => {
+    if (!commentText.trim()) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const newComment = {
+      id: Math.random().toString(),
+      user: 'You',
+      text: commentText,
+      time: 'Just now',
+      isUseful: false,
+      timestamp: attachMoment ? '00:38' : null
+    };
+    setComments([...comments, newComment]);
+    setCommentText('');
+    setAttachMoment(false);
+  };
+
+  const toggleUseful = (id: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setComments(comments.map((c: any) => c.id === id ? { ...c, isUseful: !c.isUseful } : c));
+  };
 
   return (
-    <>
-      <View className="flex-col pb-3.5 mb-3.5 border-b border-white/[0.08]">
-      <View className="relative w-full aspect-[16/9.35] rounded-[18px] overflow-hidden border border-white/15 bg-[#100C09]">
-        <VideoView
-          style={{ width: '100%', height: '100%' }}
-          player={player}
-          allowsFullscreen
-          allowsPictureInPicture
-          nativeControls={false}
-        />
-        <View className="absolute inset-x-0 top-0 h-14 bg-black/40" />
+    <View className="mb-6">
+      {/* Video Container */}
+      <View className="relative w-full aspect-[16/9.5] rounded-[16px] overflow-hidden border border-white/10 bg-[#100C09] mb-4">
+        {Platform.OS === 'web' ? (
+          isPlaying ? (
+            <video 
+              src={video.videoUrl} 
+              autoPlay 
+              loop
+              muted={false}
+              playsInline
+              poster={video.videoThumb}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+            />
+          ) : (
+            <Image source={{ uri: video.videoThumb }} className="w-full h-full opacity-90" />
+          )
+        ) : (
+          <View className="flex-1 items-center justify-center bg-black">
+             <Image source={{ uri: video.videoThumb }} className="w-full h-full opacity-90 absolute" />
+          </View>
+        )}
         
-        <View className="absolute top-3 left-3.5 flex-row items-center gap-2">
-          <Text className="text-[10.5px] font-medium tracking-[0.11em] text-white/95 uppercase">PERFORMANCE</Text>
-          <Text className="text-white/80 text-[10.5px]">•</Text>
-          <Text className="text-white/95 text-[10.5px] tracking-[0.11em]">0:58</Text>
+        {/* Gradient Overlay Simulation */}
+        <View className="absolute inset-x-0 top-0 h-16 bg-black/40" />
+        <View className="absolute inset-x-0 bottom-0 h-16 bg-black/40" />
+
+        {/* Top Left: Performance Tag */}
+        <View className="absolute top-4 left-4 flex-row items-center gap-2">
+          <Text className="text-[11px] font-bold tracking-[0.1em] text-white uppercase">PERFORMANCE</Text>
+          <View className="w-1 h-1 rounded-full bg-white/60" />
+          <Text className="text-white text-[11px] font-bold tracking-widest">{video.duration}</Text>
         </View>
 
-        <View className="absolute top-2.5 right-2.5">
-          <TouchableOpacity 
-            activeOpacity={0.7} 
-            className="h-[26px] px-2.5 rounded-[7px] bg-black/60 border border-white/20 flex-row items-center gap-1.5"
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              Alert.alert('Visibility Status', 'This video is currently hidden due to blind mode.');
-            }}
-          >
-            <EyeOff color="#fff" size={12} strokeWidth={1.8} />
-            <Text className="text-[9.5px] font-medium tracking-[0.09em] text-white/90 uppercase">POPULARITY HIDDEN</Text>
-          </TouchableOpacity>
+        {/* Top Right: Popularity Hidden */}
+        <View className="absolute top-3 right-3">
+          <View className="px-3 py-1.5 rounded-lg bg-black/60 border border-white/20 flex-row items-center gap-1.5">
+            <EyeOff color="#fff" size={12} strokeWidth={2} />
+            <Text className="text-[10px] font-bold tracking-[0.1em] text-white uppercase">POPULARITY HIDDEN</Text>
+          </View>
         </View>
 
+        {/* Center: Play Button */}
         <TouchableOpacity 
-          activeOpacity={0.7} 
-          className={`absolute top-1/2 left-1/2 -ml-[26px] -mt-[26px] w-[52px] h-[52px] rounded-full bg-black/45 border-[1.5px] border-white/85 items-center justify-center ${isPlaying ? 'opacity-0' : 'opacity-100'}`}
+          activeOpacity={0.8} 
+          className="absolute top-1/2 left-1/2 -ml-7 -mt-7 w-14 h-14 rounded-full bg-black/40 border border-white/80 items-center justify-center"
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            if (isPlaying) {
-              setPlayingVideoId(null);
-            } else {
-              setPlayingVideoId(video.id);
-            }
+            setPlayingVideoId(isPlaying ? null : video.id);
           }}
         >
           {isPlaying ? (
-            <Pause color="#fff" fill="#fff" size={20} />
+            <Pause color="#fff" fill="#fff" size={24} />
           ) : (
-            <Play color="#fff" fill="#fff" size={20} className="ml-1" />
+            <Play color="#fff" fill="#fff" size={24} className="ml-1" />
           )}
         </TouchableOpacity>
 
-        <View className="absolute bottom-2.5 right-2.5 flex-row items-center gap-1.5">
-          <TouchableOpacity 
-            activeOpacity={0.7} 
-            className="w-[27px] h-[27px] rounded-[7px] bg-black/65 border border-white/20 items-center justify-center"
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              Alert.alert('Fullscreen', 'Enter fullscreen viewing mode');
-            }}
-          >
-            <Maximize2 color="#fff" size={13} strokeWidth={2} />
+        {/* Bottom Right: Controls */}
+        <View className="absolute bottom-3 right-3 flex-row items-center gap-2">
+          <TouchableOpacity activeOpacity={0.8} className="w-8 h-8 rounded-lg bg-black/60 border border-white/20 items-center justify-center">
+            <Maximize2 color="#fff" size={14} strokeWidth={2} />
           </TouchableOpacity>
-          <View className="h-[27px] px-2.5 rounded-[7px] bg-black/65 border border-white/20 items-center justify-center">
-            <Text className="text-[11px] font-medium text-white/95 tracking-[0.05em]">00:58 / 01:00</Text>
+          <View className="h-8 px-3 rounded-lg bg-black/60 border border-white/20 items-center justify-center">
+            <Text className="text-[12px] font-medium text-white tracking-wider">{video.duration} / {video.duration}</Text>
           </View>
         </View>
+
+        {/* Judging Floating Overlay */}
+        {isJudgingActive && (
+          <View className="absolute inset-0 bg-black/60 items-center justify-center z-20">
+            <Text className="text-white text-[72px] font-bold tracking-tighter shadow-xl">
+              {tempScore.toFixed(1)}
+            </Text>
+            <Text className="text-white/60 text-[12px] font-medium tracking-widest uppercase mt-4">Slide Up/Down to Adjust</Text>
+          </View>
+        )}
       </View>
 
-      <View className="mt-2.5 flex-row items-start justify-between">
-        <View className="flex-row items-center gap-3 flex-1">
-          <TouchableOpacity 
-            activeOpacity={0.7} 
-            className="flex-row items-center gap-2.5"
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              Alert.alert('Profile', `View ${video.author}'s profile`);
-            }}
-          >
-            <View className="w-[30px] h-[30px] rounded-full bg-[#1A1D24] overflow-hidden border-[1.5px] border-white/10">
-              <Image source={{ uri: video.avatar }} className="w-full h-full" />
+      {/* User Info */}
+      <View className="flex-row items-start justify-between mb-4">
+        <View className="flex-row items-center gap-3">
+          <View className="w-[42px] h-[42px] rounded-full overflow-hidden border border-white/10">
+            <Image source={{ uri: video.avatar }} className="w-full h-full" />
+          </View>
+          <View>
+            <Text className="text-white text-[16px] font-bold mb-0.5">{video.author}</Text>
+            <View className="flex-row items-center gap-1.5 mb-1.5">
+              <Text className="text-[#9CA3AF] text-[11px]">{video.role.split('•')[0].trim()}</Text>
+              <Text className="text-[#9CA3AF] text-[11px]">•</Text>
+              <MapPin color="#9CA3AF" size={10} />
+              <Text className="text-[#9CA3AF] text-[11px]">{video.role.split('•')[1]?.trim() || video.role}</Text>
             </View>
-            <View className="flex-col pb-0.5">
-              <Text className="text-white text-[13px] font-bold tracking-tight">{video.author}</Text>
-              <Text className="text-[#8E95A5] text-[11px] tracking-tight">{video.role || 'Creator'}</Text>
-              <Text className="text-white/90 text-[12px] mt-1">{video.title}</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-        
-        <View className="flex-row items-center gap-2">
-          <TouchableOpacity 
-            activeOpacity={0.7} 
-            className="flex-row items-center gap-1.5 px-3 h-[30px] rounded-full bg-[#171922] border border-white/[0.06] mt-1"
-            onPress={handleLike}
-          >
-            <Heart color={isLiked ? "#E91E76" : "#9CA3AF"} fill={isLiked ? "#E91E76" : "transparent"} size={16} />
-            <Text className="text-[#9CA3AF] text-[12px] font-medium">{likesCount}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            activeOpacity={0.7} 
-            className="flex-row items-center gap-1.5 px-3 h-[30px] rounded-full bg-[#171922] border border-white/[0.06] mt-1"
-            onPress={() => {
-              if (!user) return Alert.alert('Login Required', 'You must be logged in to judge videos.');
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setIsJudging(true);
-            }}
-          >
-            <Gavel color={userRating ? "#E91E76" : "#9CA3AF"} size={16} />
-            <Text className="text-[#9CA3AF] text-[12px] font-medium">{averageRating ? averageRating.toFixed(1) : 'Rate'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            activeOpacity={0.7} 
-            className="flex-row items-center gap-1.5 px-3 h-[30px] rounded-full bg-[#171922] border border-white/[0.06] mt-1"
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setIsCommenting(true);
-            }}
-          >
-            <MessageCircle color="#9CA3AF" size={16} />
-            <Text className="text-[#9CA3AF] text-[12px] font-medium">{commentsCount}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            activeOpacity={0.7} 
-            className="w-[30px] h-[30px] rounded-full bg-[#171922] border border-white/[0.06] items-center justify-center mt-1 ml-1"
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              Alert.alert('More Options', 'Share, Report, or copy link to this take');
-            }}
-          >
-            <MoreHorizontal color="#9CA3AF" size={16} />
-          </TouchableOpacity>
-        </View>
-        </View>
-      </View>
-
-      {/* Judging Overlay Modal */}
-      {isJudging && (
-        <View className="absolute inset-0 z-50 bg-black/60 items-center justify-center p-4">
-          <View className="bg-[#171922] w-full max-w-sm rounded-3xl p-6 border border-white/10 shadow-2xl">
-            <View className="flex-row justify-between items-center mb-6">
-              <Text className="text-white text-lg font-bold">Judge this take</Text>
-              <TouchableOpacity onPress={() => setIsJudging(false)}>
-                <X color="#9CA3AF" size={24} />
-              </TouchableOpacity>
-            </View>
-            
-            <View className="flex-row flex-wrap justify-center gap-3">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((score) => (
-                <TouchableOpacity
-                  key={score}
-                  onPress={() => handleRate(score)}
-                  activeOpacity={0.7}
-                  className={`w-12 h-12 rounded-full items-center justify-center border ${
-                    userRating === score 
-                      ? 'bg-[#E91E76] border-[#E91E76]' 
-                      : 'bg-[#2A2D3A] border-white/5'
-                  }`}
-                >
-                  <Text className={`text-lg font-bold ${userRating === score ? 'text-white' : 'text-gray-300'}`}>
-                    {score}
-                  </Text>
-                </TouchableOpacity>
+            <View className="flex-row items-center gap-2">
+              {video.tags.map((tag: string, idx: number) => (
+                <Text key={idx} className="text-[#6B7280] text-[11px]">{tag}</Text>
               ))}
             </View>
-            
-            <Text className="text-gray-400 text-center mt-6 text-sm">Select a score from 1 to 10</Text>
           </View>
         </View>
+        <TouchableOpacity onPress={() => setShowOptions(true)} className="w-8 h-8 rounded-full bg-white/5 items-center justify-center mt-1">
+          <MoreHorizontal color="#9CA3AF" size={16} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Actions Row */}
+      <View className="flex-row items-center justify-between px-1">
+        <View className="flex-row items-center gap-5">
+          <TouchableOpacity onPress={handleKeepToggle} activeOpacity={0.7} className="items-center gap-1.5 min-w-[36px]">
+            <Bookmark color={isKept ? "#E91E76" : "#fff"} fill={isKept ? "#E91E76" : "transparent"} size={22} strokeWidth={1.5} />
+            <Text className={`text-[9px] font-bold tracking-widest uppercase ${isKept ? 'text-[#E91E76]' : 'text-[#9CA3AF]'}`}>{keptText}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setIsCommenting(true); }} activeOpacity={0.7} className="items-center gap-1.5 min-w-[36px]">
+            <MessageCircle color="#fff" size={22} strokeWidth={1.5} />
+            <Text className="text-[#9CA3AF] text-[9px] font-bold tracking-widest uppercase">TALK</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPass(); }} activeOpacity={0.7} className="items-center gap-1.5 pb-0.5 min-w-[36px]">
+            <Send color="#fff" size={22} strokeWidth={1.5} style={{ transform: [{ rotate: '45deg' }, { marginLeft: -4 }, { marginBottom: 2 }] }} />
+            <Text className="text-[#9CA3AF] text-[9px] font-bold tracking-widest uppercase">PASS</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View className="flex-col items-end pt-1">
+          {/* SMALLER JUDGE BUTTON with Gesture Support */}
+          <View {...panResponder.panHandlers}>
+            <View className={`rounded-full h-[32px] px-3.5 flex-row items-center gap-2 mb-2 ${judgeScore ? 'bg-white/10 border border-[#E91E76]/50' : 'bg-[#E91E76]'}`}>
+              <Gauge color={judgeScore ? "#E91E76" : "#fff"} size={13} />
+              <Text className={`text-[10px] font-bold tracking-widest uppercase mt-0.5 ${judgeScore ? 'text-[#E91E76]' : 'text-white'}`}>
+                {judgeScore ? (judgedStatusText || 'JUDGED') : 'JUDGE'}
+              </Text>
+            </View>
+          </View>
+          <View className="flex-row items-center gap-2 pr-1">
+            <Text className="text-[#6B7280] text-[9px] uppercase tracking-wider">Presence</Text>
+            <View className="w-1 h-1 rounded-full bg-[#E91E76]/80" />
+            <Text className="text-[#6B7280] text-[9px] uppercase tracking-wider">Originality</Text>
+            <View className="w-1 h-1 rounded-full bg-[#E91E76]/80" />
+            <Text className="text-[#6B7280] text-[9px] uppercase tracking-wider">Craft</Text>
+          </View>
+        </View>
+      </View>
+      
+      <View className="w-full h-[1px] bg-white/5 mt-5" />
+
+      {/* Options Menu Sheet */}
+      {showOptions && (
+        <Modal visible={true} transparent={true} animationType="fade">
+          <TouchableOpacity activeOpacity={1} onPress={() => setShowOptions(false)} className="flex-1 bg-black/60 justify-end">
+            <View className="bg-[#171922] w-full rounded-t-2xl pb-8 pt-4 px-4 border-t border-white/10">
+              <View className="w-10 h-1 bg-white/20 rounded-full self-center mb-6" />
+              <TouchableOpacity onPress={() => { setShowOptions(false); Alert.alert('Navigate', `Going to ${video.author}'s profile`); }} className="flex-row items-center gap-4 py-4 border-b border-white/5">
+                <User color="#fff" size={20} />
+                <Text className="text-white text-[15px] font-medium">View profile</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => { setShowOptions(false); Alert.alert('Hidden', 'Performance hidden.'); }} className="flex-row items-center gap-4 py-4 border-b border-white/5">
+                <UserX color="#fff" size={20} />
+                <Text className="text-white text-[15px] font-medium">Not interested</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => { setShowOptions(false); Alert.alert('Reported', 'Performance reported for review.'); }} className="flex-row items-center gap-4 py-4">
+                <Flag color="#EF4444" size={20} />
+                <Text className="text-[#EF4444] text-[15px] font-medium">Report</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
       )}
 
-      {/* Comments Overlay Modal */}
-      <Modal visible={isCommenting} transparent animationType="slide">
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          className="flex-1"
-        >
-          <View className="flex-1 justify-end bg-black/60">
-            <View className="bg-[#171922] w-full h-[65%] rounded-t-3xl border-t border-white/10 flex-col pb-6">
-              <View className="flex-row justify-between items-center p-5 border-b border-white/10">
-                <Text className="text-white text-lg font-bold">Comments ({commentsCount})</Text>
-                <TouchableOpacity onPress={() => setIsCommenting(false)}>
-                  <X color="#9CA3AF" size={24} />
+      {/* Talk / Comments Bottom Sheet */}
+      {isCommenting && (
+        <Modal visible={true} transparent={true} animationType="slide">
+          <View className="flex-1 justify-end bg-black/50">
+            <View className="bg-[#101217] w-full h-[75%] rounded-t-3xl border-t border-white/10 flex-col pb-6 shadow-2xl">
+              <View className="flex-row justify-between items-center p-5 border-b border-white/5">
+                <View>
+                  <Text className="text-white text-[16px] font-bold tracking-wider">TALK</Text>
+                  <Text className="text-[#9CA3AF] text-[12px] mt-0.5">{video.author}</Text>
+                </View>
+                <TouchableOpacity onPress={() => setIsCommenting(false)} className="w-8 h-8 bg-white/5 rounded-full items-center justify-center">
+                  <X color="#9CA3AF" size={18} />
                 </TouchableOpacity>
               </View>
               
-              <View className="flex-1 p-5">
+              <ScrollView className="flex-1 p-5" showsVerticalScrollIndicator={false}>
                 {comments.length === 0 ? (
-                  <Text className="text-gray-400 text-center mt-10">No comments yet. Be the first!</Text>
+                  <Text className="text-[#6B7280] text-[13px] text-center mt-10">No comments yet. Start the conversation!</Text>
                 ) : (
-                  <Animated.ScrollView showsVerticalScrollIndicator={false}>
-                    {comments.map((c: any, index: number) => (
-                      <View key={c.id || index} className="mb-4 flex-row gap-3">
-                        <View className="w-8 h-8 rounded-full bg-[#2A2D3A] items-center justify-center">
-                          <Text className="text-white text-xs font-bold">{c.author ? c.author[0].toUpperCase() : 'U'}</Text>
+                  comments.map((c: any) => (
+                    <View key={c.id} className="mb-6">
+                      <View className="flex-row items-start gap-3">
+                        <View className="w-8 h-8 rounded-full bg-[#1A1D24] items-center justify-center border border-white/5 overflow-hidden">
+                          {c.user === 'You' ? (
+                             <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100' }} className="w-full h-full" />
+                          ) : (
+                             <Text className="text-[#9CA3AF] text-xs font-bold">{c.user.charAt(0)}</Text>
+                          )}
                         </View>
                         <View className="flex-1">
-                          <Text className="text-[#9CA3AF] text-xs font-bold mb-1">{c.author}</Text>
-                          <Text className="text-white text-sm">{c.text}</Text>
+                          <View className="flex-row items-center gap-2 mb-1">
+                            <Text className="text-[#9CA3AF] text-[12px] font-medium">{c.user}</Text>
+                            <Text className="text-[#4B5563] text-[10px]">{c.time}</Text>
+                            {c.isArtist && <Text className="bg-[#E91E76]/20 text-[#E91E76] text-[8px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-widest">Artist</Text>}
+                            {c.isFeedback && <Text className="bg-blue-500/20 text-blue-400 text-[8px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-widest">Feedback</Text>}
+                            {c.isOpportunity && <Text className="bg-emerald-500/20 text-emerald-400 text-[8px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-widest">Opportunity</Text>}
+                            {c.isQuestion && <Text className="bg-amber-500/20 text-amber-400 text-[8px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-widest">Question</Text>}
+                            {c.timestamp && (
+                              <TouchableOpacity className="bg-white/10 rounded-full px-2 py-0.5 ml-1">
+                                <Text className="text-white text-[9px] font-medium">○ {c.timestamp}</Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                          <Text className="text-white/90 text-[13px] leading-5">{c.text}</Text>
+                          
+                          <View className="flex-row items-center gap-4 mt-2">
+                            <TouchableOpacity>
+                              <Text className="text-[#6B7280] text-[11px] font-medium">Reply</Text>
+                            </TouchableOpacity>
+                            {c.isOpportunity ? (
+                              <TouchableOpacity>
+                                <Text className="text-emerald-400 text-[11px] font-bold">Connect</Text>
+                              </TouchableOpacity>
+                            ) : (
+                              <TouchableOpacity onPress={() => toggleUseful(c.id)}>
+                                <Text className={`text-[11px] font-medium ${c.isUseful ? 'text-[#E91E76]' : 'text-[#6B7280]'}`}>
+                                  {c.isUseful ? 'Useful ✓' : 'Useful'}
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
                         </View>
                       </View>
-                    ))}
-                  </Animated.ScrollView>
+                    </View>
+                  ))
                 )}
-              </View>
+                <View className="h-10" />
+              </ScrollView>
               
-              <View className="p-4 border-t border-white/10 flex-row items-center bg-[#050608]">
-                {user ? (
-                  <>
+              <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+                <View className="p-4 border-t border-white/5 bg-[#101217]">
+                  <View className="flex-row items-center gap-3">
+                    <View className="w-8 h-8 rounded-full overflow-hidden border border-white/10">
+                      <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100' }} className="w-full h-full" />
+                    </View>
                     <TextInput
                       value={commentText}
                       onChangeText={setCommentText}
-                      placeholder="Add comment..."
-                      placeholderTextColor="#9CA3AF"
-                      className="flex-1 bg-[#1A1D24] text-white px-4 py-3 rounded-full border border-white/5"
-                      onSubmitEditing={handleCommentSubmit}
+                      placeholder="Talk about this performance..."
+                      placeholderTextColor="#6B7280"
+                      className="flex-1 bg-[#1A1D24] text-white text-[13px] px-4 py-2.5 rounded-full border border-white/5"
+                      onSubmitEditing={handlePostComment}
                       returnKeyType="send"
                     />
-                    <TouchableOpacity 
-                      className={`ml-3 px-4 py-3 rounded-full ${commentText.trim() ? 'bg-[#E91E76]' : 'bg-[#E91E76]/50'}`}
-                      disabled={!commentText.trim() || isSubmittingComment}
-                      onPress={handleCommentSubmit}
-                    >
-                      <Text className="text-white font-bold text-sm">Post</Text>
+                    <TouchableOpacity onPress={handlePostComment} disabled={!commentText.trim()} className={`w-8 h-8 rounded-full items-center justify-center ${commentText.trim() ? 'bg-[#E91E76]' : 'bg-white/10'}`}>
+                      <Send color={commentText.trim() ? "#fff" : "#6B7280"} size={14} style={{ transform: [{ rotate: '45deg' }, { marginLeft: -2 }] }} />
                     </TouchableOpacity>
-                  </>
-                ) : (
-                  <Text className="text-gray-400 text-sm text-center w-full py-2">Log in to comment</Text>
-                )}
-              </View>
+                  </View>
+                  <View className="flex-row items-center gap-4 mt-3 ml-11">
+                    <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setAttachMoment(!attachMoment); }} className={`flex-row items-center gap-1.5 px-2.5 py-1 rounded-full ${attachMoment ? 'bg-[#E91E76]/20' : 'bg-white/5'}`}>
+                      <Text className={`text-[10px] font-medium ${attachMoment ? 'text-[#E91E76]' : 'text-[#9CA3AF]'}`}>○ Attach moment</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity className="flex-row items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5">
+                      <Text className="text-[#9CA3AF] text-[10px] font-medium">🎤 Voice</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </KeyboardAvoidingView>
             </View>
           </View>
-        </KeyboardAvoidingView>
-      </Modal>
-    </>
+        </Modal>
+      )}
+    </View>
   );
 }
 
 export function HomeView({ user }: { user?: any }) {
   const [activeFeedTab, setActiveFeedTab] = useState('For You');
+  const [playingVideoId, setPlayingVideoId] = useState<string | null>('1');
+  
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
   
-  const { videos, isLoading } = useFeed(user?.id);
+  const scrollRef = useRef<ScrollView>(null);
   
-  const filteredVideos = videos.filter(v => 
-    searchQuery.trim() === '' ? true : 
-    v.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    v.author.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-  
+  // Filter Logic based on Tabs and Search
+  const filteredData = initialFeedData.filter(v => {
+    let matchesTab = true;
+    if (activeFeedTab === 'Rising') matchesTab = v.isRising;
+    if (activeFeedTab === 'Nearby') matchesTab = v.isNearby;
+    if (activeFeedTab === 'Live') matchesTab = v.isLive;
+    
+    let matchesSearch = true;
+    if (searchQuery.trim() !== '') {
+      const q = searchQuery.toLowerCase();
+      matchesSearch = v.author.toLowerCase().includes(q) || 
+                      v.role.toLowerCase().includes(q) || 
+                      v.tags.some(t => t.toLowerCase().includes(q));
+    }
+    
+    return matchesTab && matchesSearch;
+  });
+
   const scrollY = useSharedValue(0);
   const lastScrollY = useSharedValue(0);
   const headerTranslateY = useSharedValue(0);
@@ -386,19 +530,32 @@ export function HomeView({ user }: { user?: any }) {
       right: 0,
       zIndex: 10,
       backgroundColor: '#050608',
-      paddingBottom: 4,
+      paddingBottom: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: 'rgba(255,255,255,0.03)'
     };
   });
 
+  const handlePass = (currentIndex: number) => {
+    if (scrollRef.current && filteredData.length > currentIndex + 1) {
+      // Calculate approximate offset: Header + (Card height + Margin) * nextIndex
+      // A more robust way in React Native is using flatlist, but with ScrollView we estimate
+      const approximateCardHeight = Dimensions.get('window').width * (9.5/16) + 180;
+      scrollRef.current.scrollTo({ y: (currentIndex + 1) * approximateCardHeight, animated: true });
+      // Pause current, maybe auto-play next
+      setPlayingVideoId(filteredData[currentIndex + 1].id);
+    }
+  };
+
   if (isSearchOpen) {
     return (
-      <View className="flex-1 bg-[#0B0D13]">
-        <View className="px-4 pt-12 pb-4">
-          <View className="flex-row items-center w-full bg-[#1A1D24] rounded-full px-4 h-11 border border-white/5">
-            <Search color="#9CA3AF" size={18} />
+      <View className="flex-1 bg-[#050608]">
+        <View className="px-4 pt-12 pb-4 border-b border-white/5">
+          <View className="flex-row items-center w-full bg-[#13151C] rounded-full px-4 h-11 border border-white/5">
+            <Search color="#6B7280" size={18} />
             <TextInput 
-              className="flex-1 ml-2 text-white font-medium text-[15px]"
-              placeholder="Search"
+              className="flex-1 ml-3 text-white font-medium text-[15px]"
+              placeholder="Search talent, skills, tags..."
               placeholderTextColor="#6B7280"
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -407,161 +564,111 @@ export function HomeView({ user }: { user?: any }) {
             <TouchableOpacity onPress={() => {
               setSearchQuery('');
               setIsSearchOpen(false);
-            }}>
-              <X color="#9CA3AF" size={20} />
+            }} className="w-8 h-8 items-center justify-center -mr-2">
+              <X color="#9CA3AF" size={18} />
             </TouchableOpacity>
           </View>
         </View>
 
-        <Animated.ScrollView showsVerticalScrollIndicator={false} className="flex-1 px-[1px]">
-          <View className="flex-row flex-wrap">
-            {filteredVideos.map((video, index) => (
-              <View key={video.id} className="w-[33.33%] p-[1px]">
-                <TouchableOpacity 
-                  activeOpacity={0.8}
-                  className="aspect-[3/4.5] bg-[#1A1D24] relative overflow-hidden"
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setPlayingVideoId(video.id);
-                    setIsSearchOpen(false);
-                  }}
-                >
-                  <Image source={{ uri: `https://picsum.photos/seed/${index + 40}/300/450` }} className="w-full h-full" />
-                  
-                  <View className="absolute top-2 right-2 w-6 h-6 bg-white rounded-md flex items-center justify-center">
-                    <Play color="black" fill="black" size={11} className="ml-0.5" />
-                  </View>
-                </TouchableOpacity>
+        <ScrollView showsVerticalScrollIndicator={false} className="flex-1 px-4 pt-4">
+          <Text className="text-[#6B7280] text-[12px] font-bold uppercase tracking-wider mb-4">Results ({filteredData.length})</Text>
+          {filteredData.map((video) => (
+            <TouchableOpacity 
+              key={video.id}
+              activeOpacity={0.7}
+              onPress={() => {
+                setIsSearchOpen(false);
+                setPlayingVideoId(video.id);
+                setActiveFeedTab('For You');
+              }}
+              className="flex-row items-center gap-4 mb-4 bg-[#0A0C10] p-3 rounded-2xl border border-white/5"
+            >
+              <Image source={{ uri: video.avatar }} className="w-12 h-12 rounded-full" />
+              <View className="flex-1">
+                <Text className="text-white text-[15px] font-bold">{video.author}</Text>
+                <Text className="text-[#9CA3AF] text-[12px] mt-0.5">{video.role}</Text>
               </View>
-            ))}
-          </View>
-          <View className="h-32" />
-        </Animated.ScrollView>
-
-        <TouchableOpacity 
-          activeOpacity={0.85}
-          className="absolute bottom-8 right-4 bg-[#21242D] rounded-full px-4 h-12 flex-row items-center gap-2.5 border border-white/10 shadow-lg"
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            Alert.alert('Messages', 'Open messages');
-          }}
-        >
-          <View className="relative">
-            <Text className="text-white text-lg">💬</Text>
-            <View className="absolute -bottom-1 -right-2 bg-[#E91E76] rounded-full w-[15px] h-[15px] items-center justify-center border-[1.5px] border-[#21242D]">
-              <Text className="text-white text-[8px] font-bold">2</Text>
-            </View>
-          </View>
-          <Text className="text-white font-medium text-[14px]">Messages</Text>
-          <View className="flex-row ml-1 -space-x-2">
-            <Image source={{ uri: 'https://i.pravatar.cc/100?img=11' }} className="w-[22px] h-[22px] rounded-full border-[1.5px] border-[#21242D]" />
-            <Image source={{ uri: 'https://i.pravatar.cc/100?img=12' }} className="w-[22px] h-[22px] rounded-full border-[1.5px] border-[#21242D]" />
-          </View>
-        </TouchableOpacity>
+              <ChevronRight color="#4B5563" size={16} />
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
     );
   }
 
   return (
-    <View className="flex-1 bg-[#050608]"><Animated.View style={headerStyle}>
-          <View className="px-4 pt-12 pb-2 flex-row items-center justify-between">
-            <View className="flex-row items-baseline">
-              <Text className="font-bold text-[33px] tracking-[-0.02em] text-white leading-none">talent</Text>
-              <Text className="font-bold text-[33px] text-[#E91E76] leading-none ml-[0.5px]">.</Text>
-            </View>
-            <View className="flex-row items-center gap-3.5">
-              <TouchableOpacity 
-                activeOpacity={0.7} 
-                className="w-10 h-10 rounded-full items-center justify-center -mr-2"
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setIsSearchOpen(true);
-                }}
-              >
-                <Search color="#E5E7EB" size={23} strokeWidth={1.8} />
-              </TouchableOpacity>
-            </View>
+    <View className="flex-1 bg-[#050608]">
+      <Animated.View style={headerStyle}>
+        <View className="px-5 pt-12 pb-4 flex-row items-center justify-between">
+          <View className="flex-row items-baseline">
+            <Text className="font-bold text-[32px] tracking-tight text-white leading-none font-serif">talent</Text>
+            <Text className="font-bold text-[32px] text-[#E91E76] leading-none ml-[1px] font-serif">.</Text>
           </View>
-          <Animated.ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8, gap: 8 }}>{['For You', 'Rising', 'Nearby', 'Live', 'All Genres'].map((tab) => {
-              const isActive = activeFeedTab === tab;
-              return (
-                <TouchableOpacity activeOpacity={0.7}
-                  key={tab}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setActiveFeedTab(tab);
-                  }}
-                  className={`h-[34px] px-4 rounded-full flex-row items-center justify-center ${
-                    isActive ? 'bg-[#42112B] border-[1.5px] border-[#E52177]' : 'bg-[#13151C] border border-[#252834]'
-                  }`}
-                >
-                  <Text className={`text-[12.5px] ${isActive ? 'text-white font-semibold' : 'text-[#D1D5DB] font-medium'}`}>
-                    {tab}
-                  </Text>
-                  {tab === 'Live' && (
-                    <View className="w-[6px] h-[6px] rounded-full bg-[#EC267F] ml-1.5 -mt-1.5" />
-                  )}
-                </TouchableOpacity>
-              )
-            })}</Animated.ScrollView>
-          <View className="px-4 pb-2.5 flex-row items-center justify-between">
-            <View className="flex-row items-center gap-1.5">
-              <Text className="text-[#8E95A5] font-medium text-[11px]">Filter:</Text>
-              <TouchableOpacity 
-                activeOpacity={0.7} 
-                className="px-2.5 py-0.5 rounded-full bg-white/20"
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  Alert.alert('Filter', 'Show all takes');
-                }}
-              >
-                <Text className="text-white font-semibold text-[11px]">All (13)</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                activeOpacity={0.7} 
-                className="px-2.5 py-0.5 rounded-full flex-row items-center gap-1"
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  Alert.alert('Filter', 'Show only hidden takes');
-                }}
-              >
-                <EyeOff color="#E91E76" size={12} />
-                <Text className="text-[#9CA3AF] text-[11px]">Hidden (7)</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                activeOpacity={0.7} 
-                className="px-2.5 py-0.5 rounded-full flex-row items-center gap-1"
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  Alert.alert('Filter', 'Show only showing takes');
-                }}
-              >
-                <Flame color="#fbbf24" size={12} />
-                <Text className="text-[#9CA3AF] text-[11px]">Showing (6)</Text>
-              </TouchableOpacity>
-            </View>
-            <Text className="text-[#7C8495] text-[10px]">13 takes</Text>
+          <View className="flex-row items-center gap-4">
+            <TouchableOpacity activeOpacity={0.7} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setIsSearchOpen(true); }}>
+              <Search color="#E5E7EB" size={24} strokeWidth={2} />
+            </TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.7} onPress={() => Alert.alert('Navigate', 'Opening Profile')} className="w-[32px] h-[32px] rounded-full overflow-hidden border border-white/20">
+              <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100' }} className="w-full h-full" />
+            </TouchableOpacity>
           </View>
-        </Animated.View><Animated.ScrollView
+        </View>
+        
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 10 }}>
+          {['For You', 'Rising', 'Nearby', 'Live', 'All Genres'].map((tab) => {
+            const isActive = activeFeedTab === tab;
+            return (
+              <TouchableOpacity activeOpacity={0.7}
+                key={tab}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setActiveFeedTab(tab);
+                  // Reset scroll
+                  scrollRef.current?.scrollTo({ y: 0, animated: true });
+                }}
+                className={`h-[36px] px-5 rounded-full flex-row items-center justify-center ${
+                  isActive ? 'bg-[#130711] border border-[#E91E76]/80' : 'bg-[#13151C] border border-white/5'
+                }`}
+              >
+                <Text className={`text-[13px] ${isActive ? 'text-white font-bold' : 'text-[#D1D5DB] font-medium'}`}>
+                  {tab}
+                </Text>
+                {tab === 'Live' && (
+                  <View className="w-1.5 h-1.5 rounded-full bg-[#E91E76] ml-2 -mt-1" />
+                )}
+                {tab === 'All Genres' && (
+                  <ChevronDown color="#D1D5DB" size={14} className="ml-1" />
+                )}
+              </TouchableOpacity>
+            )
+          })}
+        </ScrollView>
+      </Animated.View>
+
+      <Animated.ScrollView
+        ref={scrollRef as any}
         className="flex-1"
-        contentContainerStyle={{ paddingTop: HEADER_HEIGHT, paddingHorizontal: 16, paddingBottom: 80 }}
+        contentContainerStyle={{ paddingTop: HEADER_HEIGHT + 10, paddingHorizontal: 16, paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
         onScroll={scrollHandler}
         scrollEventThrottle={16}
-      >{isLoading ? (
-          <Text className="text-white text-center mt-10">Loading videos from backend...</Text>
-        ) : filteredVideos.length === 0 ? (
-          <Text className="text-white text-center mt-10">No videos found.</Text>
+      >
+        {filteredData.length === 0 ? (
+          <View className="items-center justify-center py-20">
+            <Text className="text-[#9CA3AF] text-[15px]">No performances found.</Text>
+          </View>
         ) : (
-          filteredVideos.map((video) => (
+          filteredData.map((video, index) => (
             <FeedVideoCard 
               key={video.id} 
               video={video} 
               playingVideoId={playingVideoId} 
               setPlayingVideoId={setPlayingVideoId}
-              user={user}
+              onPass={() => handlePass(index)}
             />
           ))
-      )}</Animated.ScrollView></View>
+        )}
+      </Animated.ScrollView>
+    </View>
   );
 }
