@@ -1,21 +1,34 @@
 # Talent App: Full-Stack Project
 
-Welcome to the Talent App monorepo! This repository contains both the mobile/web frontend and the Node.js backend. 
+Welcome to the Talent App monorepo! This repository contains both the mobile/web frontend and the Node.js backend for a TikTok-style short-video social platform.
 
 ## Project Structure
 
 This project is divided into two main applications:
 1. **`talent-mobile` (Frontend)**: A universal React Native app built with Expo and NativeWind (Tailwind CSS).
-2. **`talent-backend` (Backend)**: A Node.js & Express RESTful API utilizing Prisma ORM and a local SQLite database.
+2. **`talent-backend` (Backend)**: A Node.js & Express RESTful API utilizing Prisma ORM, SQLite database, Socket.io for Real-Time chat, and Swagger for API Documentation.
 
 ---
 
 ## 🌟 Current Features
 
-- **Dynamic Video Feed**: Scrollable video feed in `HomeView` fetching data from the backend.
-- **Advanced Video Creator**: A multi-step `CreateView` for recording or uploading performance videos (`expo-image-picker`), with a custom interactive video editing timeline for trimming and configuring video metadata (category, purpose, judging flags).
-- **User Profiles**: `ProfileView` displaying dynamic stats, recent videos, and "Blind Scores" from the backend.
-- **Robust Playback**: Integration with `expo-video` for responsive video playback with automated web browser handling (auto-mute for autoplay policies).
+### Backend (Fully Featured)
+- **Authentication**: Secure JWT-based user authentication and registration (`bcryptjs`).
+- **Dynamic Personalized Feed**: Algorithm-driven paginated video feed (scoring based on views, likes, comments, and ratings).
+- **Social Graph**: Robust Follower/Following system.
+- **Engagement**: Liking, Commenting, Rating (0-100 score), and Saving (Bookmarking) videos.
+- **Discoverability**: Automatic Hashtag extraction from video descriptions, trending hashtag analytics.
+- **Creator Analytics**: Aggregated dashboard for views and engagement.
+- **Moderation & Admin Tools**: Role-based access control, reporting mechanism, banning users, and removing videos.
+- **Real-Time Chat**: WebSockets integrated via `socket.io` for instant messaging.
+- **Security & Performance**: Rate Limiting (`express-rate-limit`) to prevent abuse and Security Headers (`helmet`).
+- **Interactive Documentation**: Beautiful auto-generated API docs via Swagger (`swagger-ui-express`).
+
+### Frontend (Mobile App)
+- **Dynamic Video Feed**: Scrollable video feed in `HomeView`.
+- **Advanced Video Creator**: A multi-step `CreateView` for recording or uploading performance videos with an interactive video editing timeline.
+- **User Profiles**: `ProfileView` displaying dynamic stats and user uploads.
+- **Robust Playback**: Integration with `expo-video` for responsive video playback.
 - **Modern UI/UX**: Highly polished UI using `lucide-react-native` icons, custom typography, haptic feedback, and a sleek dark mode interface.
 
 ---
@@ -56,7 +69,8 @@ The backend serves the API and manages the database. It must be running for the 
    ```bash
    npm run dev
    ```
-   *The server should now be running on `http://localhost:3000`. Leave this terminal window open.*
+   *The server should now be running on `http://localhost:3000`.*
+   *View the interactive API documentation at: `http://localhost:3000/api-docs`*
 
 ### Step 3: Setup the Frontend (Mobile/Web App)
 Open a **new, second terminal window** at the root of the project to start the frontend.
@@ -95,12 +109,13 @@ Once both servers are running:
 
 **Frontend:**
 - [React Native](https://reactnative.dev/)
-- [Expo](https://expo.dev/) (Including `expo-camera`, `expo-video`, `expo-image-picker`, and `expo-haptics`)
+- [Expo](https://expo.dev/) (Including `expo-camera`, `expo-video`, `expo-image-picker`)
 - [NativeWind](https://www.nativewind.dev/) (Tailwind CSS for React Native)
-- [Lucide Icons](https://lucide.dev/)
 
 **Backend:**
 - [Node.js](https://nodejs.org/) & [Express](https://expressjs.com/)
 - [Prisma ORM](https://www.prisma.io/)
 - SQLite (Local database)
+- Socket.IO (WebSockets)
+- Swagger UI (API Docs)
 - TypeScript

@@ -6,7 +6,12 @@ import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import http from 'http';
+import { Server } from 'socket.io';
+import swaggerUi from 'swagger-ui-express';
+import swaggerJsDoc from 'swagger-jsdoc';
 declare global {
   namespace Express {
     interface Request {
@@ -17,8 +22,37 @@ declare global {
 
 const prisma = new PrismaClient();
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: '*' }
+});
 const JWT_SECRET = 'super-secret-jwt-key-for-development-only';
 const PORT = process.env.PORT || 3000;
+
+const swaggerOptions = {
+  swaggerDefinition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'Talent App API',
+      version: '1.0.0',
+      description: 'API for short-video social platform'
+    },
+    servers: [{ url: `http://localhost:${PORT}` }]
+  },
+  apis: ['./src/index.ts']
+};
+const swaggerDocs = swaggerJsDoc(swaggerOptions);
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
+
+app.use(helmet());
+app.use(helmet.crossOriginResourcePolicy({ policy: "cross-origin" }));
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
+  message: { error: 'Too many requests, please try again later.' }
+});
+app.use(limiter);
 
 app.use(cors());
 app.use(express.json());
@@ -905,6 +939,25 @@ app.get('/api/feed/following', requireAuth, async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+// WebSockets for Real-Time Chat
+io.on('connection', (socket) => {
+  console.log('A user connected via WebSocket:', socket.id);
+
+  socket.on('join_chat', (data) => {
+    socket.join(`chat_${data.chatId}`);
+  });
+
+  socket.on('send_message', (data) => {
+    // Broadcast the message to the chat room
+    io.to(`chat_${data.chatId}`).emit('receive_message', data);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('User disconnected:', socket.id);
+  });
+});
+
+server.listen(PORT, () => {
   console.log(`🚀 Backend server is running on http://localhost:${PORT}`);
+  console.log(`📝 Swagger API Docs available at http://localhost:${PORT}/api-docs`);
 });
