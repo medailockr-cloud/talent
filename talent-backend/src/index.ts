@@ -3,7 +3,9 @@ import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 const prisma = new PrismaClient();
 const app = express();
 const JWT_SECRET = 'super-secret-jwt-key-for-development-only';
@@ -11,6 +13,25 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Setup file uploads
+const uploadDir = path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + path.extname(file.originalname));
+  }
+});
+const upload = multer({ storage });
+
+// Serve static files from the uploads directory
+app.use('/uploads', express.static(uploadDir));
 
 // API Route for Step 3 - Now using Prisma!
 app.get('/api/feed', async (req, res) => {
@@ -181,11 +202,28 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // Upload a new Video
-app.post('/api/videos', async (req, res) => {
+app.post('/api/videos', upload.single('video'), async (req, res) => {
   try {
-    const { title, description, url, authorId } = req.body;
+    const { title, description, authorId, category, subCategory, purpose, location, allowJudging } = req.body;
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No video file provided' });
+    }
+
+    const url = `http://localhost:${PORT}/uploads/${req.file.filename}`;
+
     const video = await prisma.video.create({
-      data: { title, description, url, authorId }
+      data: { 
+        title, 
+        description: description || '', 
+        url, 
+        category: category || null,
+        subCategory: subCategory || null,
+        purpose: purpose || null,
+        location: location || null,
+        allowJudging: allowJudging === 'false' ? false : true,
+        authorId: parseInt(authorId) 
+      }
     });
     res.json(video);
   } catch (error) {
@@ -275,6 +313,43 @@ app.post('/api/videos/:id/rate', async (req, res) => {
     res.status(500).json({ error: 'Failed to submit rating' });
   }
 });
+
+// Get User Profile
+app.get('/api/profile/:id', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        videos: {
+          orderBy: { createdAt: 'desc' }
+        },
+        _count: {
+          select: { videos: true }
+        }
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({
+      id: user.id,
+      username: user.username,
+      name: user.name,
+      followers: 0, // Mocked for now
+      following: 0, // Mocked for now
+      videosCount: user._count.videos,
+      videos: user.videos
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch profile' });
+  }
+});
+
 
 app.listen(PORT, () => {
   console.log(`🚀 Backend server is running on http://localhost:${PORT}`);

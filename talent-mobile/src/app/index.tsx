@@ -63,7 +63,7 @@ export default function App() {
     switch (activeBottomTab) {
       case 'HOME': return <HomeView user={currentUser} />;
       case 'FLIPS': return <FlipsView />;
-      case 'CREATE': return <CreateView user={currentUser} onPublishSuccess={() => setActiveBottomTab('HOME')} />;
+      case 'CREATE': return <CreateView user={currentUser} onPublishSuccess={() => setActiveBottomTab('HOME')} onClose={() => setActiveBottomTab('HOME')} />;
       case 'SHOWS': return <ShowsView />;
       case 'YOU': return <ProfileView user={currentUser} onLogout={handleLogout} />;
       default: return <HomeView user={currentUser} />;
@@ -91,52 +91,54 @@ export default function App() {
       </View>
 
       {/* Fixed Bottom Navigation Bar */}
-      <View className="absolute bottom-0 w-full bg-[#0B0D13]/95 border-t border-white/10 pt-3 pb-6 px-6 z-30">
-        <View className="flex-row justify-between items-center w-full">
-          {[
-            { id: 'HOME', icon: HomeLogoIcon, label: 'Home', isCustom: true },
-            { id: 'FLIPS', icon: FlipsLogoIcon, label: 'Flips', isCustom: true },
-            { id: 'CREATE', icon: CreateLogoIcon, label: 'Create', isCustom: true },
-            { id: 'SHOWS', icon: ShowsLogoIcon, label: 'Shows', isCustom: true },
-            { id: 'YOU', icon: YouLogoIcon, label: 'You', isCustom: true },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeBottomTab === tab.id;
-            return (
-              <TouchableOpacity
-                key={tab.id}
-                activeOpacity={0.7}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setActiveBottomTab(tab.id);
-                }}
-                className="items-center justify-center gap-1.5"
-              >
-                {tab.isCustom ? (
-                  <Icon
-                    size={24}
-                    color={isActive ? '#E91E76' : '#9CA3AF'}
-                    isActive={isActive}
-                  />
-                ) : (
-                  <Icon
-                    size={24}
-                    color={isActive ? '#E91E76' : '#9CA3AF'}
-                    strokeWidth={isActive ? 2.5 : 2}
-                  />
-                )}
-                <Text
-                  className={`text-[10px] font-medium tracking-wide ${
-                    isActive ? 'text-white' : 'text-[#9CA3AF]'
-                  }`}
+      {activeBottomTab !== 'CREATE' && (
+        <View className="absolute bottom-0 w-full bg-[#0B0D13]/95 border-t border-white/10 pt-3 pb-6 px-6 z-30">
+          <View className="flex-row justify-between items-center w-full">
+            {[
+              { id: 'HOME', icon: HomeLogoIcon, label: 'Home', isCustom: true },
+              { id: 'FLIPS', icon: FlipsLogoIcon, label: 'Flips', isCustom: true },
+              { id: 'CREATE', icon: CreateLogoIcon, label: 'Create', isCustom: true },
+              { id: 'SHOWS', icon: ShowsLogoIcon, label: 'Shows', isCustom: true },
+              { id: 'YOU', icon: YouLogoIcon, label: 'You', isCustom: true },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeBottomTab === tab.id;
+              return (
+                <TouchableOpacity
+                  key={tab.id}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setActiveBottomTab(tab.id);
+                  }}
+                  className="items-center justify-center gap-1.5"
                 >
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+                  {tab.isCustom ? (
+                    <Icon
+                      size={24}
+                      color={isActive ? '#E91E76' : '#9CA3AF'}
+                      isActive={isActive}
+                    />
+                  ) : (
+                    <Icon
+                      size={24}
+                      color={isActive ? '#E91E76' : '#9CA3AF'}
+                      strokeWidth={isActive ? 2.5 : 2}
+                    />
+                  )}
+                  <Text
+                    className={`text-[10px] font-medium tracking-wide ${
+                      isActive ? 'text-white' : 'text-[#9CA3AF]'
+                    }`}
+                  >
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
-      </View>
+      )}
     </View>
   );
 }

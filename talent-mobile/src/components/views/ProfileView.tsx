@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, Modal, Share as RNShare, Alert, Platform, PanResponder, KeyboardAvoidingView, TextInput } from 'react-native';
-import { Settings, Share, MoreHorizontal, CheckCircle, MapPin, Play, Pause, X, Shield, Bell, Key, User, LogOut, ChevronRight, ChevronLeft, Heart, Calendar, Star, Plus, Music, ExternalLink, Film, Bookmark, MessageCircle, Send, Gauge, EyeOff, Maximize2, ChevronDown } from 'lucide-react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Image, Modal } from 'react-native';
+import { Settings, Share, MoreHorizontal, CheckCircle, MapPin, Play, X, Shield, Bell, Key, User, LogOut, ChevronRight, ChevronLeft } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { Switch } from 'react-native';
 
