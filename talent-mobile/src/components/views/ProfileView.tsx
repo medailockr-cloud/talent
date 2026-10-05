@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Image, Modal } from 'react-native';
 import { Settings, Share, MoreHorizontal, CheckCircle, MapPin, Play, X, Shield, Bell, Key, User, LogOut, ChevronRight, ChevronLeft } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -11,6 +11,30 @@ export function ProfileView({ user, onLogout }: { user?: any, onLogout?: () => v
   // Privacy Settings State
   const [isPrivateAccount, setIsPrivateAccount] = useState(false);
   const [isBlindModeEnabled, setIsBlindModeEnabled] = useState(true);
+
+  // Profile Data State
+  const [profileData, setProfileData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    
+    async function fetchProfile() {
+      try {
+        const response = await fetch(`http://localhost:3000/api/profile/${user.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setProfileData(data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch profile:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    
+    fetchProfile();
+  }, [user?.id]);
 
   return (
     <View className="flex-1 bg-[#050608]">
@@ -54,9 +78,9 @@ export function ProfileView({ user, onLogout }: { user?: any, onLogout?: () => v
         <ScrollView horizontal showsHorizontalScrollIndicator={false} className="px-5 mb-6" contentContainerStyle={{ paddingRight: 40, gap: 10 }}>
           {[
             { icon: '★', label: 'Blind Score', value: '4.8', color: '#E91E76' },
-            { icon: '|||', label: 'Performances', value: '28', color: '#9CA3AF' },
-            { icon: '📅', label: 'Shows', value: '6', color: '#E91E76' },
-            { icon: '👥', label: 'Followers', value: '12.4K', color: '#9CA3AF' },
+            { icon: '|||', label: 'Performances', value: profileData ? String(profileData.videosCount) : '0', color: '#9CA3AF' },
+            { icon: '📅', label: 'Shows', value: '0', color: '#E91E76' },
+            { icon: '👥', label: 'Followers', value: profileData ? String(profileData.followers) : '0', color: '#9CA3AF' },
           ].map((stat, i) => (
             <View key={i} className="bg-[#171922] border border-white/5 rounded-2xl p-4 w-[110px]">
               <Text style={{ color: stat.color, marginBottom: 4 }}>{stat.icon}</Text>
@@ -79,26 +103,33 @@ export function ProfileView({ user, onLogout }: { user?: any, onLogout?: () => v
         {/* Tabs for Grid */}
         <View className="flex-row border-b border-white/10 mb-4 px-5">
           <View className="flex-1 items-center pb-3 border-b-2 border-white">
-            <Text className="text-white font-bold">Takes (28)</Text>
+            <Text className="text-white font-bold">Takes ({profileData ? profileData.videosCount : 0})</Text>
           </View>
           <View className="flex-1 items-center pb-3 opacity-50">
-            <Text className="text-white font-bold">Drafts (3)</Text>
+            <Text className="text-white font-bold">Drafts (0)</Text>
           </View>
         </View>
 
         {/* Video Grid */}
-        <View className="flex-row flex-wrap px-1 justify-between">
-          {[1, 2, 3, 4, 5, 6].map((item) => (
-            <View key={item} className="w-[33%] aspect-[3/4] p-0.5">
-              <View className="w-full h-full bg-[#1A1512] rounded-md overflow-hidden relative">
-                <Image source={{ uri: `https://picsum.photos/seed/${item}/200/300` }} className="w-full h-full opacity-70" />
-                <View className="absolute bottom-2 left-2 flex-row items-center gap-1">
-                  <Play color="#fff" size={10} fill="#fff" />
-                  <Text className="text-white text-[10px] font-bold">1.{item}M</Text>
+        <View className="flex-row flex-wrap px-1">
+          {isLoading ? (
+            <Text className="text-white text-center w-full mt-10">Loading...</Text>
+          ) : profileData?.videos && profileData.videos.length > 0 ? (
+            profileData.videos.map((video: any, index: number) => (
+              <View key={video.id} className="w-[33.33%] aspect-[3/4] p-0.5">
+                <View className="w-full h-full bg-[#1A1512] rounded-md overflow-hidden relative">
+                  {/* Just a placeholder thumbnail for now since we don't have video thumbnails */}
+                  <Image source={{ uri: `https://picsum.photos/seed/${video.id}/200/300` }} className="w-full h-full opacity-70" />
+                  <View className="absolute bottom-2 left-2 flex-row items-center gap-1">
+                    <Play color="#fff" size={10} fill="#fff" />
+                    <Text className="text-white text-[10px] font-bold">0</Text>
+                  </View>
                 </View>
               </View>
-            </View>
-          ))}
+            ))
+          ) : (
+            <Text className="text-[#9CA3AF] text-center w-full mt-10">No videos uploaded yet.</Text>
+          )}
         </View>
       </ScrollView>
 
