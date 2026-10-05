@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView, Image } from 'react-native';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
-import { X, Music, Flashlight, Repeat, Settings2, Sparkles, Clock, Image as ImageIcon, Image as CoverIcon, Check, ChevronLeft, MapPin, ToggleRight, ToggleLeft, Camera, Upload, Folder, Cloud, MoreHorizontal, MessageSquare, Eye, Globe, Zap, UploadCloud, CheckCircle2, FileVideo, Music2, Edit3, ImagePlus, ChevronRight, Scissors, Volume2, Type, BarChart2, Users, Briefcase, Settings, Play, Pause, MonitorPlay, Star } from 'lucide-react-native';
+import { X, Music, Flashlight, Repeat, Settings2, Sparkles, Clock, Image as ImageIcon, Image as CoverIcon, Check, ChevronLeft, MapPin, ToggleRight, ToggleLeft, Camera, Upload, Folder, Cloud, MoreHorizontal, MessageSquare, Eye, Globe, Zap, UploadCloud, CheckCircle2, FileVideo, Music2, Edit3, ImagePlus, ChevronRight, Scissors, Volume2, Type, BarChart2, Users, Briefcase, Settings, Play, Pause, MonitorPlay, Star, Aperture, Subtitles } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
@@ -45,7 +45,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   const [uploadProgress, setUploadProgress] = useState(0);
   
   // Editor State
-  const [editMode, setEditMode] = useState<'none' | 'trim' | 'cover' | 'sound' | 'caption'>('none');
+  const [editMode, setEditMode] = useState<'none' | 'trim' | 'cover' | 'sound' | 'filters' | 'caption'>('filters');
+  const [activeFilter, setActiveFilter] = useState('Original');
   const [isPlaying, setIsPlaying] = useState(true);
 
   const previewPlayer = useVideoPlayer(recordedVideoUri, player => {
@@ -339,7 +340,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   const renderPreview = () => (
     <View className="flex-1 bg-[#050608] pt-14">
       <TopNav 
-        title={editMode === 'none' ? "Preview & Edit" : editMode === 'trim' ? "Trim Video" : "Edit"} 
+        title={editMode === 'none' ? "Preview & Edit" : editMode === 'trim' ? "Trim Video" : editMode === 'filters' ? "Filters" : "Preview & Edit"} 
         onBack={() => { 
           if (editMode !== 'none') {
             setEditMode('none');
@@ -349,15 +350,9 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           }
         }} 
         rightEl={
-          editMode === 'none' ? (
-            <TouchableOpacity onPress={() => setStep('CHOOSE_TALENT')} className="bg-[#E91E76] px-4 py-1.5 rounded-full">
-              <Text className="text-white font-bold">Next</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity onPress={() => setEditMode('none')} className="bg-white/20 px-4 py-1.5 rounded-full">
-              <Text className="text-white font-bold">Done</Text>
-            </TouchableOpacity>
-          )
+          <TouchableOpacity onPress={() => setStep('CHOOSE_TALENT')} className="bg-[#E91E76] px-4 py-1.5 rounded-full">
+            <Text className="text-white font-bold">Next</Text>
+          </TouchableOpacity>
         }
       />
       
@@ -373,9 +368,9 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
               setIsPlaying(true);
             }
           }}
-          className="flex-1 rounded-3xl overflow-hidden bg-black mb-6 border border-white/10 relative justify-center items-center"
+          className="flex-1 rounded-3xl overflow-hidden bg-black mb-4 border border-white/10 relative justify-center items-center"
         >
-          {recordedVideoUri && <VideoView player={previewPlayer} className="absolute inset-0 w-full h-full" contentFit="contain" nativeControls={false} />}
+          {recordedVideoUri && <VideoView player={previewPlayer} className="absolute inset-0 w-full h-full" contentFit="cover" nativeControls={false} />}
           
           {!isPlaying && (
             <View className="w-16 h-16 bg-black/50 rounded-full items-center justify-center backdrop-blur-md">
@@ -383,38 +378,64 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             </View>
           )}
 
-          {/* Progress bar mock (only show when not in an edit mode) */}
-          {editMode === 'none' && (
-            <>
-              <View className="absolute bottom-4 left-4 right-4 h-1 bg-white/20 rounded-full overflow-hidden">
-                <View className="h-full w-1/3 bg-[#E91E76]" />
+          {/* Custom Progress Bar matching image */}
+          {editMode !== 'trim' && (
+            <View className="absolute bottom-4 left-4 right-4 flex-row items-center gap-3">
+              <View className="flex-1 h-1.5 bg-white/20 rounded-full flex-row items-center">
+                <View className="h-full w-1/3 bg-[#E91E76] rounded-l-full" />
+                <View className="w-3.5 h-3.5 bg-white rounded-full -ml-1.5 shadow-md" />
               </View>
-              <Text className="absolute bottom-6 right-4 text-white text-[10px] font-medium drop-shadow-md">00:12 / 00:58</Text>
-            </>
+              <Text className="text-white text-[10px] font-medium drop-shadow-md">00:12 / 00:58</Text>
+            </View>
           )}
         </TouchableOpacity>
         
-        {editMode === 'none' ? (
-          <View className="flex-row justify-between px-2">
-            <TouchableOpacity onPress={() => setEditMode('trim')} className="items-center">
-              <Scissors color="#fff" size={24} className="mb-2" />
-              <Text className="text-white text-xs">Trim</Text>
-            </TouchableOpacity>
-            <TouchableOpacity className="items-center">
-              <ImagePlus color="#fff" size={24} className="mb-2" />
-              <Text className="text-white text-xs">Cover</Text>
-            </TouchableOpacity>
-            <TouchableOpacity className="items-center">
-              <Music2 color="#fff" size={24} className="mb-2" />
-              <Text className="text-white text-xs">Sound</Text>
-            </TouchableOpacity>
-            <TouchableOpacity className="items-center">
-              <MessageSquare color="#fff" size={24} className="mb-2" />
-              <Text className="text-white text-xs">Caption</Text>
-            </TouchableOpacity>
-          </View>
-        ) : editMode === 'trim' ? (
-          <View className="w-full h-32">
+        {/* Main 5 Editor Buttons */}
+        <View className="flex-row justify-between mb-4">
+          <TouchableOpacity 
+            onPress={() => setEditMode('trim')} 
+            className={`w-[18%] aspect-square rounded-2xl items-center justify-center border border-white/10 bg-[#1A1D24] ${editMode === 'trim' ? 'border-[#E91E76]' : ''}`}
+          >
+            <Scissors color={editMode === 'trim' ? "#E91E76" : "#fff"} size={22} className="mb-2" />
+            <Text className={editMode === 'trim' ? "text-[#E91E76] text-[10px]" : "text-white text-[10px]"}>Trim</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            onPress={() => setEditMode('cover')}
+            className={`w-[18%] aspect-square rounded-2xl items-center justify-center border border-white/10 bg-[#1A1D24] ${editMode === 'cover' ? 'border-[#E91E76]' : ''}`}
+          >
+            <ImageIcon color={editMode === 'cover' ? "#E91E76" : "#fff"} size={22} className="mb-2" />
+            <Text className={editMode === 'cover' ? "text-[#E91E76] text-[10px]" : "text-white text-[10px]"}>Cover</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            onPress={() => setEditMode('sound')}
+            className={`w-[18%] aspect-square rounded-2xl items-center justify-center border border-white/10 bg-[#1A1D24] ${editMode === 'sound' ? 'border-[#E91E76]' : ''}`}
+          >
+            <Music2 color={editMode === 'sound' ? "#E91E76" : "#fff"} size={22} className="mb-2" />
+            <Text className={editMode === 'sound' ? "text-[#E91E76] text-[10px]" : "text-white text-[10px]"}>Sound</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            onPress={() => setEditMode('filters')}
+            className={`w-[18%] aspect-square rounded-2xl items-center justify-center border border-white/10 bg-[#1A1D24] ${editMode === 'filters' ? 'border-[#E91E76] border-2' : ''}`}
+          >
+            <Aperture color={editMode === 'filters' ? "#E91E76" : "#fff"} size={22} className="mb-2" />
+            <Text className={editMode === 'filters' ? "text-[#E91E76] text-[10px]" : "text-white text-[10px]"}>Filters</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            onPress={() => setEditMode('caption')}
+            className={`w-[18%] aspect-square rounded-2xl items-center justify-center border border-white/10 bg-[#1A1D24] ${editMode === 'caption' ? 'border-[#E91E76]' : ''}`}
+          >
+            <Subtitles color={editMode === 'caption' ? "#E91E76" : "#fff"} size={22} className="mb-2" />
+            <Text className={editMode === 'caption' ? "text-[#E91E76] text-[10px]" : "text-white text-[10px]"}>Captions</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Dynamic Editor Panel */}
+        {editMode === 'trim' ? (
+          <View className="w-full h-24 mb-4">
             <View className="flex-row justify-between items-center mb-4">
               <Text className="text-white font-medium">00:12</Text>
               <View className="flex-row items-center gap-4">
@@ -429,15 +450,13 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             </View>
             
             {/* Timeline Editor Mock */}
-            <View className="h-16 w-full relative justify-center">
-              {/* Filmstrip background */}
+            <View className="h-14 w-full relative justify-center">
               <View className="absolute inset-0 flex-row overflow-hidden rounded-lg border-2 border-white/20 opacity-50">
                 {[1, 2, 3, 4, 5, 6].map(i => (
                   <View key={i} className="flex-1 h-full bg-[#2A2D34] border-r border-black" />
                 ))}
               </View>
               
-              {/* Active selection */}
               <View className="absolute left-[10%] right-[20%] h-full border-4 border-[#E91E76] rounded-lg bg-transparent">
                 <View className="absolute -left-3 top-0 bottom-0 w-3 bg-[#E91E76] rounded-l-md justify-center items-center">
                   <View className="w-1 h-4 bg-white rounded-full" />
@@ -447,15 +466,44 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                 </View>
               </View>
               
-              {/* Playhead */}
               <View className="absolute left-[33%] top-[-8px] bottom-[-8px] w-1 bg-white rounded-full z-10 shadow-lg" />
             </View>
           </View>
-        ) : (
-          <View className="w-full h-32 items-center justify-center">
+        ) : editMode === 'filters' ? (
+          <View className="w-full h-[85px] mb-4">
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-1 w-full">
+              {['Original', 'Stage', 'Studio', 'Natural', 'Low Light', 'B&W', 'Live', 'Auto Fix'].map(filter => (
+                <TouchableOpacity 
+                  key={filter} 
+                  onPress={() => setActiveFilter(filter)}
+                  className="items-center mr-3"
+                >
+                  <View className={`w-14 h-14 rounded-xl overflow-hidden mb-1.5 ${activeFilter === filter ? 'border-2 border-[#E91E76]' : ''}`}>
+                    {/* In a real app this would be a thumbnail of the video with the filter applied */}
+                    <View className="w-full h-full bg-[#2A2D34]" />
+                  </View>
+                  <Text className={`text-[10px] ${activeFilter === filter ? 'text-[#E91E76]' : 'text-white/80'}`}>{filter}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        ) : editMode !== 'none' ? (
+          <View className="w-full h-24 items-center justify-center mb-4">
             <Text className="text-[#9CA3AF]">Editing feature coming soon.</Text>
           </View>
-        )}
+        ) : null}
+
+        {/* Best Moment Banner */}
+        <View className="bg-[#1A1D24] p-4 rounded-2xl flex-row items-center border border-white/5">
+          <Sparkles color="#fff" size={24} className="mr-3" />
+          <View className="flex-1 mr-2">
+            <Text className="text-white font-bold text-sm mb-0.5">Best Moment</Text>
+            <Text className="text-[#9CA3AF] text-[11px]">Let AI find the most engaging part of your video.</Text>
+          </View>
+          <TouchableOpacity className="bg-[#E91E76] px-5 py-2 rounded-full">
+            <Text className="text-white font-bold text-xs">Try</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
