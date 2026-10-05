@@ -10,6 +10,16 @@ This project is divided into two main applications:
 
 ---
 
+## 🌟 Current Features
+
+- **Dynamic Video Feed**: Scrollable video feed in `HomeView` fetching data from the backend.
+- **Advanced Video Creator**: A multi-step `CreateView` for recording or uploading performance videos (`expo-image-picker`), with a custom interactive video editing timeline for trimming and configuring video metadata (category, purpose, judging flags).
+- **User Profiles**: `ProfileView` displaying dynamic stats, recent videos, and "Blind Scores" from the backend.
+- **Robust Playback**: Integration with `expo-video` for responsive video playback with automated web browser handling (auto-mute for autoplay policies).
+- **Modern UI/UX**: Highly polished UI using `lucide-react-native` icons, custom typography, haptic feedback, and a sleek dark mode interface.
+
+---
+
 ## 🚀 Setup & Installation Guide for Developers
 
 Follow these steps exactly to get the entire full-stack application running on your local machine.
@@ -85,7 +95,7 @@ Once both servers are running:
 
 **Frontend:**
 - [React Native](https://reactnative.dev/)
-- [Expo](https://expo.dev/) (Expo Router for navigation)
+- [Expo](https://expo.dev/) (Including `expo-camera`, `expo-video`, `expo-image-picker`, and `expo-haptics`)
 - [NativeWind](https://www.nativewind.dev/) (Tailwind CSS for React Native)
 - [Lucide Icons](https://lucide.dev/)
 
