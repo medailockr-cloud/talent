@@ -12,6 +12,10 @@ import http from 'http';
 import { Server } from 'socket.io';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsDoc from 'swagger-jsdoc';
+import { cacheFeed, getCachedFeed } from './utils/redis';
+import { cloudUpload } from './utils/cloudinary';
+import { convertToHLS } from './utils/ffmpeg';
+import { sendPushNotification } from './utils/notifications';
 declare global {
   namespace Express {
     interface Request {
@@ -101,6 +105,14 @@ app.get('/api/feed', async (req, res) => {
     const userId = req.query.userId ? parseInt(req.query.userId as string) : null;
     const limit = parseInt(req.query.limit as string) || 10;
     const cursor = req.query.cursor ? parseInt(req.query.cursor as string) : undefined;
+    
+    // Check Cache
+    const cacheKey = `feed_${limit}_${cursor}_${userId}`;
+    const cachedFeed = await getCachedFeed(cacheKey);
+    if (cachedFeed) {
+      console.log('Serving feed from Redis cache');
+      return res.json({ videos: cachedFeed });
+    }
     
     const videos = await prisma.video.findMany({
       take: limit,
@@ -208,6 +220,9 @@ app.get('/api/feed', async (req, res) => {
       return scoreB - scoreA;
     });
 
+    // Save to Cache
+    await cacheFeed(cacheKey, formattedVideos);
+
     res.json({ videos: formattedVideos });
   } catch (error) {
     console.error(error);
@@ -280,7 +295,8 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // Upload a new Video (Protected)
-app.post('/api/videos', requireAuth, upload.single('video'), async (req, res) => {
+const uploadMiddleware = cloudUpload ? cloudUpload.single('video') : upload.single('video');
+app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
   try {
     const { title, description, category, subCategory, purpose, location, allowJudging } = req.body;
     const authorId = req.userId!;
@@ -289,7 +305,8 @@ app.post('/api/videos', requireAuth, upload.single('video'), async (req, res) =>
       return res.status(400).json({ error: 'No video file provided' });
     }
 
-    const url = `http://localhost:${PORT}/uploads/${req.file.filename}`;
+    // If cloudUpload is active, the URL is provided by Cloudinary via req.file.path
+    const url = cloudUpload ? req.file.path : `http://localhost:${PORT}/uploads/${req.file.filename}`;
 
     // Extract hashtags from title or description
     const textToParse = `${title} ${description || ''}`;
@@ -317,6 +334,12 @@ app.post('/api/videos', requireAuth, upload.single('video'), async (req, res) =>
         }
       }
     });
+    
+    // Trigger HLS Transcoding in background if it's a local upload
+    if (!cloudUpload && req.file.path) {
+      convertToHLS(req.file.path, video.id).catch(console.error);
+    }
+    
     res.json(video);
   } catch (error) {
     console.error(error);
@@ -387,7 +410,11 @@ app.post('/api/videos/:id/comment', requireAuth, async (req, res) => {
     });
     
     // Generate Notification
-    const video = await prisma.video.findUnique({ where: { id: videoId } });
+    const video = await prisma.video.findUnique({ 
+      where: { id: videoId },
+      include: { author: true }
+    });
+    
     if (video && video.authorId !== userId) {
       await prisma.notification.create({
         data: {
@@ -397,6 +424,15 @@ app.post('/api/videos/:id/comment', requireAuth, async (req, res) => {
           videoId: videoId
         }
       });
+      
+      // Send real push notification if user has a token
+      if (video.author.pushToken) {
+        await sendPushNotification(
+          video.author.pushToken,
+          `Someone commented on your video!`,
+          { videoId }
+        );
+      }
     }
     
     res.json(comment);
@@ -544,6 +580,37 @@ app.put('/api/profile/me', requireAuth, upload.single('avatar'), async (req, res
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+// Search Endpoint
+app.get('/api/search', requireAuth, async (req, res) => {
+  try {
+    const query = (req.query.q as string) || '';
+    if (!query) return res.json({ users: [], videos: [] });
+
+    const users = await prisma.user.findMany({
+      where: {
+        OR: [
+          { username: { contains: query } },
+          { name: { contains: query } }
+        ]
+      },
+      select: { id: true, username: true, name: true, avatarUrl: true },
+      take: 10
+    });
+
+    const videos = await prisma.video.findMany({
+      where: {
+        description: { contains: query }
+      },
+      include: { author: { select: { username: true, name: true, avatarUrl: true } } },
+      take: 10
+    });
+
+    res.json({ users, videos });
+  } catch (error) {
+    res.status(500).json({ error: 'Search failed' });
   }
 });
 

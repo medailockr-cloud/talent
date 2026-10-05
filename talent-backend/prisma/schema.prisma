@@ -15,6 +15,7 @@ model User {
   name      String?
   bio       String?
   avatarUrl String?
+  pushToken String?
   videos      Video[]
   likes       Like[]
   comments    Comment[]
