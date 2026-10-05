@@ -163,7 +163,7 @@ export function CreateView({ user, onPublishSuccess, onClose }: { user?: any, on
     <View className="flex-1 bg-black">
       <CameraView 
         ref={cameraRef}
-        style={StyleSheet.absoluteFill} 
+        className="flex-1 w-full h-full"
         facing={facing}
         mode="video"
       >
