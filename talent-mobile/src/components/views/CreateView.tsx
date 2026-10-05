@@ -4,6 +4,7 @@ import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo
 import { X, Music, Flashlight, Repeat, Settings2, Sparkles, Clock, Image as ImageIcon, Image as CoverIcon, Check, ChevronLeft, MapPin, ToggleRight, ToggleLeft, Camera, Upload, Folder, Cloud, MoreHorizontal, MessageSquare, Eye, Globe, Zap, UploadCloud, CheckCircle2, FileVideo, Music2, Edit3, ImagePlus, ChevronRight, Scissors, Volume2, Type, BarChart2, Users, Briefcase, Settings, Play, Pause, MonitorPlay, Star } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import * as ImagePicker from 'expo-image-picker';
 
 // --- Types ---
 type CreateStep = 
@@ -42,9 +43,14 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
   // Upload progress simulation
   const [uploadProgress, setUploadProgress] = useState(0);
+  
+  // Editor State
+  const [editMode, setEditMode] = useState<'none' | 'trim' | 'cover' | 'sound' | 'caption'>('none');
+  const [isPlaying, setIsPlaying] = useState(true);
 
-  const previewPlayer = useVideoPlayer(recordedVideoUri || '', player => {
+  const previewPlayer = useVideoPlayer(recordedVideoUri, player => {
     player.loop = true;
+    player.muted = true; // Auto-play requires muted on web
     player.play();
   });
 
@@ -127,6 +133,23 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       throw e;
     }
   }
+
+  const pickVideo = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'videos',
+        allowsEditing: true,
+        quality: 1,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setRecordedVideoUri(result.assets[0].uri);
+        setStep('PREVIEW');
+      }
+    } catch (error) {
+      console.error("Failed to pick video:", error);
+    }
+  };
 
   // --- Render Helpers ---
   const TopNav = ({ title, onBack, rightEl }: { title?: string, onBack: () => void, rightEl?: React.ReactNode }) => (
@@ -282,7 +305,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           <Text className="text-[#9CA3AF] text-xs mt-1">(Max 3 minutes)</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity className="flex-row justify-between items-center bg-[#1A1D24] p-5 rounded-2xl mb-3">
+        <TouchableOpacity onPress={pickVideo} className="flex-row justify-between items-center bg-[#1A1D24] p-5 rounded-2xl mb-3">
           <View className="flex-row items-center gap-4">
             <ImageIcon color="#9CA3AF" size={24} />
             <Text className="text-white font-medium text-[16px]">From Gallery</Text>
@@ -290,7 +313,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           <ChevronRight color="#9CA3AF" size={20} />
         </TouchableOpacity>
         
-        <TouchableOpacity className="flex-row justify-between items-center bg-[#1A1D24] p-5 rounded-2xl mb-3">
+        <TouchableOpacity onPress={pickVideo} className="flex-row justify-between items-center bg-[#1A1D24] p-5 rounded-2xl mb-3">
           <View className="flex-row items-center gap-4">
             <FileVideo color="#9CA3AF" size={24} />
             <Text className="text-white font-medium text-[16px]">From Files</Text>
@@ -316,44 +339,123 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   const renderPreview = () => (
     <View className="flex-1 bg-[#050608] pt-14">
       <TopNav 
-        title="Preview & Edit" 
-        onBack={() => { setRecordedVideoUri(null); setStep('RECORD'); }} 
+        title={editMode === 'none' ? "Preview & Edit" : editMode === 'trim' ? "Trim Video" : "Edit"} 
+        onBack={() => { 
+          if (editMode !== 'none') {
+            setEditMode('none');
+          } else {
+            setRecordedVideoUri(null); 
+            setStep('RECORD'); 
+          }
+        }} 
         rightEl={
-          <TouchableOpacity onPress={() => setStep('CHOOSE_TALENT')} className="bg-[#E91E76] px-4 py-1.5 rounded-full">
-            <Text className="text-white font-bold">Next</Text>
-          </TouchableOpacity>
+          editMode === 'none' ? (
+            <TouchableOpacity onPress={() => setStep('CHOOSE_TALENT')} className="bg-[#E91E76] px-4 py-1.5 rounded-full">
+              <Text className="text-white font-bold">Next</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={() => setEditMode('none')} className="bg-white/20 px-4 py-1.5 rounded-full">
+              <Text className="text-white font-bold">Done</Text>
+            </TouchableOpacity>
+          )
         }
       />
       
       <View className="flex-1 px-5 pb-5">
-        <View className="flex-1 rounded-3xl overflow-hidden bg-black mb-6 border border-white/10 relative">
-          {recordedVideoUri && <VideoView player={previewPlayer} style={StyleSheet.absoluteFill} contentFit="cover" />}
+        <TouchableOpacity 
+          activeOpacity={0.9}
+          onPress={() => {
+            if (isPlaying) {
+              previewPlayer.pause();
+              setIsPlaying(false);
+            } else {
+              previewPlayer.play();
+              setIsPlaying(true);
+            }
+          }}
+          className="flex-1 rounded-3xl overflow-hidden bg-black mb-6 border border-white/10 relative justify-center items-center"
+        >
+          {recordedVideoUri && <VideoView player={previewPlayer} className="absolute inset-0 w-full h-full" contentFit="contain" nativeControls={false} />}
           
-          {/* Progress bar mock */}
-          <View className="absolute bottom-4 left-4 right-4 h-1 bg-white/20 rounded-full overflow-hidden">
-            <View className="h-full w-1/3 bg-[#E91E76]" />
-          </View>
-          <Text className="absolute bottom-6 right-4 text-white text-[10px] font-medium drop-shadow-md">00:12 / 00:58</Text>
-        </View>
+          {!isPlaying && (
+            <View className="w-16 h-16 bg-black/50 rounded-full items-center justify-center backdrop-blur-md">
+              <Play color="#fff" size={32} fill="#fff" className="ml-1" />
+            </View>
+          )}
+
+          {/* Progress bar mock (only show when not in an edit mode) */}
+          {editMode === 'none' && (
+            <>
+              <View className="absolute bottom-4 left-4 right-4 h-1 bg-white/20 rounded-full overflow-hidden">
+                <View className="h-full w-1/3 bg-[#E91E76]" />
+              </View>
+              <Text className="absolute bottom-6 right-4 text-white text-[10px] font-medium drop-shadow-md">00:12 / 00:58</Text>
+            </>
+          )}
+        </TouchableOpacity>
         
-        <View className="flex-row justify-between px-2">
-          <TouchableOpacity className="items-center">
-            <Edit3 color="#fff" size={24} className="mb-2" />
-            <Text className="text-white text-xs">Trim</Text>
-          </TouchableOpacity>
-          <TouchableOpacity className="items-center">
-            <ImagePlus color="#fff" size={24} className="mb-2" />
-            <Text className="text-white text-xs">Cover</Text>
-          </TouchableOpacity>
-          <TouchableOpacity className="items-center">
-            <Music2 color="#fff" size={24} className="mb-2" />
-            <Text className="text-white text-xs">Sound</Text>
-          </TouchableOpacity>
-          <TouchableOpacity className="items-center">
-            <MessageSquare color="#fff" size={24} className="mb-2" />
-            <Text className="text-white text-xs">Caption</Text>
-          </TouchableOpacity>
-        </View>
+        {editMode === 'none' ? (
+          <View className="flex-row justify-between px-2">
+            <TouchableOpacity onPress={() => setEditMode('trim')} className="items-center">
+              <Scissors color="#fff" size={24} className="mb-2" />
+              <Text className="text-white text-xs">Trim</Text>
+            </TouchableOpacity>
+            <TouchableOpacity className="items-center">
+              <ImagePlus color="#fff" size={24} className="mb-2" />
+              <Text className="text-white text-xs">Cover</Text>
+            </TouchableOpacity>
+            <TouchableOpacity className="items-center">
+              <Music2 color="#fff" size={24} className="mb-2" />
+              <Text className="text-white text-xs">Sound</Text>
+            </TouchableOpacity>
+            <TouchableOpacity className="items-center">
+              <MessageSquare color="#fff" size={24} className="mb-2" />
+              <Text className="text-white text-xs">Caption</Text>
+            </TouchableOpacity>
+          </View>
+        ) : editMode === 'trim' ? (
+          <View className="w-full h-32">
+            <View className="flex-row justify-between items-center mb-4">
+              <Text className="text-white font-medium">00:12</Text>
+              <View className="flex-row items-center gap-4">
+                <TouchableOpacity onPress={() => {
+                  if (isPlaying) { previewPlayer.pause(); setIsPlaying(false); }
+                  else { previewPlayer.play(); setIsPlaying(true); }
+                }}>
+                  {isPlaying ? <Pause color="#fff" size={24} /> : <Play color="#fff" size={24} />}
+                </TouchableOpacity>
+              </View>
+              <Text className="text-white font-medium">00:58</Text>
+            </View>
+            
+            {/* Timeline Editor Mock */}
+            <View className="h-16 w-full relative justify-center">
+              {/* Filmstrip background */}
+              <View className="absolute inset-0 flex-row overflow-hidden rounded-lg border-2 border-white/20 opacity-50">
+                {[1, 2, 3, 4, 5, 6].map(i => (
+                  <View key={i} className="flex-1 h-full bg-[#2A2D34] border-r border-black" />
+                ))}
+              </View>
+              
+              {/* Active selection */}
+              <View className="absolute left-[10%] right-[20%] h-full border-4 border-[#E91E76] rounded-lg bg-transparent">
+                <View className="absolute -left-3 top-0 bottom-0 w-3 bg-[#E91E76] rounded-l-md justify-center items-center">
+                  <View className="w-1 h-4 bg-white rounded-full" />
+                </View>
+                <View className="absolute -right-3 top-0 bottom-0 w-3 bg-[#E91E76] rounded-r-md justify-center items-center">
+                  <View className="w-1 h-4 bg-white rounded-full" />
+                </View>
+              </View>
+              
+              {/* Playhead */}
+              <View className="absolute left-[33%] top-[-8px] bottom-[-8px] w-1 bg-white rounded-full z-10 shadow-lg" />
+            </View>
+          </View>
+        ) : (
+          <View className="w-full h-32 items-center justify-center">
+            <Text className="text-[#9CA3AF]">Editing feature coming soon.</Text>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -449,7 +551,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           <View className="px-5">
             <View className="flex-row mb-8">
               <View className="w-24 h-36 bg-[#1A1D24] rounded-xl overflow-hidden mr-4">
-                {recordedVideoUri && <VideoView player={previewPlayer} style={StyleSheet.absoluteFill} contentFit="cover" />}
+                {recordedVideoUri && <VideoView player={previewPlayer} className="flex-1 w-full h-full" contentFit="cover" />}
                 <View className="absolute bottom-0 w-full bg-black/60 py-1">
                   <Text className="text-white text-[10px] text-center font-medium">Change Cover</Text>
                 </View>
@@ -521,7 +623,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       <View className="px-5">
         <View className="bg-[#1A1D24] rounded-2xl p-4 flex-row mb-6 border border-white/5">
           <View className="w-20 h-28 bg-[#2A2D34] rounded-lg overflow-hidden mr-4 relative">
-             {recordedVideoUri && <VideoView player={previewPlayer} style={StyleSheet.absoluteFill} contentFit="cover" />}
+             {recordedVideoUri && <VideoView player={previewPlayer} className="flex-1 w-full h-full" contentFit="cover" />}
              <View className="absolute inset-0 items-center justify-center bg-black/20">
                <View className="w-8 h-8 rounded-full bg-black/50 items-center justify-center">
                  <Text className="text-white text-xs">▶</Text>
