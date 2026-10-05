@@ -608,9 +608,6 @@ export function HomeView({ user }: { user?: any }) {
             <TouchableOpacity activeOpacity={0.7} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setIsSearchOpen(true); }}>
               <Search color="#E5E7EB" size={24} strokeWidth={2} />
             </TouchableOpacity>
-            <TouchableOpacity activeOpacity={0.7} onPress={() => Alert.alert('Navigate', 'Opening Profile')} className="w-[32px] h-[32px] rounded-full overflow-hidden border border-white/20">
-              <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100' }} className="w-full h-full" />
-            </TouchableOpacity>
           </View>
         </View>
         

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, Modal } from 'react-native';
-import { Settings, Share, MoreHorizontal, CheckCircle, MapPin, Play, X, Shield, Bell, Key, User, LogOut, ChevronRight, ChevronLeft } from 'lucide-react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image, Modal, Platform } from 'react-native';
+import { Settings, Share, MoreHorizontal, CheckCircle, MapPin, Play, X, Shield, Bell, Key, User, LogOut, ChevronRight, ChevronLeft, Calendar, Film, Heart, Plus, ExternalLink, Star } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { Switch } from 'react-native';
 
@@ -323,6 +323,30 @@ export function ProfileView({ user, onLogout, onBack }: { user?: any, onLogout?:
   const [isPrivateAccount, setIsPrivateAccount] = useState(false);
   const [isBlindModeEnabled, setIsBlindModeEnabled] = useState(true);
 
+  // Profile Data State
+  const [profileData, setProfileData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        setIsLoading(true);
+        const userId = user?.id || 1; // Fallback to 1 if not logged in
+        const baseUrl = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
+        
+        const response = await fetch(`${baseUrl}/api/profile/${userId}`);
+        if (!response.ok) throw new Error('Network response was not ok');
+        const data = await response.json();
+        setProfileData(data);
+      } catch (error) {
+        console.error("Failed to fetch profile:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchProfile();
+  }, [user]);
+
   const handleShare = async () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -404,10 +428,7 @@ export function ProfileView({ user, onLogout, onBack }: { user?: any, onLogout?:
 
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 100 }} bounces={false}>
         {/* Cover */}
-        <View className="w-full h-[200px] relative">
-          <Image source={{ uri: coverImg }} className="w-full h-full opacity-80" />
-          <View className="absolute inset-0 bg-black/30" />
-          
+        <View className="w-full h-[140px] relative bg-[#050608]">
           {/* Top Actions */}
           <View className="absolute top-14 left-4 z-10">
             <TouchableOpacity onPress={() => { 
@@ -419,7 +440,7 @@ export function ProfileView({ user, onLogout, onBack }: { user?: any, onLogout?:
               } else {
                 Alert.alert('Home', 'Navigating to Home...');
               }
-            }} className="w-9 h-9 items-center justify-center bg-black/40 rounded-full border border-white/10">
+            }} className="w-9 h-9 items-center justify-center rounded-full border border-white/10">
               <ChevronLeft color="#fff" size={24} />
             </TouchableOpacity>
           </View>
@@ -443,14 +464,12 @@ export function ProfileView({ user, onLogout, onBack }: { user?: any, onLogout?:
 
           {/* Name & Title */}
           <View className="flex-row items-center justify-center gap-2 mb-1">
-            <Text className="text-white text-[26px] font-bold tracking-tight">Aarav Nair</Text>
+            <Text className="text-white text-[26px] font-bold tracking-tight">{profileData?.name || 'Aarav Nair'}</Text>
             <CheckCircle color="#E91E76" fill="#E91E76" size={20} />
           </View>
           
           <View className="flex-row items-center justify-center gap-2 mb-3">
-            <Text className="text-[#9CA3AF] text-[13px]">Singer</Text>
-            <Text className="text-[#9CA3AF] text-[13px]">•</Text>
-            <Text className="text-[#9CA3AF] text-[13px]">Songwriter</Text>
+            <Text className="text-[#9CA3AF] text-[13px]">{profileData?.username ? `@${profileData.username}` : 'Singer'}</Text>
             <Text className="text-[#9CA3AF] text-[13px]">•</Text>
             <MapPin color="#9CA3AF" size={13} />
             <Text className="text-[#9CA3AF] text-[13px]">Bengaluru, India</Text>
@@ -464,33 +483,33 @@ export function ProfileView({ user, onLogout, onBack }: { user?: any, onLogout?:
         {/* Stats Row */}
         <View className="flex-row px-5 gap-2 mb-6 justify-between">
           {[
-            { icon: <Star color="#E91E76" fill="#E91E76" size={16} />, label: 'Blind Score', value: '4.8' },
-            { icon: <View className="flex-row items-end gap-1"><View className="w-0.5 h-3 bg-white"/><View className="w-0.5 h-4 bg-white"/><View className="w-0.5 h-2 bg-white"/></View>, label: 'Performances', value: '28' },
-            { icon: <Calendar color="#E91E76" size={16} />, label: 'Shows', value: '6' },
-            { icon: <User color="#9CA3AF" size={16} />, label: 'Followers', value: '12.4K' },
+            { icon: <Star color="#E91E76" fill="#E91E76" size={14} />, label: 'Blind Score', value: '4.8' },
+            { icon: <View className="flex-row items-end gap-[2px]"><View className="w-[2px] h-2.5 bg-white"/><View className="w-[2px] h-3.5 bg-white"/><View className="w-[2px] h-2 bg-white"/></View>, label: 'Performances', value: profileData?.videosCount?.toString() || '28' },
+            { icon: <Calendar color="#E91E76" size={14} />, label: 'Shows', value: '6' },
+            { icon: <User color="#9CA3AF" size={14} />, label: 'Followers', value: profileData?.followers?.toString() || '12.4K' },
           ].map((stat, i) => (
-            <View key={i} className="flex-1 bg-[#0F1115] border border-white/5 rounded-xl py-3 px-1 items-center justify-center">
-              <View className="flex-row items-center justify-center gap-2 mb-1">
+            <View key={i} className="flex-1 bg-[#12141A] rounded-[14px] py-2.5 px-1 items-center justify-center">
+              <View className="flex-row items-center justify-center gap-1.5 mb-1">
                  {stat.icon}
-                 <Text className="text-white text-[16px] font-bold">{stat.value}</Text>
+                 <Text className="text-white text-[15px] font-bold">{stat.value}</Text>
               </View>
-              <Text className="text-[#7C8495] text-[10px]">{stat.label}</Text>
+              <Text className="text-[#7C8495] text-[9px]">{stat.label}</Text>
             </View>
           ))}
         </View>
 
         {/* Action Buttons */}
         <View className="px-5 flex-row gap-3 mb-6">
-          <TouchableOpacity onPress={handleBackTalent} activeOpacity={0.8} className={`flex-1 ${backed ? 'bg-[#9CA3AF]/20' : 'bg-[#E91E76]'} h-[48px] rounded-full flex-row items-center justify-center gap-1.5`}>
-            <Heart color={backed ? "#E91E76" : "#fff"} fill={backed ? "#E91E76" : "transparent"} size={16} />
+          <TouchableOpacity onPress={handleBackTalent} activeOpacity={0.8} className={`flex-[1.2] ${backed ? 'bg-[#9CA3AF]/20' : 'bg-[#E91E76]'} h-[42px] rounded-full flex-row items-center justify-center gap-1.5`}>
+            <Heart color={backed ? "#E91E76" : "#fff"} fill={backed ? "#E91E76" : "transparent"} size={14} />
             <Text className="text-white font-bold text-[11px] tracking-wider uppercase">{backed ? 'BACKED' : 'BACK TALENT'}</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={handleInvite} activeOpacity={0.8} className="flex-[1.2] border border-[#E91E76] bg-[#E91E76]/10 h-[48px] rounded-full flex-row items-center justify-center gap-1.5 shadow-lg">
-            <Calendar color="#E91E76" size={16} />
+          <TouchableOpacity onPress={handleInvite} activeOpacity={0.8} className="flex-[1.2] border border-[#E91E76] bg-transparent h-[42px] rounded-full flex-row items-center justify-center gap-1.5">
+            <Calendar color="#E91E76" size={14} />
             <Text className="text-[#E91E76] font-bold text-[11px] tracking-wider uppercase">INVITE TO SHOW</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => setIsSettingsOpen(true)} activeOpacity={0.8} className="w-[48px] h-[48px] rounded-full border border-white/20 items-center justify-center">
-            <MoreHorizontal color="#fff" size={20} />
+          <TouchableOpacity onPress={() => setIsSettingsOpen(true)} activeOpacity={0.8} className="w-[42px] h-[42px] rounded-full border border-white/20 items-center justify-center">
+            <MoreHorizontal color="#fff" size={18} />
           </TouchableOpacity>
         </View>
 
@@ -510,55 +529,50 @@ export function ProfileView({ user, onLogout, onBack }: { user?: any, onLogout?:
         {/* Tabs */}
         <View className="flex-row border-b border-white/10 mb-6 px-5 justify-between">
           <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setActiveTab('Performances'); }} className={`flex-1 items-center pb-3 flex-row justify-center gap-2 ${activeTab === 'Performances' ? 'border-b-2 border-[#E91E76]' : 'opacity-60'}`}>
-            <Film color={activeTab === 'Performances' ? '#E91E76' : '#fff'} size={16} />
             <Text className="text-white font-bold text-[14px]">Performances</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setActiveTab('Shows'); }} className={`flex-1 items-center pb-3 flex-row justify-center gap-2 ${activeTab === 'Shows' ? 'border-b-2 border-[#E91E76]' : 'opacity-60'}`}>
-            <Calendar color={activeTab === 'Shows' ? '#E91E76' : '#fff'} size={16} />
             <Text className="text-white font-medium text-[14px]">Shows</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setActiveTab('About'); }} className={`flex-1 items-center pb-3 flex-row justify-center gap-2 ${activeTab === 'About' ? 'border-b-2 border-[#E91E76]' : 'opacity-60'}`}>
-            <User color={activeTab === 'About' ? '#E91E76' : '#fff'} size={16} />
             <Text className="text-white font-medium text-[14px]">About</Text>
           </TouchableOpacity>
         </View>
-
         {activeTab === 'Performances' && (
           <View>
             {/* Featured Performance */}
             <View className="px-5 mb-8">
               <View className="flex-row justify-between items-center mb-4">
-                <Text className="text-white text-[18px] font-bold">Featured Performance</Text>
+                <Text className="text-white text-[18px] font-bold tracking-tight">Featured Performance</Text>
                 <TouchableOpacity className="flex-row items-center gap-1" onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setIsProfileFeedOpen(true); }}>
                   <Text className="text-[#9CA3AF] text-[12px]">See all</Text>
                   <ChevronRight color="#9CA3AF" size={14} />
                 </TouchableOpacity>
               </View>
               
-              <TouchableOpacity activeOpacity={0.9} onPress={() => playVideo(dummyVideos[0])} className="w-full h-[220px] rounded-2xl overflow-hidden relative border border-white/10 bg-[#0F1115]">
-                <Image source={{ uri: 'https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=800&q=80' }} className="w-full h-full opacity-80" />
-                <View className="absolute inset-0 bg-black/10" />
+              <TouchableOpacity activeOpacity={0.9} onPress={() => playVideo(dummyVideos[0])} className="w-full aspect-[4/3] rounded-[24px] overflow-hidden relative border border-white/5 bg-[#12141A]">
+                <Image source={{ uri: 'https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=800&q=80' }} className="w-full h-[70%] opacity-80" />
                 
                 {/* Featured Badge */}
-                <View className="absolute top-3 left-3 bg-black/60 border border-[#E91E76]/50 px-3 py-1.5 rounded-full flex-row items-center gap-1.5">
+                <View className="absolute top-4 left-4 bg-[#12141A] border border-[#E91E76]/30 px-3 py-1.5 rounded-full flex-row items-center gap-1.5 shadow-sm">
                   <Star color="#E91E76" fill="#E91E76" size={12} />
-                  <Text className="text-white text-[11px] font-bold">Featured</Text>
+                  <Text className="text-white text-[11px] font-bold tracking-wide">Featured</Text>
                 </View>
                 
                 {/* Play Button */}
-                <View className="absolute inset-0 items-center justify-center">
-                  <View className="w-14 h-14 rounded-full bg-black/40 border border-white/30 items-center justify-center">
+                <View className="absolute top-[35%] left-0 right-0 items-center justify-center -translate-y-1/2">
+                  <View className="w-16 h-16 rounded-full border border-white bg-black/30 items-center justify-center">
                     <Play color="#fff" fill="#fff" size={24} style={{ marginLeft: 4 }} />
                   </View>
                 </View>
                 
                 {/* Bottom Info */}
-                <View className="absolute bottom-0 left-0 right-0 p-4">
-                  <Text className="text-white text-[20px] font-bold mb-1">Monsoon Motion</Text>
+                <View className="absolute bottom-0 left-0 right-0 h-[30%] px-5 py-4 justify-center">
+                  <Text className="text-white text-[20px] font-bold tracking-tight mb-1.5">Monsoon Motion</Text>
                   <View className="flex-row items-center justify-between">
-                    <Text className="text-[#D1D5DB] text-[12px]">Original • Acoustic • 3.2M views</Text>
-                    <View className="bg-black/60 border border-white/20 px-2 py-1 rounded">
-                      <Text className="text-white text-[10px]">09:56</Text>
+                    <Text className="text-[#9CA3AF] text-[12.5px] font-medium">Original • Acoustic • 3.2M views</Text>
+                    <View className="bg-[#1C1F26] px-2.5 py-1 rounded-md">
+                      <Text className="text-[#9CA3AF] text-[11px] font-medium tracking-wide">09:56</Text>
                     </View>
                   </View>
                 </View>
