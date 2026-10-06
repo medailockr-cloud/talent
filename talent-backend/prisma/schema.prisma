@@ -16,6 +16,7 @@ model User {
   bio       String?
   avatarUrl String?
   pushToken String?
+  isPrivate Boolean  @default(false)
   videos      Video[]
   likes       Like[]
   comments    Comment[]
@@ -28,6 +29,9 @@ model User {
   savedVideos SavedVideo[]
   sentMessages Message[] @relation("sentMessages")
   receivedMessages Message[] @relation("receivedMessages")
+  blockedUsers Block[] @relation("blocker")
+  blockedBy   Block[] @relation("blocked")
+  watchHistory WatchHistory[]
   liveStream  LiveStream?
   createdAt   DateTime @default(now())
 }
@@ -43,6 +47,8 @@ model Video {
   purpose      String?
   location     String?
   allowJudging Boolean   @default(true)
+  isDraft      Boolean   @default(false)
+  privacy      String    @default("PUBLIC") // PUBLIC, PRIVATE, FRIENDS
   
   views       Int       @default(0)
   shares      Int       @default(0)
@@ -57,6 +63,7 @@ model Video {
   notifications Notification[]
   reports     Report[]
   savedBy     SavedVideo[]
+  watchHistory WatchHistory[]
   
   createdAt   DateTime  @default(now())
 }
@@ -183,4 +190,25 @@ model SavedVideo {
   createdAt DateTime @default(now())
   
   @@unique([userId, videoId])
+}
+
+model Block {
+  id        Int      @id @default(autoincrement())
+  blockerId Int
+  blockedId Int
+  blocker   User     @relation("blocker", fields: [blockerId], references: [id])
+  blocked   User     @relation("blocked", fields: [blockedId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+}
+
+model WatchHistory {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  videoId   Int
+  watchTime Float    // seconds watched
+  user      User     @relation(fields: [userId], references: [id])
+  video     Video    @relation(fields: [videoId], references: [id])
+  createdAt DateTime @default(now())
 }

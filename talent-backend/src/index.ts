@@ -16,6 +16,9 @@ import { cacheFeed, getCachedFeed } from './utils/redis';
 import { cloudUpload } from './utils/cloudinary';
 import { convertToHLS } from './utils/ffmpeg';
 import { sendPushNotification } from './utils/notifications';
+import { videoQueue } from './utils/queue';
+import * as Sentry from '@sentry/node';
+import { nodeProfilingIntegration } from '@sentry/profiling-node';
 declare global {
   namespace Express {
     interface Request {
@@ -26,6 +29,17 @@ declare global {
 
 const prisma = new PrismaClient();
 const app = express();
+
+Sentry.init({
+  dsn: process.env.SENTRY_DSN || "", // Default empty string to prevent crashes in dev
+  integrations: [
+    nodeProfilingIntegration(),
+  ],
+  tracesSampleRate: 1.0,
+  profilesSampleRate: 1.0,
+});
+
+Sentry.setupExpressErrorHandler(app);
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*' }
@@ -335,9 +349,9 @@ app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
       }
     });
     
-    // Trigger HLS Transcoding in background if it's a local upload
+    // Trigger HLS Transcoding via BullMQ Background Worker if it's a local upload
     if (!cloudUpload && req.file.path) {
-      convertToHLS(req.file.path, video.id).catch(console.error);
+      videoQueue.add('transcode', { inputPath: req.file.path, videoId: video.id });
     }
     
     res.json(video);
@@ -1006,17 +1020,124 @@ app.get('/api/feed/following', requireAuth, async (req, res) => {
   }
 });
 
+// Block a user
+app.post('/api/users/:id/block', requireAuth, async (req, res) => {
+  try {
+    const blockedId = parseInt(req.params.id as string);
+    const blockerId = req.userId!;
+    if (blockedId === blockerId) return res.status(400).json({ error: 'Cannot block yourself' });
+    
+    await prisma.block.create({
+      data: { blockerId, blockedId }
+    });
+    // Optional: Also unfollow them
+    await prisma.follows.deleteMany({
+      where: {
+        OR: [
+          { followerId: blockerId, followingId: blockedId },
+          { followerId: blockedId, followingId: blockerId }
+        ]
+      }
+    });
+    res.json({ success: true, message: 'User blocked' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to block user' });
+  }
+});
+
+// Fetch Paginated Comments
+app.get('/api/videos/:id/comments', async (req, res) => {
+  try {
+    const videoId = parseInt(req.params.id as string);
+    const cursor = req.query.cursor ? parseInt(req.query.cursor as string) : undefined;
+    const limit = 20;
+
+    const comments = await prisma.comment.findMany({
+      where: { videoId },
+      take: limit + 1,
+      skip: cursor ? 1 : 0,
+      cursor: cursor ? { id: cursor } : undefined,
+      orderBy: { createdAt: 'desc' },
+      include: { user: { select: { id: true, username: true, avatarUrl: true } } }
+    });
+
+    let nextCursor: number | null = null;
+    if (comments.length > limit) {
+      const nextItem = comments.pop();
+      nextCursor = nextItem!.id;
+    }
+
+    res.json({ comments, nextCursor });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch comments' });
+  }
+});
+
+// Fetch Direct Message History
+app.get('/api/messages/:userId', requireAuth, async (req, res) => {
+  try {
+    const otherUserId = parseInt(req.params.userId as string);
+    const myId = req.userId!;
+    
+    const messages = await prisma.message.findMany({
+      where: {
+        OR: [
+          { senderId: myId, receiverId: otherUserId },
+          { senderId: otherUserId, receiverId: myId }
+        ]
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 50 // In a real app, this should also be paginated
+    });
+    
+    res.json({ messages });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// Report Watch Time (Analytics)
+app.post('/api/videos/:id/watch-time', requireAuth, async (req, res) => {
+  try {
+    const videoId = parseInt(req.params.id as string);
+    const { watchTime } = req.body;
+    
+    if (typeof watchTime !== 'number') return res.status(400).json({ error: 'Invalid watch time' });
+    
+    await prisma.watchHistory.create({
+      data: { userId: req.userId!, videoId, watchTime }
+    });
+    
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to record watch time' });
+  }
+});
+
 // WebSockets for Real-Time Chat
 io.on('connection', (socket) => {
   console.log('A user connected via WebSocket:', socket.id);
 
   socket.on('join_chat', (data) => {
-    socket.join(`chat_${data.chatId}`);
+    socket.join(`chat_${data.chatId}`); // chatId could be "1_2" (user1 + user2)
   });
 
-  socket.on('send_message', (data) => {
-    // Broadcast the message to the chat room
-    io.to(`chat_${data.chatId}`).emit('receive_message', data);
+  socket.on('send_message', async (data) => {
+    try {
+      // Save to database
+      const message = await prisma.message.create({
+        data: {
+          text: data.text,
+          senderId: data.senderId,
+          receiverId: data.receiverId
+        }
+      });
+      
+      // Broadcast the message to the chat room
+      io.to(`chat_${data.chatId}`).emit('receive_message', message);
+    } catch (error) {
+      console.error('Failed to save message', error);
+    }
   });
 
   socket.on('disconnect', () => {
