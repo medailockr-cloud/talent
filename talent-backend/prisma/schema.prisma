@@ -33,6 +33,8 @@ model User {
   blockedBy   Block[] @relation("blocked")
   watchHistory WatchHistory[]
   liveStream  LiveStream?
+  shows       Show[]
+  bookings    Booking[]
   createdAt   DateTime @default(now())
 }
 
@@ -212,3 +214,29 @@ model WatchHistory {
   video     Video    @relation(fields: [videoId], references: [id])
   createdAt DateTime @default(now())
 }
+
+model Show {
+  id          Int      @id @default(autoincrement())
+  title       String
+  location    String
+  date        DateTime
+  image       String?
+  
+  hostId      Int
+  host        User     @relation(fields: [hostId], references: [id])
+  
+  bookings    Booking[]
+  createdAt   DateTime @default(now())
+}
+
+model Booking {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  showId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  show      Show     @relation(fields: [showId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([userId, showId])
+}
+

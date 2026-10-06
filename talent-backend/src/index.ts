@@ -36,7 +36,6 @@ Sentry.init({
     nodeProfilingIntegration(),
   ],
   tracesSampleRate: 1.0,
-  profilesSampleRate: 1.0,
 });
 
 Sentry.setupExpressErrorHandler(app);
@@ -688,17 +687,16 @@ app.get('/api/notifications', requireAuth, async (req, res) => {
 });
 
 // Search and Discovery API
-app.get('/api/search', async (req, res) => {
+app.get('/api/discover', async (req, res) => {
   try {
     const { q, category } = req.query;
     
+    const where: any = {};
+    if (q) where.title = { contains: q as string };
+    if (category) where.category = category as string;
+    
     const videos = await prisma.video.findMany({
-      where: {
-        AND: [
-          q ? { title: { contains: q as string } } : {},
-          category ? { category: category as string } : {}
-        ]
-      },
+      where,
       include: {
         author: { select: { id: true, username: true, name: true, avatarUrl: true } },
         likes: true,
@@ -1114,6 +1112,89 @@ app.post('/api/videos/:id/watch-time', requireAuth, async (req, res) => {
   }
 });
 
+// --- Messages Routes ---
+
+// Get list of recent conversations for the logged in user
+app.get('/api/messages/conversations', requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId!;
+    // Find all users the current user has sent messages to or received messages from
+    const users = await prisma.user.findMany({
+      where: {
+        OR: [
+          { sentMessages: { some: { receiverId: userId } } },
+          { receivedMessages: { some: { senderId: userId } } }
+        ]
+      },
+      select: {
+        id: true,
+        username: true,
+        name: true,
+        avatarUrl: true
+      }
+    });
+    
+    // For each user, get the last message between them
+    const conversations = await Promise.all(users.map(async (u) => {
+      const lastMessage = await prisma.message.findFirst({
+        where: {
+          OR: [
+            { senderId: userId, receiverId: u.id },
+            { senderId: u.id, receiverId: userId }
+          ]
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+      return { user: u, lastMessage };
+    }));
+    
+    // Sort conversations by latest message first
+    conversations.sort((a, b) => {
+      const dateA = a.lastMessage ? new Date(a.lastMessage.createdAt).getTime() : 0;
+      const dateB = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : 0;
+      return dateB - dateA;
+    });
+
+    res.json(conversations);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch conversations' });
+  }
+});
+
+// Get chat history with a specific user
+app.get('/api/messages/:otherUserId', requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId!;
+    const otherUserId = parseInt(req.params.otherUserId);
+    
+    const messages = await prisma.message.findMany({
+      where: {
+        OR: [
+          { senderId: userId, receiverId: otherUserId },
+          { senderId: otherUserId, receiverId: userId }
+        ]
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+    
+    // Mark messages as read
+    await prisma.message.updateMany({
+      where: {
+        senderId: otherUserId,
+        receiverId: userId,
+        isRead: false
+      },
+      data: { isRead: true }
+    });
+    
+    res.json(messages);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+
 // WebSockets for Real-Time Chat
 io.on('connection', (socket) => {
   console.log('A user connected via WebSocket:', socket.id);
@@ -1149,3 +1230,52 @@ server.listen(PORT, () => {
   console.log(`🚀 Backend server is running on http://localhost:${PORT}`);
   console.log(`📝 Swagger API Docs available at http://localhost:${PORT}/api-docs`);
 });
+
+// --- Shows Routes ---
+
+// Get all shows for a specific user (host)
+app.get('/api/shows/:userId', async (req: any, res: any) => {
+  try {
+    const userId = parseInt(req.params.userId);
+    const shows = await prisma.show.findMany({
+      where: { hostId: userId },
+      include: {
+        bookings: true,
+      },
+      orderBy: { date: 'asc' },
+    });
+    res.json(shows);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch shows' });
+  }
+});
+
+// Book a show (RSVP)
+app.post('/api/shows/:showId/book', requireAuth, async (req: any, res: any) => {
+  try {
+    const showId = parseInt(req.params.showId);
+    const userId = req.user.id;
+
+    // Check if already booked
+    const existing = await prisma.booking.findUnique({
+      where: {
+        userId_showId: { userId, showId }
+      }
+    });
+
+    if (existing) {
+      // Unbook
+      await prisma.booking.delete({ where: { id: existing.id } });
+      res.json({ message: 'Unbooked successfully', isBooked: false });
+    } else {
+      // Book
+      await prisma.booking.create({
+        data: { userId, showId }
+      });
+      res.json({ message: 'Booked successfully', isBooked: true });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Booking failed' });
+  }
+});
+

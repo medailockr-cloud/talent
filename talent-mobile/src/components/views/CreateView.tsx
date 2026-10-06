@@ -5,6 +5,7 @@ import { X, Music, Flashlight, Repeat, Settings2, Sparkles, Clock, Image as Imag
 import * as Haptics from 'expo-haptics';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
+import { api } from '../../utils/api';
 
 // --- Types ---
 type CreateStep = 
@@ -107,7 +108,6 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     try {
       const formData = new FormData();
       formData.append('title', title.trim());
-      formData.append('authorId', '1'); // Mock user ID
       formData.append('description', '');
       formData.append('category', category);
       formData.append('subCategory', subCategory);
@@ -116,8 +116,11 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       formData.append('allowJudging', String(allowJudging));
       
       if (recordedVideoUri) {
-        // Only append on native or if we have a real file
-        if (Platform.OS !== 'web') {
+        if (Platform.OS === 'web') {
+          const res = await fetch(recordedVideoUri);
+          const blob = await res.blob();
+          formData.append('video', blob, 'video.mp4');
+        } else {
           formData.append('video', {
             uri: recordedVideoUri,
             name: 'video.mp4',
@@ -126,9 +129,12 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         }
       }
       
-      // In a real scenario, use actual API URL
-      console.log('Sending to server...', formData);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log('Sending to server...');
+      await api.post('/videos', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
     } catch (e) {
       console.error(e);
       throw e;
@@ -299,7 +305,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       <TopNav title="Upload Performance" onBack={() => setStep('HOME')} />
       
       <View className="px-5 mt-4">
-        <TouchableOpacity className="w-full aspect-[4/3] rounded-3xl border-2 border-dashed border-[#E91E76]/50 bg-[#E91E76]/5 items-center justify-center mb-8">
+        <TouchableOpacity onPress={pickVideo} className="w-full aspect-[4/3] rounded-3xl border-2 border-dashed border-[#E91E76]/50 bg-[#E91E76]/5 items-center justify-center mb-8">
           <UploadCloud color="#E91E76" size={40} className="mb-4" />
           <Text className="text-white font-bold text-lg mb-1">Choose a video</Text>
           <Text className="text-[#9CA3AF] text-sm">Select from your device</Text>

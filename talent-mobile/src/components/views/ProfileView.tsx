@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, Modal, Platform } from 'react-native';
-import { Settings, Share, MoreHorizontal, CheckCircle, MapPin, Play, X, Shield, Bell, Key, User, LogOut, ChevronRight, ChevronLeft, Calendar, Film, Heart, Plus, ExternalLink, Star } from 'lucide-react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Image, Modal, Platform, Alert, PanResponder, Share as RNShare, TextInput } from 'react-native';
+import { Settings, Share, MoreHorizontal, CheckCircle, MapPin, Play, X, Shield, Bell, Key, User, LogOut, ChevronRight, ChevronLeft, Calendar, Film, Heart, Plus, ExternalLink, Star, Music, Gauge, Bookmark, MessageCircle, Pause, Maximize2, Flag, UserX, Link } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { Switch } from 'react-native';
+import { api } from '../../utils/api';
+import { useAuthStore } from '../../store/authStore';
 
 const coverImg = 'https://images.unsplash.com/photo-1493225457124-a1a2a4fa3e93?w=800&q=80';
 const avatarImg = 'https://images.unsplash.com/photo-1493225457124-a1a2a4fa3e93?w=200&q=80';
@@ -52,6 +54,34 @@ function VideoPlayerModal({ url, onClose }: { url: string, onClose: () => void }
 }
 
 function ShowPreviewModal({ show, onClose }: { show: any, onClose: () => void }) {
+  const [isBooked, setIsBooked] = useState(false);
+  const [visitors, setVisitors] = useState(show.bookings?.length || 0);
+
+  useEffect(() => {
+    // Basic check assuming user info is available or we just rely on backend response.
+    // Ideally we pass user id here to check if already booked.
+    setIsBooked(show.isBooked || false); 
+  }, [show]);
+
+  const handleRSVP = async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const res = await api.post(`/shows/${show.id}/book`);
+      if (res.data.isBooked) {
+        setIsBooked(true);
+        setVisitors((prev: number) => prev + 1);
+        Alert.alert('RSVP Confirmed', 'You are now visiting this show.');
+      } else {
+        setIsBooked(false);
+        setVisitors((prev: number) => Math.max(0, prev - 1));
+        Alert.alert('RSVP Cancelled', 'You are no longer visiting this show.');
+      }
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', 'Failed to update RSVP.');
+    }
+  };
+
   return (
     <Modal visible={true} transparent={true} animationType="slide" onRequestClose={onClose}>
       <View className="flex-1 bg-black/80 justify-center items-center p-4">
@@ -90,18 +120,18 @@ function ShowPreviewModal({ show, onClose }: { show: any, onClose: () => void })
               <View className="flex-row items-center justify-between mb-4">
                 <View className="flex-row items-center gap-2">
                   <User color="#E91E76" size={16} />
-                  <Text className="text-white text-[13px] font-bold">Who's Visiting (86)</Text>
+                  <Text className="text-white text-[13px] font-bold">Who's Visiting ({visitors})</Text>
                 </View>
                 <Text className="text-[#10b981] text-[10px] font-bold">Verified Judges Attending</Text>
               </View>
               <View className="flex-row flex-wrap gap-2 mb-4">
                 <View className="bg-white/10 px-3 py-1.5 rounded-full"><Text className="text-[#D1D5DB] text-[12px]">Vikram Rao</Text></View>
                 <View className="bg-white/10 px-3 py-1.5 rounded-full"><Text className="text-[#D1D5DB] text-[12px]">Tara Devi (Judge)</Text></View>
-                <View className="bg-white/10 px-3 py-1.5 rounded-full"><Text className="text-[#D1D5DB] text-[12px]">84 others</Text></View>
+                <View className="bg-white/10 px-3 py-1.5 rounded-full"><Text className="text-[#D1D5DB] text-[12px]">{visitors > 2 ? `${visitors - 2} others` : 'Others'}</Text></View>
               </View>
-              <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); Alert.alert('RSVP Confirmed', 'You are now visiting this show.'); }} activeOpacity={0.8} className="w-full bg-white/10 h-[44px] rounded-xl flex-row items-center justify-center gap-2">
-                <CheckCircle color="#fff" size={16} />
-                <Text className="text-white font-bold text-[13px]">RSVP: I'm Visiting This Show</Text>
+              <TouchableOpacity onPress={handleRSVP} activeOpacity={0.8} className={`w-full h-[44px] rounded-xl flex-row items-center justify-center gap-2 ${isBooked ? 'bg-[#E91E76]' : 'bg-white/10'}`}>
+                {isBooked ? <CheckCircle color="#fff" size={16} /> : <Calendar color="#fff" size={16} />}
+                <Text className="text-white font-bold text-[13px]">{isBooked ? "RSVP: You're Visiting!" : "RSVP: I'm Visiting This Show"}</Text>
               </TouchableOpacity>
             </View>
 
@@ -111,7 +141,7 @@ function ShowPreviewModal({ show, onClose }: { show: any, onClose: () => void })
               <View className="flex-row justify-between items-start mb-3">
                 <View className="flex-1 pr-4">
                   <Text className="text-white font-bold text-[14px] leading-5 mb-1">Secret Heritage Courtyard, 4th Block Koramangala</Text>
-                  <Text className="text-[#9CA3AF] text-[12px]">{show.loc}</Text>
+                  <Text className="text-[#9CA3AF] text-[12px]">{show.location}</Text>
                 </View>
                 <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); Alert.alert('Map', 'Opening map...'); }} className="bg-white/10 px-3 py-2 rounded-xl flex-row items-center gap-2">
                   <MapPin color="#fff" size={14} />
@@ -325,19 +355,52 @@ export function ProfileView({ user, onLogout, onBack }: { user?: any, onLogout?:
 
   // Profile Data State
   const [profileData, setProfileData] = useState<any>(null);
+  const [shows, setShows] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
+  const { user: authUser } = useAuthStore();
+  const isOwnProfile = profileData?.id === authUser?.id;
+
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editBio, setEditBio] = useState('');
+  const [editAvatarUrl, setEditAvatarUrl] = useState('');
+
+  const handleSaveProfile = async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const res = await api.put('/profile/me', { name: editName, bio: editBio });
+      setProfileData({ ...profileData, name: editName, bio: editBio });
+      setIsEditingProfile(false);
+      Alert.alert('Success', 'Profile updated successfully.');
+    } catch (e) {
+      Alert.alert('Error', 'Failed to update profile.');
+    }
+  };
 
   useEffect(() => {
     const fetchProfile = async () => {
       try {
         setIsLoading(true);
-        const userId = user?.id || 1; // Fallback to 1 if not logged in
-        const baseUrl = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
+        // If no user prop is passed, or if we want the current user profile
+        const endpoint = user?.id ? `/profile/${user.id}` : '/profile/me';
         
-        const response = await fetch(`${baseUrl}/api/profile/${userId}`);
-        if (!response.ok) throw new Error('Network response was not ok');
-        const data = await response.json();
-        setProfileData(data);
+        const response = await api.get(endpoint);
+        setProfileData(response.data);
+        setEditName(response.data?.name || '');
+        setEditBio(response.data?.bio || '');
+        setEditAvatarUrl(response.data?.avatarUrl || '');
+        
+        // Fetch shows
+        const userId = response.data?.id;
+        if (userId) {
+          try {
+            const showsRes = await api.get(`/shows/${userId}`);
+            setShows(showsRes.data || []);
+          } catch (e) {
+            console.error("Failed to fetch shows:", e);
+          }
+        }
       } catch (error) {
         console.error("Failed to fetch profile:", error);
       } finally {
@@ -358,13 +421,53 @@ export function ProfileView({ user, onLogout, onBack }: { user?: any, onLogout?:
     }
   };
 
-  const handleBackTalent = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    if (!backed) {
-      Alert.alert("Success!", "You are now backing Aarav Nair.");
-      setBacked(true);
-    } else {
-      Alert.alert("Already Backed", "You are already supporting this talent!");
+  const handleBackTalent = async () => {
+    try {
+      const targetUserId = user?.id || 1; // Assuming we are viewing profile of user ID 1 if none passed
+      if (!backed) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        
+        // Optimistic update
+        setBacked(true);
+        Alert.alert("Success!", "You are now backing this talent.");
+        
+        // Call backend to Follow
+        await api.post(`/users/${targetUserId}/follow`);
+      } else {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (Platform.OS === 'web') {
+          if (window.confirm("Are you sure you want to stop backing this talent?")) {
+            setBacked(false);
+            await api.post(`/users/${targetUserId}/follow`);
+          }
+        } else {
+          Alert.alert(
+            "Stop Backing",
+            "Are you sure you want to stop backing this talent?",
+            [
+              { text: "Cancel", style: "cancel" },
+              { 
+                text: "Stop Backing", 
+                style: "destructive", 
+                onPress: async () => {
+                  setBacked(false);
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  try {
+                    await api.post(`/users/${targetUserId}/follow`);
+                  } catch (e) {
+                    console.error('Failed to unback:', e);
+                  }
+                }
+              }
+            ]
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling back status:', error);
+      // Revert on failure
+      setBacked(!backed);
+      Alert.alert('Error', 'Failed to update backing status.');
     }
   };
 
@@ -394,17 +497,17 @@ export function ProfileView({ user, onLogout, onBack }: { user?: any, onLogout?:
           <Text className="text-white font-bold text-[16px] ml-4">Aarav Nair's Performances</Text>
         </View>
         <ScrollView className="flex-1" contentContainerStyle={{ paddingTop: 20, paddingHorizontal: 16, paddingBottom: 100 }}>
-          {dummyVideos.map((url, i) => (
+          {profileData?.videos?.map((video: any, i: number) => (
              <ProfileFeedVideoCard 
-               key={i} 
+               key={video.id || i} 
                video={{
-                 id: String(i),
-                 author: 'Aarav Nair',
-                 role: 'Singer-Songwriter • Bengaluru, India',
-                 avatar: avatarImg,
-                 videoThumb: i === 0 ? 'https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=800&q=80' : (i === 1 ? 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300' : 'https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=300'),
+                 id: String(video.id || i),
+                 author: profileData?.name || 'User',
+                 role: 'Artist',
+                 avatar: profileData?.avatarUrl || avatarImg,
+                 videoThumb: i === 0 ? 'https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=800&q=80' : 'https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=300',
                  duration: '0:58',
-                 videoUrl: url,
+                 videoUrl: video.url || dummyVideos[0],
                }} 
                playingVideoId={playingVideoId}
                setPlayingVideoId={setPlayingVideoId}
@@ -427,31 +530,32 @@ export function ProfileView({ user, onLogout, onBack }: { user?: any, onLogout?:
       )}
 
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 100 }} bounces={false}>
+        {/* Top Actions (Moved outside Cover to fix z-index stacking context) */}
+        <View className="absolute top-14 left-4 z-50">
+          <TouchableOpacity onPress={() => { 
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); 
+            if (onBack) {
+              onBack(); 
+            } else if (Platform.OS === 'web') {
+              window.location.href = '/';
+            } else {
+              Alert.alert('Home', 'Navigating to Home...');
+            }
+          }} className="w-9 h-9 items-center justify-center rounded-full border border-white/10 bg-black/30">
+            <ChevronLeft color="#fff" size={24} />
+          </TouchableOpacity>
+        </View>
+        <View className="absolute top-12 right-2 flex-row gap-2 z-50">
+          <TouchableOpacity onPress={handleShare} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }} className="p-2 bg-black/10 rounded-full">
+            <Share color="#fff" size={24} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setIsSettingsOpen(true)} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }} className="p-2 bg-black/10 rounded-full">
+            <MoreHorizontal color="#fff" size={24} />
+          </TouchableOpacity>
+        </View>
+
         {/* Cover */}
         <View className="w-full h-[140px] relative bg-[#050608]">
-          {/* Top Actions */}
-          <View className="absolute top-14 left-4 z-10">
-            <TouchableOpacity onPress={() => { 
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); 
-              if (onBack) {
-                onBack(); 
-              } else if (Platform.OS === 'web') {
-                window.location.href = '/';
-              } else {
-                Alert.alert('Home', 'Navigating to Home...');
-              }
-            }} className="w-9 h-9 items-center justify-center rounded-full border border-white/10">
-              <ChevronLeft color="#fff" size={24} />
-            </TouchableOpacity>
-          </View>
-          <View className="absolute top-14 right-4 flex-row gap-5 z-10">
-            <TouchableOpacity onPress={handleShare}>
-              <Share color="#fff" size={24} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setIsSettingsOpen(true)}>
-              <MoreHorizontal color="#fff" size={24} />
-            </TouchableOpacity>
-          </View>
         </View>
 
         {/* Profile Info */}
@@ -483,10 +587,10 @@ export function ProfileView({ user, onLogout, onBack }: { user?: any, onLogout?:
         {/* Stats Row */}
         <View className="flex-row px-5 gap-2 mb-6 justify-between">
           {[
-            { icon: <Star color="#E91E76" fill="#E91E76" size={14} />, label: 'Blind Score', value: '4.8' },
-            { icon: <View className="flex-row items-end gap-[2px]"><View className="w-[2px] h-2.5 bg-white"/><View className="w-[2px] h-3.5 bg-white"/><View className="w-[2px] h-2 bg-white"/></View>, label: 'Performances', value: profileData?.videosCount?.toString() || '28' },
-            { icon: <Calendar color="#E91E76" size={14} />, label: 'Shows', value: '6' },
-            { icon: <User color="#9CA3AF" size={14} />, label: 'Followers', value: profileData?.followers?.toString() || '12.4K' },
+            { icon: <Star color="#E91E76" fill="#E91E76" size={14} />, label: 'Blind Score', value: '0.0' },
+            { icon: <View className="flex-row items-end gap-[2px]"><View className="w-[2px] h-2.5 bg-white"/><View className="w-[2px] h-3.5 bg-white"/><View className="w-[2px] h-2 bg-white"/></View>, label: 'Performances', value: profileData?.videosCount?.toString() || '0' },
+            { icon: <Calendar color="#E91E76" size={14} />, label: 'Shows', value: '0' },
+            { icon: <User color="#9CA3AF" size={14} />, label: 'Followers', value: profileData?.followers?.toString() || '0' },
           ].map((stat, i) => (
             <View key={i} className="flex-1 bg-[#12141A] rounded-[14px] py-2.5 px-1 items-center justify-center">
               <View className="flex-row items-center justify-center gap-1.5 mb-1">
@@ -500,14 +604,23 @@ export function ProfileView({ user, onLogout, onBack }: { user?: any, onLogout?:
 
         {/* Action Buttons */}
         <View className="px-5 flex-row gap-3 mb-6">
-          <TouchableOpacity onPress={handleBackTalent} activeOpacity={0.8} className={`flex-[1.2] ${backed ? 'bg-[#9CA3AF]/20' : 'bg-[#E91E76]'} h-[42px] rounded-full flex-row items-center justify-center gap-1.5`}>
-            <Heart color={backed ? "#E91E76" : "#fff"} fill={backed ? "#E91E76" : "transparent"} size={14} />
-            <Text className="text-white font-bold text-[11px] tracking-wider uppercase">{backed ? 'BACKED' : 'BACK TALENT'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleInvite} activeOpacity={0.8} className="flex-[1.2] border border-[#E91E76] bg-transparent h-[42px] rounded-full flex-row items-center justify-center gap-1.5">
-            <Calendar color="#E91E76" size={14} />
-            <Text className="text-[#E91E76] font-bold text-[11px] tracking-wider uppercase">INVITE TO SHOW</Text>
-          </TouchableOpacity>
+          {isOwnProfile ? (
+            <TouchableOpacity onPress={() => setIsEditingProfile(true)} activeOpacity={0.8} className="flex-[2.4] bg-[#E91E76] h-[42px] rounded-full flex-row items-center justify-center gap-1.5">
+              <User color="#fff" size={14} />
+              <Text className="text-white font-bold text-[11px] tracking-wider uppercase">EDIT PROFILE</Text>
+            </TouchableOpacity>
+          ) : (
+            <>
+              <TouchableOpacity onPress={handleBackTalent} activeOpacity={0.8} className={`flex-[1.2] ${backed ? 'bg-[#9CA3AF]/20' : 'bg-[#E91E76]'} h-[42px] rounded-full flex-row items-center justify-center gap-1.5`}>
+                <Heart color={backed ? "#E91E76" : "#fff"} fill={backed ? "#E91E76" : "transparent"} size={14} />
+                <Text className="text-white font-bold text-[11px] tracking-wider uppercase">{backed ? 'BACKED' : 'BACK TALENT'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleInvite} activeOpacity={0.8} className="flex-[1.2] border border-[#E91E76] bg-transparent h-[42px] rounded-full flex-row items-center justify-center gap-1.5">
+                <Calendar color="#E91E76" size={14} />
+                <Text className="text-[#E91E76] font-bold text-[11px] tracking-wider uppercase">INVITE TO SHOW</Text>
+              </TouchableOpacity>
+            </>
+          )}
           <TouchableOpacity onPress={() => setIsSettingsOpen(true)} activeOpacity={0.8} className="w-[42px] h-[42px] rounded-full border border-white/20 items-center justify-center">
             <MoreHorizontal color="#fff" size={18} />
           </TouchableOpacity>
@@ -550,33 +663,41 @@ export function ProfileView({ user, onLogout, onBack }: { user?: any, onLogout?:
                 </TouchableOpacity>
               </View>
               
-              <TouchableOpacity activeOpacity={0.9} onPress={() => playVideo(dummyVideos[0])} className="w-full aspect-[4/3] rounded-[24px] overflow-hidden relative border border-white/5 bg-[#12141A]">
-                <Image source={{ uri: 'https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=800&q=80' }} className="w-full h-[70%] opacity-80" />
-                
-                {/* Featured Badge */}
-                <View className="absolute top-4 left-4 bg-[#12141A] border border-[#E91E76]/30 px-3 py-1.5 rounded-full flex-row items-center gap-1.5 shadow-sm">
-                  <Star color="#E91E76" fill="#E91E76" size={12} />
-                  <Text className="text-white text-[11px] font-bold tracking-wide">Featured</Text>
-                </View>
-                
-                {/* Play Button */}
-                <View className="absolute top-[35%] left-0 right-0 items-center justify-center -translate-y-1/2">
-                  <View className="w-16 h-16 rounded-full border border-white bg-black/30 items-center justify-center">
-                    <Play color="#fff" fill="#fff" size={24} style={{ marginLeft: 4 }} />
+              {profileData?.videos && profileData.videos.length > 0 ? (
+                <TouchableOpacity activeOpacity={0.9} onPress={() => playVideo(profileData.videos[0].url)} className="w-full aspect-[4/3] rounded-[24px] overflow-hidden relative border border-white/5 bg-[#12141A]">
+                  <Image source={{ uri: 'https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=800&q=80' }} className="w-full h-[70%] opacity-80" />
+                  
+                  {/* Featured Badge */}
+                  <View className="absolute top-4 left-4 bg-[#12141A] border border-[#E91E76]/30 px-3 py-1.5 rounded-full flex-row items-center gap-1.5 shadow-sm">
+                    <Star color="#E91E76" fill="#E91E76" size={12} />
+                    <Text className="text-white text-[11px] font-bold tracking-wide">Featured</Text>
                   </View>
-                </View>
-                
-                {/* Bottom Info */}
-                <View className="absolute bottom-0 left-0 right-0 h-[30%] px-5 py-4 justify-center">
-                  <Text className="text-white text-[20px] font-bold tracking-tight mb-1.5">Monsoon Motion</Text>
-                  <View className="flex-row items-center justify-between">
-                    <Text className="text-[#9CA3AF] text-[12.5px] font-medium">Original • Acoustic • 3.2M views</Text>
-                    <View className="bg-[#1C1F26] px-2.5 py-1 rounded-md">
-                      <Text className="text-[#9CA3AF] text-[11px] font-medium tracking-wide">09:56</Text>
+                  
+                  {/* Play Button */}
+                  <View className="absolute top-[35%] left-0 right-0 items-center justify-center -translate-y-1/2">
+                    <View className="w-16 h-16 rounded-full border border-white bg-black/30 items-center justify-center">
+                      <Play color="#fff" fill="#fff" size={24} style={{ marginLeft: 4 }} />
                     </View>
                   </View>
+                  
+                  {/* Bottom Info */}
+                  <View className="absolute bottom-0 left-0 right-0 h-[30%] px-5 py-4 justify-center">
+                    <Text className="text-white text-[20px] font-bold tracking-tight mb-1.5">{profileData.videos[0].title}</Text>
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-[#9CA3AF] text-[12.5px] font-medium">{profileData.videos[0].category || 'Original'}</Text>
+                      <View className="bg-[#1C1F26] px-2.5 py-1 rounded-md">
+                        <Text className="text-[#9CA3AF] text-[11px] font-medium tracking-wide">09:56</Text>
+                      </View>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ) : (
+                <View className="w-full aspect-[4/3] rounded-[24px] border border-white/5 bg-[#12141A] items-center justify-center p-6">
+                   <Film color="#4B5563" size={48} className="mb-4" />
+                   <Text className="text-white font-bold text-[18px] text-center mb-2">No performances yet</Text>
+                   <Text className="text-[#9CA3AF] text-[13px] text-center">When {profileData?.name || 'this artist'} uploads a video, it will appear here.</Text>
                 </View>
-              </TouchableOpacity>
+              )}
             </View>
 
             {/* Performances Row */}
@@ -590,15 +711,9 @@ export function ProfileView({ user, onLogout, onBack }: { user?: any, onLogout?:
               </View>
 
               <ScrollView horizontal showsHorizontalScrollIndicator={false} className="pl-5" contentContainerStyle={{ paddingRight: 40, gap: 12 }}>
-                {[
-                  { title: 'Monsoon\nMotion', img: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300', active: true, video: dummyVideos[0] },
-                  { title: 'City Lights', img: 'https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=300', active: false, video: dummyVideos[1] },
-                  { title: 'Falling Again', img: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=300', active: false, video: dummyVideos[2] },
-                  { title: 'Unplugged', img: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300', active: false, video: dummyVideos[3] },
-                  { title: 'The Edge', img: 'https://images.unsplash.com/photo-1493225457124-a1a2a4fa3e93?w=300', active: false, video: dummyVideos[4] },
-                ].map((perf, i) => (
-                  <TouchableOpacity key={i} onPress={() => playVideo(perf.video)} activeOpacity={0.8} className={`w-[130px] h-[170px] rounded-xl overflow-hidden relative ${perf.active ? 'border-2 border-[#E91E76]' : 'border border-white/10'}`}>
-                    <Image source={{ uri: perf.img }} className="w-full h-full opacity-80" />
+                {profileData?.videos?.map((perf: any, i: number) => (
+                  <TouchableOpacity key={perf.id || i} onPress={() => playVideo(perf.url)} activeOpacity={0.8} className={`w-[130px] h-[170px] rounded-xl overflow-hidden relative ${i === 0 ? 'border-2 border-[#E91E76]' : 'border border-white/10'}`}>
+                    <Image source={{ uri: i % 2 === 0 ? 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300' : 'https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=300' }} className="w-full h-full opacity-80" />
                     <View className="absolute inset-0 bg-black/30" />
                     <View className="absolute bottom-2 left-2 right-2 flex-row items-end justify-between">
                       <Text className="text-white text-[12px] font-bold w-[70%]" numberOfLines={2}>{perf.title}</Text>
@@ -621,30 +736,35 @@ export function ProfileView({ user, onLogout, onBack }: { user?: any, onLogout?:
               </View>
 
               <View className="px-5 gap-3">
-                {[
-                  { dateM: '24', dateD: 'OCT', title: 'Live at The Next Stage', loc: 'Bengaluru, India', img: 'https://images.unsplash.com/photo-1540039155733-d7696d4eb98e?w=100' },
-                  { dateM: '16', dateD: 'NOV', title: 'Sofar Sounds', loc: 'Bengaluru, India', img: 'https://images.unsplash.com/photo-1506157786151-b8491531f063?w=100' }
-                ].map((show, i) => (
-                  <TouchableOpacity key={i} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setActiveShowModal(show); }} activeOpacity={0.8} className="w-full bg-[#0F1115] border border-white/5 rounded-xl p-3 flex-row items-center justify-between">
-                    <View className="flex-row items-center gap-4">
-                      <View className="items-center w-[40px]">
-                        <Text className="text-white font-bold text-[18px]">{show.dateM}</Text>
-                        <Text className="text-[#9CA3AF] text-[10px]">{show.dateD}</Text>
-                      </View>
-                      <View className="w-12 h-12 rounded-lg overflow-hidden bg-[#1A1512]">
-                        <Image source={{ uri: show.img }} className="w-full h-full opacity-80" />
-                      </View>
-                      <View>
-                        <Text className="text-white font-bold text-[14px] mb-1">{show.title}</Text>
-                        <View className="flex-row items-center gap-1">
-                          <MapPin color="#9CA3AF" size={10} />
-                          <Text className="text-[#9CA3AF] text-[11px]">{show.loc}</Text>
+                {shows && shows.length > 0 ? shows.slice(0, 2).map((show, i) => {
+                  const date = new Date(show.date);
+                  const dateM = date.getDate().toString();
+                  const dateD = date.toLocaleString('default', { month: 'short' }).toUpperCase();
+                  
+                  return (
+                    <TouchableOpacity key={show.id || i} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setActiveShowModal(show); }} activeOpacity={0.8} className="w-full bg-[#0F1115] border border-white/5 rounded-xl p-3 flex-row items-center justify-between">
+                      <View className="flex-row items-center gap-4">
+                        <View className="items-center w-[40px]">
+                          <Text className="text-white font-bold text-[18px]">{dateM}</Text>
+                          <Text className="text-[#9CA3AF] text-[10px]">{dateD}</Text>
+                        </View>
+                        <View className="w-12 h-12 rounded-lg overflow-hidden bg-[#1A1512]">
+                          <Image source={{ uri: show.image || 'https://images.unsplash.com/photo-1540039155733-d7696d4eb98e?w=100' }} className="w-full h-full opacity-80" />
+                        </View>
+                        <View>
+                          <Text className="text-white font-bold text-[14px] mb-1">{show.title}</Text>
+                          <View className="flex-row items-center gap-1">
+                            <MapPin color="#9CA3AF" size={10} />
+                            <Text className="text-[#9CA3AF] text-[11px]">{show.location}</Text>
+                          </View>
                         </View>
                       </View>
-                    </View>
-                    <ChevronRight color="#9CA3AF" size={16} />
-                  </TouchableOpacity>
-                ))}
+                      <ChevronRight color="#9CA3AF" size={16} />
+                    </TouchableOpacity>
+                  );
+                }) : (
+                  <Text className="text-[#9CA3AF] text-[13px] text-center mt-4">No upcoming shows.</Text>
+                )}
               </View>
             </View>
 
@@ -658,31 +778,39 @@ export function ProfileView({ user, onLogout, onBack }: { user?: any, onLogout?:
             </View>
 
             <View className="px-5 gap-3">
-              {[
-                { dateM: '24', dateD: 'OCT', title: 'Live at The Next Stage', loc: 'Bengaluru, India', img: 'https://images.unsplash.com/photo-1540039155733-d7696d4eb98e?w=100' },
-                { dateM: '16', dateD: 'NOV', title: 'Sofar Sounds', loc: 'Bengaluru, India', img: 'https://images.unsplash.com/photo-1506157786151-b8491531f063?w=100' },
-                { dateM: '02', dateD: 'DEC', title: 'Acoustic Nights', loc: 'Mumbai, India', img: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=100' }
-              ].map((show, i) => (
-                <TouchableOpacity key={i} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setActiveShowModal(show); }} activeOpacity={0.8} className="w-full bg-[#0F1115] border border-white/5 rounded-xl p-3 flex-row items-center justify-between">
-                  <View className="flex-row items-center gap-4">
-                    <View className="items-center">
-                      <Text className="text-white font-bold text-[18px]">{show.dateM}</Text>
-                      <Text className="text-[#9CA3AF] text-[10px]">{show.dateD}</Text>
-                    </View>
-                    <View className="w-12 h-12 rounded-lg overflow-hidden bg-[#1A1512]">
-                      <Image source={{ uri: show.img }} className="w-full h-full opacity-80" />
-                    </View>
-                    <View>
-                      <Text className="text-white font-bold text-[14px] mb-1">{show.title}</Text>
-                      <View className="flex-row items-center gap-1">
-                        <MapPin color="#9CA3AF" size={10} />
-                        <Text className="text-[#9CA3AF] text-[11px]">{show.loc}</Text>
+              {shows && shows.length > 0 ? shows.map((show, i) => {
+                  const date = new Date(show.date);
+                  const dateM = date.getDate().toString();
+                  const dateD = date.toLocaleString('default', { month: 'short' }).toUpperCase();
+                  
+                  return (
+                    <TouchableOpacity key={show.id || i} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setActiveShowModal(show); }} activeOpacity={0.8} className="w-full bg-[#0F1115] border border-white/5 rounded-xl p-3 flex-row items-center justify-between">
+                      <View className="flex-row items-center gap-4">
+                        <View className="items-center w-[40px]">
+                          <Text className="text-white font-bold text-[18px]">{dateM}</Text>
+                          <Text className="text-[#9CA3AF] text-[10px]">{dateD}</Text>
+                        </View>
+                        <View className="w-12 h-12 rounded-lg overflow-hidden bg-[#1A1512]">
+                          <Image source={{ uri: show.image || 'https://images.unsplash.com/photo-1540039155733-d7696d4eb98e?w=100' }} className="w-full h-full opacity-80" />
+                        </View>
+                        <View>
+                          <Text className="text-white font-bold text-[14px] mb-1">{show.title}</Text>
+                          <View className="flex-row items-center gap-1">
+                            <MapPin color="#9CA3AF" size={10} />
+                            <Text className="text-[#9CA3AF] text-[11px]">{show.location}</Text>
+                          </View>
+                        </View>
                       </View>
-                    </View>
+                      <ChevronRight color="#9CA3AF" size={16} />
+                    </TouchableOpacity>
+                  );
+                }) : (
+                  <View className="items-center justify-center p-8 border border-white/5 bg-[#12141A] rounded-[24px]">
+                     <Calendar color="#4B5563" size={48} className="mb-4" />
+                     <Text className="text-white font-bold text-[18px] text-center mb-2">No upcoming shows</Text>
+                     <Text className="text-[#9CA3AF] text-[13px] text-center">There are no upcoming shows scheduled right now.</Text>
                   </View>
-                  <ChevronRight color="#9CA3AF" size={16} />
-                </TouchableOpacity>
-              ))}
+                )}
             </View>
           </View>
         )}
@@ -762,50 +890,70 @@ export function ProfileView({ user, onLogout, onBack }: { user?: any, onLogout?:
 
               <ScrollView className="flex-1">
                 <View className="px-5 py-6">
-                  <Text className="text-[#9CA3AF] text-[13px] font-bold tracking-wider mb-4">ACCOUNT</Text>
-                  
-                  <SettingsRow icon={<User color="#fff" size={20} />} title="Account Details" onPress={() => Alert.alert("Account Details", "Available soon!")} />
-                  <SettingsRow 
-                    icon={<Key color="#fff" size={20} />} 
-                    title="Privacy & Blind Mode" 
-                    subtitle="Manage what is shown before judging" 
-                    onPress={() => setActiveSettingView('privacy')}
-                  />
-                  <SettingsRow icon={<Shield color="#fff" size={20} />} title="Security" onPress={() => Alert.alert("Security", "Security settings are up to date.")} />
-                  <SettingsRow icon={<Bell color="#fff" size={20} />} title="Notifications" onPress={() => Alert.alert("Notifications", "You have 3 new notifications")} />
+                  {isOwnProfile ? (
+                    <>
+                      <Text className="text-[#9CA3AF] text-[13px] font-bold tracking-wider mb-4">ACCOUNT</Text>
+                      
+                      <SettingsRow icon={<User color="#fff" size={20} />} title="Account Details" onPress={() => Alert.alert("Account Details", "Available soon!")} />
+                      <SettingsRow 
+                        icon={<Key color="#fff" size={20} />} 
+                        title="Privacy & Blind Mode" 
+                        subtitle="Manage what is shown before judging" 
+                        onPress={() => setActiveSettingView('privacy')}
+                      />
+                      <SettingsRow icon={<Shield color="#fff" size={20} />} title="Security" onPress={() => Alert.alert("Security", "Security settings are up to date.")} />
+                      <SettingsRow icon={<Bell color="#fff" size={20} />} title="Notifications" onPress={() => Alert.alert("Notifications", "You have 3 new notifications")} />
 
-                  <SettingsRow 
-                    icon={<User color="#fff" size={20} />} 
-                    title="Appearance" 
-                    subtitle="Customize app theme and colors" 
-                    onPress={() => setActiveSettingView('appearance')}
-                  />
+                      <SettingsRow 
+                        icon={<User color="#fff" size={20} />} 
+                        title="Appearance" 
+                        subtitle="Customize app theme and colors" 
+                        onPress={() => setActiveSettingView('appearance')}
+                      />
 
-                  <View className="h-[1px] w-full bg-white/10 my-6" />
+                      <View className="h-[1px] w-full bg-white/10 my-6" />
 
-                  <Text className="text-[#9CA3AF] text-[13px] font-bold tracking-wider mb-4">CONTENT & ACTIVITY</Text>
-                  
-                  <SettingsRow icon={<Play color="#fff" size={20} />} title="Watch History" onPress={() => Alert.alert("Watch History", "Opening history...")} />
-                  <SettingsRow icon={<CheckCircle color="#fff" size={20} />} title="Verification" subtitle="Apply for verified badge" onPress={() => Alert.alert("Verification", "Application submitted!")} />
-                  
-                  <View className="h-[1px] w-full bg-white/10 my-6" />
+                      <Text className="text-[#9CA3AF] text-[13px] font-bold tracking-wider mb-4">CONTENT & ACTIVITY</Text>
+                      
+                      <SettingsRow icon={<Play color="#fff" size={20} />} title="Watch History" onPress={() => Alert.alert("Watch History", "Opening history...")} />
+                      <SettingsRow icon={<CheckCircle color="#fff" size={20} />} title="Verification" subtitle="Apply for verified badge" onPress={() => Alert.alert("Verification", "Application submitted!")} />
+                      
+                      <View className="h-[1px] w-full bg-white/10 my-6" />
 
-                  <TouchableOpacity 
-                    activeOpacity={0.7} 
-                    className="flex-row items-center justify-between bg-white/5 p-4 rounded-xl mb-8 border border-white/10"
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setIsSettingsOpen(false);
-                      if (onLogout) onLogout();
-                    }}
-                  >
-                    <View className="flex-row items-center gap-3">
-                      <LogOut color="#E91E76" size={20} />
-                      <Text className="text-[#E91E76] text-[16px] font-bold">Log out</Text>
-                    </View>
-                  </TouchableOpacity>
+                      <TouchableOpacity 
+                        activeOpacity={0.7} 
+                        className="flex-row items-center justify-between bg-white/5 p-4 rounded-xl mb-8 border border-white/10"
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setIsSettingsOpen(false);
+                          if (onLogout) {
+                            onLogout();
+                          }
+                        }}
+                      >
+                        <View className="flex-row items-center gap-3">
+                          <LogOut color="#E91E76" size={20} />
+                          <Text className="text-[#E91E76] text-[16px] font-bold">Log out</Text>
+                        </View>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      <Text className="text-[#9CA3AF] text-[13px] font-bold tracking-wider mb-4">ACTIONS</Text>
+                      
+                      <SettingsRow icon={<Flag color="#fff" size={20} />} title="Report User" onPress={() => { Alert.alert("Report", "User reported."); setIsSettingsOpen(false); }} />
+                      <SettingsRow icon={<UserX color="#fff" size={20} />} title="Block User" onPress={() => { Alert.alert("Block", "User blocked."); setIsSettingsOpen(false); }} />
+                      
+                      <View className="h-[1px] w-full bg-white/10 my-6" />
 
-                  <Text className="text-center text-[#6B7280] text-[12px] mb-8">Talent App v1.0.0</Text>
+                      <Text className="text-[#9CA3AF] text-[13px] font-bold tracking-wider mb-4">SHARE</Text>
+                      
+                      <SettingsRow icon={<Link color="#fff" size={20} />} title="Copy Profile Link" onPress={() => { Alert.alert("Link Copied", "Profile link copied to clipboard."); setIsSettingsOpen(false); }} />
+                      <SettingsRow icon={<Share color="#fff" size={20} />} title="Share Profile" onPress={() => { handleShare(); setIsSettingsOpen(false); }} />
+                    </>
+                  )}
+
+                  <Text className="text-center text-[#6B7280] text-[12px] mb-8 mt-4">Talent App v1.0.0</Text>
                 </View>
               </ScrollView>
             </>
@@ -942,6 +1090,61 @@ export function ProfileView({ user, onLogout, onBack }: { user?: any, onLogout?:
           </View>
         </Modal>
       )}
+
+      {/* Edit Profile Modal */}
+      {isEditingProfile && (
+        <Modal visible={true} transparent={true} animationType="slide">
+          <View className="flex-1 justify-end bg-black/50">
+            <View className="bg-[#101217] w-full h-[80%] rounded-t-3xl border-t border-white/10 flex-col shadow-2xl">
+              <View className="flex-row justify-between items-center p-5 border-b border-white/5">
+                <Text className="text-white text-[16px] font-bold">Edit Profile</Text>
+                <TouchableOpacity onPress={() => setIsEditingProfile(false)} className="w-8 h-8 bg-white/5 rounded-full items-center justify-center">
+                  <X color="#9CA3AF" size={18} />
+                </TouchableOpacity>
+              </View>
+              
+              <ScrollView className="flex-1 p-5">
+                <View className="items-center mb-6">
+                  <View className="w-[96px] h-[96px] rounded-full border-2 border-[#E91E76] overflow-hidden mb-3">
+                    <Image source={{ uri: editAvatarUrl || avatarImg }} className="w-full h-full" />
+                  </View>
+                  <TouchableOpacity>
+                    <Text className="text-[#E91E76] text-[13px] font-bold">Change Avatar</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View className="mb-4">
+                  <Text className="text-[#9CA3AF] text-[12px] font-bold mb-2">Name</Text>
+                  <TextInput
+                    value={editName}
+                    onChangeText={setEditName}
+                    className="bg-[#1A1D24] border border-white/10 rounded-xl text-white px-4 py-3 text-[14px]"
+                    placeholderTextColor="#6B7280"
+                  />
+                </View>
+
+                <View className="mb-6">
+                  <Text className="text-[#9CA3AF] text-[12px] font-bold mb-2">Bio</Text>
+                  <TextInput
+                    value={editBio}
+                    onChangeText={setEditBio}
+                    multiline
+                    numberOfLines={3}
+                    className="bg-[#1A1D24] border border-white/10 rounded-xl text-white px-4 py-3 text-[14px]"
+                    style={{ minHeight: 80, textAlignVertical: 'top' }}
+                    placeholderTextColor="#6B7280"
+                  />
+                </View>
+
+                <TouchableOpacity onPress={handleSaveProfile} className="w-full bg-[#E91E76] h-[48px] rounded-full flex-row items-center justify-center mb-10">
+                  <Text className="text-white font-bold text-[14px]">SAVE CHANGES</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      )}
+
     </View>
   );
 }
