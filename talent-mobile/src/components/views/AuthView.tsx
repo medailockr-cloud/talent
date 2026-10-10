@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Eye, EyeOff } from 'lucide-react-native';
+import { api } from '../../utils/api';
 
 export function AuthView({ onAuthSuccess }: { onAuthSuccess: (token: string, user: any) => void }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -45,26 +46,17 @@ export function AuthView({ onAuthSuccess }: { onAuthSuccess: (token: string, use
     setLoading(true);
     
     try {
-      const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
+      const endpoint = isLogin ? '/auth/login' : '/auth/register';
       const body = isLogin 
         ? { username, password }
         : { username, password, name };
 
-      const res = await fetch(`http://localhost:3000${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
+      const res = await api.post(endpoint, body);
+      const data = res.data;
       
-      const data = await res.json();
-      
-      if (!res.ok) {
-        throw new Error(data.error || 'Authentication failed');
-      }
-
       onAuthSuccess(data.token, data.user);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message || 'Authentication failed');
     } finally {
       setLoading(false);
     }

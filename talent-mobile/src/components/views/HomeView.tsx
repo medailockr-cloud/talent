@@ -8,7 +8,10 @@ import Animated, {
   withSpring,
   withTiming
 } from 'react-native-reanimated';
-import { Search, EyeOff, Play, Pause, Maximize2, MoreHorizontal, X, Bookmark, MessageCircle, Send, ChevronDown, ChevronRight, Gauge, MapPin, Flag, UserX, User } from 'lucide-react-native';
+import { Search, EyeOff, Play, Pause, Maximize2, MoreHorizontal, X, Bookmark, MessageCircle, Send, ChevronDown, ChevronRight, Gauge, MapPin, Flag, UserX, User, Bell } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { useFeed } from '../../hooks/useFeed';
+import { api } from '../../utils/api';
 
 const HEADER_HEIGHT = 130;
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -108,11 +111,12 @@ const initialFeedData = [
 ];
 
 function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { video: any, playingVideoId: string | null, setPlayingVideoId: (id: string | null) => void, onPass: () => void }) {
+  const router = useRouter();
   const isPlaying = playingVideoId === video.id;
   
   // Interactive States
-  const [isKept, setIsKept] = useState(false);
-  const [keptText, setKeptText] = useState('KEEP');
+  const [isKept, setIsKept] = useState(video.isLiked || false);
+  const [keptText, setKeptText] = useState(video.isLiked ? 'KEPT ✓' : 'KEEP');
   
   const [isCommenting, setIsCommenting] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -122,7 +126,7 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
   const [showOptions, setShowOptions] = useState(false);
   
   // Judging States (Press + Move + Release)
-  const [judgeScore, setJudgeScore] = useState<number | null>(null);
+  const [judgeScore, setJudgeScore] = useState<number | null>(video.userRating || null);
   const [isJudgingActive, setIsJudgingActive] = useState(false);
   const [tempScore, setTempScore] = useState<number>(5.0);
   const [judgedStatusText, setJudgedStatusText] = useState('');
@@ -156,6 +160,9 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setJudgedStatusText(`${tempScore.toFixed(1)} ✓`);
         setTimeout(() => setJudgedStatusText('JUDGED'), 800);
+        
+        // Make API Call
+        api.post(`/videos/${video.id}/rate`, { score: tempScore }).catch(err => console.error("Rate err:", err));
       },
       onPanResponderTerminate: () => {
         setIsJudgingActive(false);
@@ -164,32 +171,40 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
   ).current;
 
   const handleKeepToggle = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (!isKept) {
-      setIsKept(true);
-      setKeptText('KEPT ✓');
-      setTimeout(() => setKeptText('KEPT'), 1500);
-    } else {
-      setIsKept(false);
-      setKeptText('KEEP');
-    }
-  };
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        const willKeep = !isKept;
+        setIsKept(willKeep);
+        if (willKeep) {
+          setKeptText('KEPT ✓');
+          setTimeout(() => setKeptText('KEPT'), 1500);
+        } else {
+          setKeptText('KEEP');
+        }
+        
+        api.post(`/videos/${video.id}/like`).catch(err => {
+          console.error("Like err:", err);
+          setIsKept(!willKeep); // revert on error
+        });
+      };
 
   const handlePostComment = () => {
-    if (!commentText.trim()) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const newComment = {
-      id: Math.random().toString(),
-      user: 'You',
-      text: commentText,
-      time: 'Just now',
-      isUseful: false,
-      timestamp: attachMoment ? '00:38' : null
-    };
-    setComments([...comments, newComment]);
-    setCommentText('');
-    setAttachMoment(false);
-  };
+        if (!commentText.trim()) return;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        const newComment = {
+          id: Math.random().toString(),
+          author: 'You',
+          text: commentText,
+          time: 'Just now',
+          isUseful: false,
+          timestamp: attachMoment ? '00:38' : null
+        };
+        setComments([...comments, newComment]);
+        
+        api.post(`/videos/${video.id}/comment`, { text: commentText }).catch(err => console.error("Comment err:", err));
+        
+        setCommentText('');
+        setAttachMoment(false);
+      };
 
   const toggleUseful = (id: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -203,20 +218,20 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
         {Platform.OS === 'web' ? (
           isPlaying ? (
             <video 
-              src={video.videoUrl} 
+              src={video.url || video.videoUrl} 
               autoPlay 
               loop
               muted={false}
               playsInline
-              poster={video.videoThumb}
+              poster={video.videoThumb || video.thumbnailUrl || 'https://images.unsplash.com/photo-1547153760-18fc86324498?w=800&q=80'}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
             />
           ) : (
-            <Image source={{ uri: video.videoThumb }} className="w-full h-full opacity-90" />
+            <Image source={{ uri: video.videoThumb || video.thumbnailUrl || 'https://images.unsplash.com/photo-1547153760-18fc86324498?w=800&q=80' }} className="w-full h-full opacity-90" />
           )
         ) : (
           <View className="flex-1 items-center justify-center bg-black">
-             <Image source={{ uri: video.videoThumb }} className="w-full h-full opacity-90 absolute" />
+             <Image source={{ uri: video.videoThumb || video.thumbnailUrl || 'https://images.unsplash.com/photo-1547153760-18fc86324498?w=800&q=80' }} className="w-full h-full opacity-90 absolute" />
           </View>
         )}
         
@@ -228,7 +243,7 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
         <View className="absolute top-4 left-4 flex-row items-center gap-2">
           <Text className="text-[11px] font-bold tracking-[0.1em] text-white uppercase">PERFORMANCE</Text>
           <View className="w-1 h-1 rounded-full bg-white/60" />
-          <Text className="text-white text-[11px] font-bold tracking-widest">{video.duration}</Text>
+          <Text className="text-white text-[11px] font-bold tracking-widest">{video.duration || '0:00'}</Text>
         </View>
 
         {/* Top Right: Popularity Hidden */}
@@ -261,7 +276,7 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
             <Maximize2 color="#fff" size={14} strokeWidth={2} />
           </TouchableOpacity>
           <View className="h-8 px-3 rounded-lg bg-black/60 border border-white/20 items-center justify-center">
-            <Text className="text-[12px] font-medium text-white tracking-wider">{video.duration} / {video.duration}</Text>
+            <Text className="text-[12px] font-medium text-white tracking-wider">{video.duration || '0:00'} / {video.duration || '0:00'}</Text>
           </View>
         </View>
 
@@ -276,27 +291,33 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
         )}
       </View>
 
-      {/* User Info */}
       <View className="flex-row items-start justify-between mb-4">
-        <View className="flex-row items-center gap-3">
+        <TouchableOpacity 
+          activeOpacity={0.8}
+          className="flex-row items-center gap-3"
+          onPress={() => {
+            const userId = video.authorId || video.author?.id || video.id;
+            router.push(`/profile/${userId}` as any);
+          }}
+        >
           <View className="w-[42px] h-[42px] rounded-full overflow-hidden border border-white/10">
-            <Image source={{ uri: video.avatar }} className="w-full h-full" />
+            <Image source={{ uri: video.avatar || video.authorAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100' }} className="w-full h-full" />
           </View>
           <View>
             <Text className="text-white text-[16px] font-bold mb-0.5">{video.author}</Text>
             <View className="flex-row items-center gap-1.5 mb-1.5">
-              <Text className="text-[#9CA3AF] text-[11px]">{video.role.split('•')[0].trim()}</Text>
+              <Text className="text-[#9CA3AF] text-[11px]">{(video.role || 'Artist').split('•')[0].trim()}</Text>
               <Text className="text-[#9CA3AF] text-[11px]">•</Text>
               <MapPin color="#9CA3AF" size={10} />
-              <Text className="text-[#9CA3AF] text-[11px]">{video.role.split('•')[1]?.trim() || video.role}</Text>
+              <Text className="text-[#9CA3AF] text-[11px]">{(video.role || 'World').split('•')[1]?.trim() || 'World'}</Text>
             </View>
             <View className="flex-row items-center gap-2">
-              {video.tags.map((tag: string, idx: number) => (
+              {(video.tags || video.hashtags || []).map((tag: string, idx: number) => (
                 <Text key={idx} className="text-[#6B7280] text-[11px]">{tag}</Text>
               ))}
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => setShowOptions(true)} className="w-8 h-8 rounded-full bg-white/5 items-center justify-center mt-1">
           <MoreHorizontal color="#9CA3AF" size={16} />
         </TouchableOpacity>
@@ -314,7 +335,7 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
             <Text className="text-[#9CA3AF] text-[9px] font-bold tracking-widest uppercase">TALK</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPass(); }} activeOpacity={0.7} className="items-center gap-1.5 pb-0.5 min-w-[36px]">
-            <Send color="#fff" size={22} strokeWidth={1.5} style={{ transform: [{ rotate: '45deg' }, { marginLeft: -4 }, { marginBottom: 2 }] }} />
+            <Send color="#fff" size={22} strokeWidth={1.5} style={{ transform: [{ rotate: '45deg' }], marginLeft: -4, marginBottom: 2 }} />
             <Text className="text-[#9CA3AF] text-[9px] font-bold tracking-widest uppercase">PASS</Text>
           </TouchableOpacity>
         </View>
@@ -347,7 +368,11 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
           <TouchableOpacity activeOpacity={1} onPress={() => setShowOptions(false)} className="flex-1 bg-black/60 justify-end">
             <View className="bg-[#171922] w-full rounded-t-2xl pb-8 pt-4 px-4 border-t border-white/10">
               <View className="w-10 h-1 bg-white/20 rounded-full self-center mb-6" />
-              <TouchableOpacity onPress={() => { setShowOptions(false); Alert.alert('Navigate', `Going to ${video.author}'s profile`); }} className="flex-row items-center gap-4 py-4 border-b border-white/5">
+              <TouchableOpacity onPress={() => { 
+                setShowOptions(false); 
+                const userId = video.authorId || video.author?.id || video.id;
+                router.push(`/profile/${userId}` as any);
+              }} className="flex-row items-center gap-4 py-4 border-b border-white/5">
                 <User color="#fff" size={20} />
                 <Text className="text-white text-[15px] font-medium">View profile</Text>
               </TouchableOpacity>
@@ -449,7 +474,7 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
                       returnKeyType="send"
                     />
                     <TouchableOpacity onPress={handlePostComment} disabled={!commentText.trim()} className={`w-8 h-8 rounded-full items-center justify-center ${commentText.trim() ? 'bg-[#E91E76]' : 'bg-white/10'}`}>
-                      <Send color={commentText.trim() ? "#fff" : "#6B7280"} size={14} style={{ transform: [{ rotate: '45deg' }, { marginLeft: -2 }] }} />
+                      <Send color={commentText.trim() ? "#fff" : "#6B7280"} size={14} style={{ transform: [{ rotate: '45deg' }], marginLeft: -2 }} />
                     </TouchableOpacity>
                   </View>
                   <View className="flex-row items-center gap-4 mt-3 ml-11">
@@ -472,29 +497,28 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
 
 export function HomeView({ user }: { user?: any }) {
   const [activeFeedTab, setActiveFeedTab] = useState('For You');
-  const [playingVideoId, setPlayingVideoId] = useState<string | null>('1');
   
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  
+  // Search & Filters state removed for dedicated screens
+  const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
+
+  const { videos: feedData, isLoading, refetch } = useFeed();
+  const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (feedData && feedData.length > 0 && !playingVideoId) {
+      setPlayingVideoId(feedData[0].id);
+    }
+  }, [feedData, playingVideoId]);
   
   // Filter Logic based on Tabs and Search
-  const filteredData = initialFeedData.filter(v => {
+  const filteredData = (feedData || []).filter(v => {
     let matchesTab = true;
     if (activeFeedTab === 'Rising') matchesTab = v.isRising;
     if (activeFeedTab === 'Nearby') matchesTab = v.isNearby;
     if (activeFeedTab === 'Live') matchesTab = v.isLive;
     
-    let matchesSearch = true;
-    if (searchQuery.trim() !== '') {
-      const q = searchQuery.toLowerCase();
-      matchesSearch = v.author.toLowerCase().includes(q) || 
-                      v.role.toLowerCase().includes(q) || 
-                      v.tags.some(t => t.toLowerCase().includes(q));
-    }
-    
-    return matchesTab && matchesSearch;
+    return matchesTab;
   });
 
   const scrollY = useSharedValue(0);
@@ -546,56 +570,6 @@ export function HomeView({ user }: { user?: any }) {
       setPlayingVideoId(filteredData[currentIndex + 1].id);
     }
   };
-
-  if (isSearchOpen) {
-    return (
-      <View className="flex-1 bg-[#050608]">
-        <View className="px-4 pt-12 pb-4 border-b border-white/5">
-          <View className="flex-row items-center w-full bg-[#13151C] rounded-full px-4 h-11 border border-white/5">
-            <Search color="#6B7280" size={18} />
-            <TextInput 
-              className="flex-1 ml-3 text-white font-medium text-[15px]"
-              placeholder="Search talent, skills, tags..."
-              placeholderTextColor="#6B7280"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoFocus
-            />
-            <TouchableOpacity onPress={() => {
-              setSearchQuery('');
-              setIsSearchOpen(false);
-            }} className="w-8 h-8 items-center justify-center -mr-2">
-              <X color="#9CA3AF" size={18} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <ScrollView showsVerticalScrollIndicator={false} className="flex-1 px-4 pt-4">
-          <Text className="text-[#6B7280] text-[12px] font-bold uppercase tracking-wider mb-4">Results ({filteredData.length})</Text>
-          {filteredData.map((video) => (
-            <TouchableOpacity 
-              key={video.id}
-              activeOpacity={0.7}
-              onPress={() => {
-                setIsSearchOpen(false);
-                setPlayingVideoId(video.id);
-                setActiveFeedTab('For You');
-              }}
-              className="flex-row items-center gap-4 mb-4 bg-[#0A0C10] p-3 rounded-2xl border border-white/5"
-            >
-              <Image source={{ uri: video.avatar }} className="w-12 h-12 rounded-full" />
-              <View className="flex-1">
-                <Text className="text-white text-[15px] font-bold">{video.author}</Text>
-                <Text className="text-[#9CA3AF] text-[12px] mt-0.5">{video.role}</Text>
-              </View>
-              <ChevronRight color="#4B5563" size={16} />
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-    );
-  }
-
   return (
     <View className="flex-1 bg-[#050608]">
       <Animated.View style={headerStyle}>
@@ -604,12 +578,15 @@ export function HomeView({ user }: { user?: any }) {
             <Text className="font-bold text-[32px] tracking-tight text-white leading-none font-serif">talent</Text>
             <Text className="font-bold text-[32px] text-[#E91E76] leading-none ml-[1px] font-serif">.</Text>
           </View>
-          <View className="flex-row items-center gap-4">
-            <TouchableOpacity activeOpacity={0.7} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setIsSearchOpen(true); }}>
+          <View className="flex-row items-center gap-6">
+            <TouchableOpacity activeOpacity={0.7} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/search' as any); }}>
               <Search color="#E5E7EB" size={24} strokeWidth={2} />
             </TouchableOpacity>
-            <TouchableOpacity activeOpacity={0.7} onPress={() => Alert.alert('Navigate', 'Opening Profile')} className="w-[32px] h-[32px] rounded-full overflow-hidden border border-white/20">
-              <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100' }} className="w-full h-full" />
+            <TouchableOpacity activeOpacity={0.7} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/messages' as any); }}>
+              <MessageCircle color="#E5E7EB" size={24} strokeWidth={2} />
+            </TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.7} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/notifications' as any); }}>
+              <Bell color="#E5E7EB" size={24} strokeWidth={2} />
             </TouchableOpacity>
           </View>
         </View>
