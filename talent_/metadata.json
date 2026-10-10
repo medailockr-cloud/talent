@@ -1,0 +1,8 @@
+{
+  "name": "talent.",
+  "description": "Blind-judged 60-second performance discovery platform with real video performances and selective popularity reveal.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
