@@ -70,3 +70,4 @@ ehthumbs_vista.db
 
 # Agents / Customizations
 .agents/
+talent-backend/prisma/dev.db
