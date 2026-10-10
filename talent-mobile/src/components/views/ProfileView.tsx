@@ -875,8 +875,8 @@ export function ProfileView({
             </TouchableOpacity>
           </View>
 
-          {/* Avatar on the bottom left corner */}
-          <View className="absolute -bottom-10 left-4 z-20">
+          {/* Avatar Centered */}
+          <View className="absolute -bottom-10 left-1/2 -ml-[50px] z-20">
             <TouchableOpacity
               className="relative"
               onPress={() =>
@@ -900,10 +900,10 @@ export function ProfileView({
         </View>
 
         {/* Profile Info & Bio */}
-        <View className="px-4 pt-14 flex-col">
+        <View className="px-4 pt-14 flex-col items-center">
           {/* Name & Badge */}
-          <View className="flex-row items-center gap-2">
-            <Text className="text-[32px] font-serif font-bold text-white tracking-tight">
+          <View className="flex-row items-center justify-center gap-2">
+            <Text className="text-[32px] font-serif font-bold text-white tracking-tight text-center">
               {profileData?.name || "Aarav Nair"}
             </Text>
             <TouchableOpacity
@@ -917,25 +917,25 @@ export function ProfileView({
           </View>
 
           {/* Role & Location */}
-          <View className="flex-row items-center flex-wrap gap-2 mt-2">
-            <Text className="text-[13px] text-[#D1D5DB]">
+          <View className="flex-row items-center justify-center flex-wrap gap-2 mt-2">
+            <Text className="text-[13px] text-[#D1D5DB] text-center">
               {profileData?.title?.split("•")[0]?.trim() || "Singer"}
             </Text>
             <View className="w-1 h-1 rounded-full bg-[#6B7280]" />
-            <Text className="text-[13px] text-[#D1D5DB]">
+            <Text className="text-[13px] text-[#D1D5DB] text-center">
               {profileData?.title?.split("•")[1]?.trim() || "Songwriter"}
             </Text>
             <View className="w-1 h-1 rounded-full bg-[#6B7280]" />
-            <View className="flex-row items-center gap-1">
+            <View className="flex-row items-center justify-center gap-1">
               <MapPin color="#E91E76" fill="#E91E76" size={13} />
-              <Text className="text-[13px] text-[#D1D5DB]">
+              <Text className="text-[13px] text-[#D1D5DB] text-center">
                 Bengaluru, India
               </Text>
             </View>
           </View>
 
           {/* Quote */}
-          <Text className="text-[13px] text-[#9CA3AF] mt-3 italic font-normal tracking-wide">
+          <Text className="text-[13px] text-[#9CA3AF] mt-3 italic font-normal tracking-wide text-center px-4">
             “Building a life on stage, one performance at a time.”
           </Text>
 
