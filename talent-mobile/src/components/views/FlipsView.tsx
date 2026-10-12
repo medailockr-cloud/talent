@@ -1,8 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, Image, TouchableOpacity, Dimensions, FlatList, Animated } from 'react-native';
+import { View, Text, Image, TouchableOpacity, useWindowDimensions, FlatList, Animated } from 'react-native';
 import { Bookmark, Sparkles, Send, MoreHorizontal, CheckCircle2, ChevronUp } from 'lucide-react-native';
-
-const { height, width } = Dimensions.get('window');
 
 const FLIPS_DATA = [
   { 
@@ -35,6 +33,7 @@ const FLIPS_DATA = [
 ];
 
 export function FlipsView() {
+  const { height, width } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(0);
   
   const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
@@ -138,11 +137,6 @@ export function FlipsView() {
           <TouchableOpacity className="self-start flex-row items-center gap-2 bg-white px-5 py-3 rounded-full shadow-xl">
             <Text className="text-black font-bold text-[14px]">View Full Portfolio</Text>
           </TouchableOpacity>
-        </View>
-
-        {/* Video Scrubber / Progress Bar Simulation */}
-        <View className="absolute bottom-[90px] left-0 right-0 h-[2px] bg-white/20 z-20">
-          <View className="h-full bg-white w-[30%]" />
         </View>
       </View>
     );
