@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import * as ImagePicker from "expo-image-picker";
 import {
   View,
   Text,
@@ -11,6 +12,7 @@ import {
   PanResponder,
   Share as RNShare,
   TextInput,
+  Animated,
 } from "react-native";
 import {
   Settings,
@@ -613,6 +615,12 @@ export function ProfileView({
   const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null);
   const [activeShowModal, setActiveShowModal] = useState<any | null>(null);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [isScoreBreakdownOpen, setIsScoreBreakdownOpen] = useState(false);
+  const [isFansModalOpen, setIsFansModalOpen] = useState(false);
+  const [showTicketsModal, setShowTicketsModal] = useState<string | null>(null);
+  const [ticketTier, setTicketTier] = useState<string>("General");
+  const [ticketQty, setTicketQty] = useState<number>(1);
+  const [ticketConfirmed, setTicketConfirmed] = useState<boolean>(false);
   const [isProfileFeedOpen, setIsProfileFeedOpen] = useState(false);
   const [playingVideoId, setPlayingVideoId] = useState<string | null>("0");
   const [backed, setBacked] = useState(false);
@@ -626,25 +634,89 @@ export function ProfileView({
   const [shows, setShows] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const { user: authUser } = useAuthStore();
+  const { user: authUser, checkAuth } = useAuthStore();
   const isOwnProfile = profileData?.id === authUser?.id;
 
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editName, setEditName] = useState("");
   const [editBio, setEditBio] = useState("");
   const [editAvatarUrl, setEditAvatarUrl] = useState("");
+  const [editTitle, setEditTitle] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+  const [editQuote, setEditQuote] = useState("");
+  const [editAvatarFilter, setEditAvatarFilter] = useState("Original");
+
+  const avatarFilterStyles: Record<string, string> = {
+    Original: "none",
+    Stage: "contrast(1.25) saturate(1.4) hue-rotate(-8deg)",
+    Noir: "grayscale(1) contrast(1.35)",
+    Studio: "contrast(1.15) brightness(1.08) saturate(1.15)",
+    Golden: "brightness(1.06) saturate(1.2) sepia(0.25)",
+    Neon: "saturate(1.6) contrast(1.25) hue-rotate(20deg)",
+  };
+
+  const pickImage = async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      let result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setEditAvatarUrl(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error("Error picking image:", error);
+      Alert.alert("Error", "Failed to pick image");
+    }
+  };
 
   const handleSaveProfile = async () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      const res = await api.put("/profile/me", {
-        name: editName,
-        bio: editBio,
+
+      const formData = new FormData();
+      formData.append("name", editName);
+      formData.append("bio", editBio);
+      formData.append("title", editTitle);
+      formData.append("location", editLocation);
+      formData.append("quote", editQuote);
+
+      if (editAvatarUrl && (editAvatarUrl.startsWith("file://") || editAvatarUrl.startsWith("blob:") || editAvatarUrl.startsWith("data:"))) {
+        if (Platform.OS === "web") {
+          const response = await fetch(editAvatarUrl);
+          const blob = await response.blob();
+          formData.append("avatar", blob, "avatar.jpg");
+        } else {
+          const filename = editAvatarUrl.split("/").pop();
+          const match = /\.(\w+)$/.exec(filename || "");
+          const type = match ? `image/${match[1]}` : `image`;
+          formData.append("avatar", {
+            uri: editAvatarUrl,
+            name: filename || "avatar.jpg",
+            type,
+          } as any);
+        }
+      }
+
+      const res = await api.put("/profile/me", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
       });
-      setProfileData({ ...profileData, name: editName, bio: editBio });
+      
+      const updatedProfile = res.data;
+      setProfileData({ ...profileData, ...updatedProfile });
+      
+      if (checkAuth) {
+        await checkAuth();
+      }
+
       setIsEditingProfile(false);
       Alert.alert("Success", "Profile updated successfully.");
     } catch (e) {
+      console.error(e);
       Alert.alert("Error", "Failed to update profile.");
     }
   };
@@ -653,6 +725,10 @@ export function ProfileView({
     const fetchProfile = async () => {
       try {
         setIsLoading(true);
+        if (!user?.id && !authUser) {
+          setIsLoading(false);
+          return;
+        }
         // If no user prop is passed, or if we want the current user profile
         const endpoint = user?.id ? `/profile/${user.id}` : "/profile/me";
 
@@ -661,6 +737,9 @@ export function ProfileView({
         setEditName(response.data?.name || "");
         setEditBio(response.data?.bio || "");
         setEditAvatarUrl(response.data?.avatarUrl || "");
+        setEditTitle(response.data?.title || "");
+        setEditLocation(response.data?.location || "");
+        setEditQuote(response.data?.quote || "");
 
         // Fetch shows
         const userId = response.data?.id;
@@ -672,8 +751,12 @@ export function ProfileView({
             console.error("Failed to fetch shows:", e);
           }
         }
-      } catch (error) {
-        console.error("Failed to fetch profile:", error);
+      } catch (error: any) {
+        if (error.response?.status === 401) {
+          console.log("Unauthorized: Please log in to view profile");
+        } else {
+          console.error("Failed to fetch profile:", error);
+        }
       } finally {
         setIsLoading(false);
       }
@@ -831,36 +914,25 @@ export function ProfileView({
         contentContainerStyle={{ paddingBottom: 100 }}
         bounces={false}
       >
-        {/* Cover Image & Avatar */}
-        <View className="relative w-full aspect-[430/280]">
-          <Image
-            source={{ uri: coverImg }}
-            className="w-full h-full"
-            resizeMode="cover"
-          />
+        {/* Top Actions */}
+        <View className="flex-row justify-between items-center px-4 pt-14 pb-4 bg-[#050608]">
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              if (onBack) {
+                onBack();
+              } else if (Platform.OS === "web") {
+                window.location.href = "/";
+              } else {
+                Alert.alert("Home", "Navigating to Home...");
+              }
+            }}
+            className="w-10 h-10 items-center justify-center rounded-full border border-white/10 bg-black/40"
+          >
+            <ChevronLeft color="#fff" size={24} />
+          </TouchableOpacity>
 
-          <View className="absolute inset-0 bg-black/40" />
-          <View className="absolute bottom-0 left-0 right-0 h-24 bg-[#050608]/80" />
-
-          {/* Top Actions (Over the cover) */}
-          <View className="absolute top-14 left-4 z-50">
-            <TouchableOpacity
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                if (onBack) {
-                  onBack();
-                } else if (Platform.OS === "web") {
-                  window.location.href = "/";
-                } else {
-                  Alert.alert("Home", "Navigating to Home...");
-                }
-              }}
-              className="w-10 h-10 items-center justify-center rounded-full border border-white/10 bg-black/40"
-            >
-              <ChevronLeft color="#fff" size={24} />
-            </TouchableOpacity>
-          </View>
-          <View className="absolute top-14 right-4 flex-row gap-2 z-50">
+          <View className="flex-row gap-2">
             <TouchableOpacity
               onPress={handleShare}
               className="w-10 h-10 items-center justify-center rounded-full bg-black/40 border border-white/10"
@@ -874,74 +946,82 @@ export function ProfileView({
               <MoreHorizontal color="#fff" size={20} />
             </TouchableOpacity>
           </View>
+        </View>
 
-          {/* Avatar Centered */}
-          <View className="absolute -bottom-10 left-1/2 -ml-[50px] z-20">
-            <TouchableOpacity
-              className="relative"
-              onPress={() =>
-                Alert.alert(
-                  "Online",
-                  "Aarav Nair is currently online & accepting bookings!",
-                )
-              }
-            >
-              <View className="w-[100px] h-[100px] rounded-full overflow-hidden border-[2px] border-white bg-[#1B1D24] shadow-lg">
-                <Image
-                  source={{ uri: profileData?.avatarUrl || avatarImg }}
-                  className="w-full h-full"
-                  resizeMode="cover"
-                />
-              </View>
-              {/* Online Dot */}
-              <View className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-[#00E575] border-[2.5px] border-[#050608]" />
-            </TouchableOpacity>
-          </View>
+        {/* Avatar (Centered) */}
+        <View className="items-center mt-2">
+          <TouchableOpacity
+            className="relative"
+            onPress={() =>
+              Alert.alert(
+                "Online",
+                "Aarav Nair is currently online & accepting bookings!",
+              )
+            }
+          >
+            <View className="w-[100px] h-[100px] rounded-full overflow-hidden border-[2px] border-[#E91E76] bg-[#1B1D24] shadow-lg">
+              <Image
+                source={{ uri: profileData?.avatarUrl || avatarImg }}
+                className="w-full h-full"
+                resizeMode="cover"
+              />
+            </View>
+            {/* Online Dot */}
+            <View className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-[#00E575] border-[2.5px] border-[#050608]" />
+          </TouchableOpacity>
         </View>
 
         {/* Profile Info & Bio */}
-        <View className="px-4 pt-14 flex-col items-center">
-          {/* Name & Badge */}
-          <View className="flex-row items-center justify-center gap-2">
-            <Text className="text-[32px] font-serif font-bold text-white tracking-tight text-center">
-              {profileData?.name || "Aarav Nair"}
-            </Text>
-            <TouchableOpacity
-              onPress={() =>
-                Alert.alert("Verified Stage Artist", "Level 4 Calibrated")
-              }
-              className="w-[22px] h-[22px] rounded-full bg-[#E91E76] items-center justify-center shadow-md"
-            >
-              <Check color="#fff" strokeWidth={3.5} size={13} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Role & Location */}
-          <View className="flex-row items-center justify-center flex-wrap gap-2 mt-2">
-            <Text className="text-[13px] text-[#D1D5DB] text-center">
-              {profileData?.title?.split("•")[0]?.trim() || "Singer"}
-            </Text>
-            <View className="w-1 h-1 rounded-full bg-[#6B7280]" />
-            <Text className="text-[13px] text-[#D1D5DB] text-center">
-              {profileData?.title?.split("•")[1]?.trim() || "Songwriter"}
-            </Text>
-            <View className="w-1 h-1 rounded-full bg-[#6B7280]" />
-            <View className="flex-row items-center justify-center gap-1">
-              <MapPin color="#E91E76" fill="#E91E76" size={13} />
-              <Text className="text-[13px] text-[#D1D5DB] text-center">
-                Bengaluru, India
+        <View className="px-4 pt-6 flex-col">
+          <View className="items-center">
+            {/* Name & Badge */}
+            <View className="flex-row items-center justify-center gap-2">
+              <Text className="text-[32px] font-serif font-bold text-white tracking-tight text-center">
+                {profileData?.name || "Aarav Nair"}
               </Text>
+              <TouchableOpacity
+                onPress={() =>
+                  Alert.alert("Verified Stage Artist", "Level 4 Calibrated")
+                }
+                className="w-[22px] h-[22px] rounded-full bg-[#E91E76] items-center justify-center shadow-md"
+              >
+                <Check color="#fff" strokeWidth={3.5} size={13} />
+              </TouchableOpacity>
             </View>
-          </View>
 
-          {/* Quote */}
-          <Text className="text-[13px] text-[#9CA3AF] mt-3 italic font-normal tracking-wide text-center px-4">
-            “Building a life on stage, one performance at a time.”
-          </Text>
+            {/* Role & Location */}
+            <View className="flex-row items-center justify-center flex-wrap gap-2 mt-2">
+              <Text className="text-[13px] text-[#D1D5DB]">
+                {profileData?.title ? profileData.title.split("•")[0]?.trim() : "Singer"}
+              </Text>
+              {((profileData?.title && profileData.title.split("•").length > 1) || (!profileData?.title)) && (
+                <>
+                  <View className="w-1 h-1 rounded-full bg-[#6B7280]" />
+                  <Text className="text-[13px] text-[#D1D5DB]">
+                    {profileData?.title ? profileData.title.split("•")[1]?.trim() : "Songwriter"}
+                  </Text>
+                </>
+              )}
+              <View className="w-1 h-1 rounded-full bg-[#6B7280]" />
+              <View className="flex-row items-center justify-center gap-1">
+                <MapPin color="#E91E76" fill="#E91E76" size={13} />
+                <Text className="text-[13px] text-[#D1D5DB]">
+                  {profileData?.location || "Bengaluru, India"}
+                </Text>
+              </View>
+            </View>
+
+            {/* Quote / Caption */}
+            <Text className="text-white text-[15px] italic text-center mt-3 px-6 leading-6 opacity-90">
+              "{profileData?.quote || "Music is the language of the spirit."}"
+            </Text>
+          </View>
 
           {/* Metrics 4-Grid Cards */}
           <View className="flex-row gap-2 mt-5">
-            <TouchableOpacity className="flex-1 p-3 rounded-2xl bg-[#11131B] border border-white/5 items-start min-h-[72px] justify-between">
+            <TouchableOpacity 
+              onPress={() => setIsScoreBreakdownOpen(true)}
+              className="flex-1 p-3 rounded-2xl bg-[#11131B] border border-white/5 items-start min-h-[72px] justify-between">
               <Star color="#E91E76" fill="#E91E76" size={18} />
               <View className="mt-2">
                 <Text className="text-[17px] font-bold text-white">4.8</Text>
@@ -982,7 +1062,9 @@ export function ProfileView({
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity className="flex-1 p-3 rounded-2xl bg-[#11131B] border border-white/5 items-start min-h-[72px] justify-between">
+            <TouchableOpacity 
+              onPress={() => setIsFansModalOpen(true)}
+              className="flex-1 p-3 rounded-2xl bg-[#11131B] border border-white/5 items-start min-h-[72px] justify-between">
               <Users color="#D1D5DB" size={18} strokeWidth={2} />
               <View className="mt-2">
                 <Text className="text-[17px] font-bold text-white">
@@ -1030,13 +1112,13 @@ export function ProfileView({
 
             {!isOwnProfile && (
               <TouchableOpacity
-                onPress={handleInvite}
+                onPress={() => Alert.alert("Message", "Opening direct messages...")}
                 activeOpacity={0.8}
                 className="flex-[1.8] h-[48px] rounded-full bg-transparent border border-white/10 items-center justify-center flex-row gap-2"
               >
-                <Calendar color="#fff" size={16} strokeWidth={2} />
+                <MessageCircle color="#fff" size={16} strokeWidth={2} />
                 <Text className="text-[12px] font-semibold tracking-[0.05em] text-white uppercase">
-                  INVITE TO SHOW
+                  MESSAGE
                 </Text>
               </TouchableOpacity>
             )}
@@ -1059,6 +1141,7 @@ export function ProfileView({
             {["#Original", "#Acoustic", "#Indie", "#Singer"].map((tag, i) => (
               <TouchableOpacity
                 key={i}
+                onPress={() => Alert.alert("Search Tag", `Searching for talents with ${tag}`)}
                 className="px-4 py-2 rounded-full bg-[#11131B] border border-white/10 items-center justify-center"
               >
                 <Text className="text-[#D1D5DB] text-[12px] font-medium">
@@ -1983,6 +2066,105 @@ export function ProfileView({
         </Modal>
       )}
 
+      {/* Score Breakdown Modal */}
+      {isScoreBreakdownOpen && (
+        <Modal visible={true} transparent={true} animationType="slide">
+          <View className="flex-1 justify-end bg-black/60">
+            <View className="bg-[#12141A] w-full rounded-t-3xl border-t border-white/10 flex-col pb-8 pt-4 px-5">
+              <View className="flex-row justify-between items-center mb-6">
+                <View className="flex-row items-center gap-2">
+                  <Star color="#E91E76" size={20} />
+                  <Text className="text-white text-[16px] font-bold">
+                    Blind Score Breakdown
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => setIsScoreBreakdownOpen(false)}>
+                  <X color="#9CA3AF" size={24} />
+                </TouchableOpacity>
+              </View>
+
+              <View className="bg-[#0A0B10] border border-white/10 rounded-xl p-4 mb-4">
+                <Text className="text-white text-[28px] font-bold text-center">4.8</Text>
+                <Text className="text-[#E91E76] text-[12px] font-semibold text-center mb-4">Top 5% Artist</Text>
+                <View className="flex-row items-center justify-between mb-3">
+                  <Text className="text-[#D1D5DB] text-[13px]">Vocal Control</Text>
+                  <Text className="text-white font-bold text-[13px]">4.9</Text>
+                </View>
+                <View className="flex-row items-center justify-between mb-3">
+                  <Text className="text-[#D1D5DB] text-[13px]">Stage Presence</Text>
+                  <Text className="text-white font-bold text-[13px]">4.7</Text>
+                </View>
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-[#D1D5DB] text-[13px]">Originality</Text>
+                  <Text className="text-white font-bold text-[13px]">4.8</Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                onPress={() => setIsScoreBreakdownOpen(false)}
+                className="bg-[#E91E76] h-[48px] rounded-full flex-row items-center justify-center mt-2"
+              >
+                <Text className="text-white font-bold text-[14px] tracking-widest">DONE</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {/* Fans Modal */}
+      {isFansModalOpen && (
+        <Modal visible={true} transparent={true} animationType="slide">
+          <View className="flex-1 justify-end bg-black/60">
+            <View className="bg-[#12141A] w-full rounded-t-3xl border-t border-white/10 flex-col pb-8 pt-4 px-5">
+              <View className="flex-row justify-between items-center mb-6">
+                <View className="flex-row items-center gap-2">
+                  <Users color="#E91E76" size={20} />
+                  <Text className="text-white text-[16px] font-bold">
+                    Backers & Community
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => setIsFansModalOpen(false)}>
+                  <X color="#9CA3AF" size={24} />
+                </TouchableOpacity>
+              </View>
+
+              <View className="flex-col gap-2 mb-4">
+                {[
+                  { name: "Maya Krishnan", role: "Lead Patron • 14 Shows", color: "pink", icon: "MK" },
+                  { name: "Arjun Menon", role: "Verified Stage Peer", color: "amber", icon: "AM" },
+                  { name: "Bengaluru Live Club", role: "Curator", color: "blue", icon: "BL" }
+                ].map((fan, index) => (
+                  <View key={index} className="p-3 bg-[#0A0B10] border border-white/10 rounded-xl flex-row items-center justify-between">
+                    <View className="flex-row items-center gap-3">
+                      <View className="w-10 h-10 rounded-full bg-white/10 items-center justify-center">
+                        <Text className="text-white text-[12px] font-bold">{fan.icon}</Text>
+                      </View>
+                      <View>
+                        <Text className="text-white text-[14px] font-semibold">{fan.name}</Text>
+                        <Text className="text-[#9CA3AF] text-[12px]">{fan.role}</Text>
+                      </View>
+                    </View>
+                    <Heart color="#E91E76" fill="#E91E76" size={16} />
+                  </View>
+                ))}
+              </View>
+
+              <TouchableOpacity
+                onPress={() => {
+                  setIsFansModalOpen(false);
+                  handleBackTalent();
+                }}
+                className="bg-[#E91E76] h-[48px] rounded-full flex-row items-center justify-center mt-2"
+              >
+                <Text className="text-white font-bold text-[14px] tracking-widest uppercase">
+                  {backed ? "You are Backing this Talent" : "Back Aarav Nair (+0.1K)"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
+
       {/* Edit Profile Modal */}
       {isEditingProfile && (
         <Modal visible={true} transparent={true} animationType="slide">
@@ -2002,17 +2184,52 @@ export function ProfileView({
 
               <ScrollView className="flex-1 p-5">
                 <View className="items-center mb-6">
-                  <View className="w-[96px] h-[96px] rounded-full border-2 border-[#E91E76] overflow-hidden mb-3">
+                  <View className="w-[96px] h-[96px] rounded-full border-2 border-[#E91E76] overflow-hidden mb-3 relative bg-black/40">
                     <Image
                       source={{ uri: editAvatarUrl || avatarImg }}
                       className="w-full h-full"
+                      style={[
+                        Platform.OS === "web"
+                          ? ({ filter: avatarFilterStyles[editAvatarFilter] || "none" } as any)
+                          : {},
+                      ]}
                     />
                   </View>
-                  <TouchableOpacity>
+                  <TouchableOpacity onPress={pickImage} className="mb-2.5">
                     <Text className="text-[#E91E76] text-[13px] font-bold">
                       Change Avatar
                     </Text>
                   </TouchableOpacity>
+
+                  {/* Photo Filters for Avatar */}
+                  <View className="flex-row items-center flex-wrap justify-center gap-1.5 mt-1 px-4">
+                    {["Original", "Stage", "Noir", "Studio", "Golden", "Neon"].map(
+                      (f) => (
+                        <TouchableOpacity
+                          key={f}
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            setEditAvatarFilter(f);
+                          }}
+                          className={`px-2.5 py-1 rounded-full border ${
+                            editAvatarFilter === f
+                              ? "bg-[#E91E76] border-[#E91E76]"
+                              : "bg-white/5 border-white/10"
+                          }`}
+                        >
+                          <Text
+                            className={`text-[10px] font-medium ${
+                              editAvatarFilter === f
+                                ? "text-white font-bold"
+                                : "text-white/70"
+                            }`}
+                          >
+                            {f}
+                          </Text>
+                        </TouchableOpacity>
+                      ),
+                    )}
+                  </View>
                 </View>
 
                 <View className="mb-4">
@@ -2022,6 +2239,42 @@ export function ProfileView({
                   <TextInput
                     value={editName}
                     onChangeText={setEditName}
+                    className="bg-[#1A1D24] border border-white/10 rounded-xl text-white px-4 py-3 text-[14px]"
+                    placeholderTextColor="#6B7280"
+                  />
+                </View>
+
+                <View className="mb-4">
+                  <Text className="text-[#9CA3AF] text-[12px] font-bold mb-2">
+                    Categories (e.g. Singer • Songwriter)
+                  </Text>
+                  <TextInput
+                    value={editTitle}
+                    onChangeText={setEditTitle}
+                    className="bg-[#1A1D24] border border-white/10 rounded-xl text-white px-4 py-3 text-[14px]"
+                    placeholderTextColor="#6B7280"
+                  />
+                </View>
+
+                <View className="mb-4">
+                  <Text className="text-[#9CA3AF] text-[12px] font-bold mb-2">
+                    Location
+                  </Text>
+                  <TextInput
+                    value={editLocation}
+                    onChangeText={setEditLocation}
+                    className="bg-[#1A1D24] border border-white/10 rounded-xl text-white px-4 py-3 text-[14px]"
+                    placeholderTextColor="#6B7280"
+                  />
+                </View>
+
+                <View className="mb-4">
+                  <Text className="text-[#9CA3AF] text-[12px] font-bold mb-2">
+                    Quote / Caption
+                  </Text>
+                  <TextInput
+                    value={editQuote}
+                    onChangeText={setEditQuote}
                     className="bg-[#1A1D24] border border-white/10 rounded-xl text-white px-4 py-3 text-[14px]"
                     placeholderTextColor="#6B7280"
                   />

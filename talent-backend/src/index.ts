@@ -278,7 +278,7 @@ app.post('/api/auth/register', async (req, res) => {
     });
 
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: { id: user.id, username: user.username, name: user.name } });
+    res.json({ token, user: { id: user.id, username: user.username, name: user.name, avatarUrl: user.avatarUrl, title: user.title, location: user.location, quote: user.quote } });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to register' });
@@ -300,7 +300,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: { id: user.id, username: user.username, name: user.name } });
+    res.json({ token, user: { id: user.id, username: user.username, name: user.name, avatarUrl: user.avatarUrl, title: user.title, location: user.location, quote: user.quote } });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to login' });
@@ -569,11 +569,15 @@ app.get('/api/profile/:id', async (req, res) => {
 app.put('/api/profile/me', requireAuth, upload.single('avatar'), async (req, res) => {
   try {
     const userId = req.userId!;
-    const { name, bio } = req.body;
+    const { name, bio, title, location, quote } = req.body;
     
     const updateData: any = {};
     if (name) updateData.name = name;
     if (bio !== undefined) updateData.bio = bio;
+    if (title !== undefined) updateData.title = title;
+    if (location !== undefined) updateData.location = location;
+    if (quote !== undefined) updateData.quote = quote;
+    
     if (req.file) {
       updateData.avatarUrl = `http://localhost:${PORT}/uploads/${req.file.filename}`;
     }
@@ -588,7 +592,10 @@ app.put('/api/profile/me', requireAuth, upload.single('avatar'), async (req, res
       username: updatedUser.username,
       name: updatedUser.name,
       bio: updatedUser.bio,
-      avatarUrl: updatedUser.avatarUrl
+      avatarUrl: updatedUser.avatarUrl,
+      title: updatedUser.title,
+      location: updatedUser.location,
+      quote: updatedUser.quote
     });
   } catch (error) {
     console.error(error);

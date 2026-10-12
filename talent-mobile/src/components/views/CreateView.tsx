@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
   ScrollView,
   Image,
   PanResponder,
+  Animated,
+  Alert,
 } from "react-native";
 import {
   CameraView,
@@ -61,13 +63,285 @@ import {
   Star,
   Aperture,
   Subtitles,
+  SlidersHorizontal,
+  Sun,
+  RotateCcw,
+  Palette,
+  Contrast,
+  Droplets,
+  Flame,
+  VolumeX,
+  Plus,
+  Trash2,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useVideoPlayer, VideoView } from "expo-video";
 import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
 import { api } from "../../utils/api";
 
-// --- Types ---
+// --- Types & Filter Configurations ---
+export interface TalentFilter {
+  id: string;
+  name: string;
+  category: "All" | "Popular" | "Stage" | "Mood" | "Film" | "B&W";
+  badge?: string;
+  cssFilter: (intensity: number) => string;
+  overlayColor?: string;
+  overlayOpacity?: number;
+  secondaryOverlay?: string;
+  previewBg: string;
+  accentColor: string;
+  description: string;
+}
+
+export const TALENT_FILTERS: TalentFilter[] = [
+  {
+    id: "original",
+    name: "Original",
+    category: "All",
+    cssFilter: () => "none",
+    previewBg: "#1F2937",
+    accentColor: "#9CA3AF",
+    description: "Raw unedited capture",
+  },
+  {
+    id: "stage",
+    name: "Stage",
+    category: "Stage",
+    badge: "POPULAR",
+    cssFilter: (int) =>
+      `contrast(${1 + 0.3 * int}) saturate(${1 + 0.45 * int}) brightness(${1 + 0.05 * int}) hue-rotate(${-8 * int}deg)`,
+    overlayColor: "rgba(233, 30, 118, 0.16)",
+    overlayOpacity: 0.8,
+    secondaryOverlay: "rgba(251, 146, 60, 0.1)",
+    previewBg: "#E91E76",
+    accentColor: "#E91E76",
+    description: "Concert stage glow & punchy mids",
+  },
+  {
+    id: "studio",
+    name: "Studio",
+    category: "Popular",
+    cssFilter: (int) =>
+      `contrast(${1 + 0.22 * int}) brightness(${1 + 0.08 * int}) saturate(${1 + 0.18 * int})`,
+    overlayColor: "rgba(14, 165, 233, 0.12)",
+    overlayOpacity: 0.7,
+    previewBg: "#0284C7",
+    accentColor: "#38BDF8",
+    description: "Crisp studio clarity & balanced exposure",
+  },
+  {
+    id: "natural",
+    name: "Natural",
+    category: "Popular",
+    cssFilter: (int) =>
+      `brightness(${1 + 0.06 * int}) saturate(${1 + 0.12 * int}) contrast(${1 + 0.08 * int})`,
+    overlayColor: "rgba(245, 158, 11, 0.10)",
+    overlayOpacity: 0.6,
+    previewBg: "#D97706",
+    accentColor: "#FBBF24",
+    description: "Golden hour glow and soft warm radiance",
+  },
+  {
+    id: "bw",
+    name: "Noir B&W",
+    category: "B&W",
+    cssFilter: (int) =>
+      `grayscale(${1 * int}) contrast(${1 + 0.42 * int}) brightness(${1 - 0.06 * int})`,
+    overlayColor: "rgba(17, 24, 39, 0.25)",
+    overlayOpacity: 0.8,
+    previewBg: "#111827",
+    accentColor: "#F3F4F6",
+    description: "High-contrast cinematic monochrome",
+  },
+  {
+    id: "live",
+    name: "Live Neon",
+    category: "Stage",
+    badge: "ELECTRIC",
+    cssFilter: (int) =>
+      `saturate(${1 + 0.65 * int}) contrast(${1 + 0.35 * int}) hue-rotate(${18 * int}deg)`,
+    overlayColor: "rgba(168, 85, 247, 0.2)",
+    overlayOpacity: 0.8,
+    secondaryOverlay: "rgba(236, 72, 153, 0.15)",
+    previewBg: "#9333EA",
+    accentColor: "#C084FC",
+    description: "Cyberpunk live arena lasers & violet neon",
+  },
+  {
+    id: "lowlight",
+    name: "Low Light",
+    category: "Mood",
+    cssFilter: (int) =>
+      `brightness(${1 + 0.35 * int}) contrast(${1 + 0.18 * int}) saturate(${1 + 0.15 * int})`,
+    overlayColor: "rgba(255, 255, 255, 0.12)",
+    overlayOpacity: 0.6,
+    previewBg: "#475569",
+    accentColor: "#94A3B8",
+    description: "Nightclub & dim room exposure booster",
+  },
+  {
+    id: "vintage",
+    name: "Vintage '92",
+    category: "Film",
+    cssFilter: (int) =>
+      `sepia(${0.55 * int}) contrast(${1 + 0.18 * int}) brightness(${1 - 0.04 * int}) saturate(${1 + 0.2 * int})`,
+    overlayColor: "rgba(180, 83, 9, 0.22)",
+    overlayOpacity: 0.8,
+    previewBg: "#B45309",
+    accentColor: "#F59E0B",
+    description: "35mm grain aesthetic & analogue warmth",
+  },
+  {
+    id: "cyber",
+    name: "Cyberpunk",
+    category: "Mood",
+    cssFilter: (int) =>
+      `hue-rotate(${135 * int}deg) saturate(${1 + 0.6 * int}) contrast(${1 + 0.3 * int})`,
+    overlayColor: "rgba(244, 63, 94, 0.18)",
+    overlayOpacity: 0.8,
+    secondaryOverlay: "rgba(59, 130, 246, 0.18)",
+    previewBg: "#E11D48",
+    accentColor: "#FB7185",
+    description: "Dual-tone hyper-contrast nightscape",
+  },
+  {
+    id: "autofix",
+    name: "Auto Fix",
+    category: "Popular",
+    badge: "AI",
+    cssFilter: (int) =>
+      `contrast(${1 + 0.22 * int}) brightness(${1 + 0.1 * int}) saturate(${1 + 0.22 * int})`,
+    overlayColor: "rgba(233, 30, 118, 0.08)",
+    overlayOpacity: 0.7,
+    previewBg: "#E91E76",
+    accentColor: "#F472B6",
+    description: "Smart luminance & dynamic range balance",
+  },
+  {
+    id: "emerald",
+    name: "Emerald",
+    category: "Film",
+    cssFilter: (int) =>
+      `hue-rotate(${30 * int}deg) saturate(${1 + 0.25 * int}) contrast(${1 + 0.25 * int})`,
+    overlayColor: "rgba(16, 185, 129, 0.18)",
+    overlayOpacity: 0.75,
+    previewBg: "#059669",
+    accentColor: "#34D399",
+    description: "Indie festival teal & emerald cinematic tint",
+  },
+  {
+    id: "sunset",
+    name: "Sunset Dream",
+    category: "Mood",
+    cssFilter: (int) =>
+      `sepia(${0.3 * int}) saturate(${1 + 0.45 * int}) brightness(${1 + 0.06 * int}) hue-rotate(${-15 * int}deg)`,
+    overlayColor: "rgba(244, 63, 94, 0.18)",
+    overlayOpacity: 0.8,
+    secondaryOverlay: "rgba(251, 191, 36, 0.12)",
+    previewBg: "#BE123C",
+    accentColor: "#FDA4AF",
+    description: "Radiant dusk horizon & magenta blush",
+  },
+];
+
+export interface FineTuneOption {
+  key: "brightness" | "contrast" | "saturation" | "warmth";
+  label: string;
+  icon: any;
+  previewFilter: string;
+}
+
+export const FINE_TUNE_OPTIONS: FineTuneOption[] = [
+  {
+    key: "brightness",
+    label: "Brightness",
+    icon: Sun,
+    previewFilter: "brightness(1.35)",
+  },
+  {
+    key: "contrast",
+    label: "Contrast",
+    icon: Contrast,
+    previewFilter: "contrast(1.45)",
+  },
+  {
+    key: "saturation",
+    label: "Saturation",
+    icon: Droplets,
+    previewFilter: "saturate(1.75)",
+  },
+  {
+    key: "warmth",
+    label: "Warmth",
+    icon: Flame,
+    previewFilter: "sepia(0.6) saturate(1.2)",
+  },
+];
+
+export interface SoundTrack {
+  id: string;
+  name: string;
+  artist: string;
+  genre: string;
+  duration: string;
+  accent: string;
+  uri?: string;
+  isCustom?: boolean;
+}
+
+export const SOUND_TRACKS: SoundTrack[] = [
+  {
+    id: "none",
+    name: "Original Only",
+    artist: "Captured Mic Audio",
+    genre: "Live Voice / Raw",
+    duration: "Live",
+    accent: "#6B7280",
+  },
+  {
+    id: "track-1",
+    name: "Midnight Echoes",
+    artist: "Talent Beat Lab",
+    genre: "Lo-Fi / Soul",
+    duration: "02:18",
+    accent: "#E91E76",
+  },
+  {
+    id: "track-2",
+    name: "Stage Horizon",
+    artist: "Nova Strings",
+    genre: "Acoustic / Live",
+    duration: "01:54",
+    accent: "#8B5CF6",
+  },
+  {
+    id: "track-3",
+    name: "Pulse & Spotlight",
+    artist: "Metro Bass",
+    genre: "Electronic / Trap",
+    duration: "02:05",
+    accent: "#38BDF8",
+  },
+  {
+    id: "track-4",
+    name: "Golden Hour Glow",
+    artist: "Aura Ensemble",
+    genre: "Chill / R&B",
+    duration: "02:30",
+    accent: "#F59E0B",
+  },
+  {
+    id: "track-5",
+    name: "Crescendo Rush",
+    artist: "Cinematic Orchestra",
+    genre: "Stage Drama",
+    duration: "01:42",
+    accent: "#10B981",
+  },
+];
+
 type CreateStep =
   | "HOME"
   | "RECORD"
@@ -91,6 +365,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   // --- State ---
   const [step, setStep] = useState<CreateStep>("HOME");
   const [recordedVideoUri, setRecordedVideoUri] = useState<string | null>(null);
+  const [mediaType, setMediaType] = useState<"video" | "image">("video");
+  const [cameraMode, setCameraMode] = useState<"video" | "photo">("video");
   const [isRecording, setIsRecording] = useState(false);
   const cameraRef = useRef<CameraView>(null);
 
@@ -112,27 +388,66 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     "none" | "trim" | "cover" | "sound" | "filters" | "caption"
   >("filters");
   const [activeFilter, setActiveFilter] = useState("Original");
+  const [filterIntensity, setFilterIntensity] = useState(0.85); // 0.0 to 1.0
+  const [activeFilterSubTab, setActiveFilterSubTab] = useState<"presets" | "adjust">("presets");
+  const [activeFilterCategory, setActiveFilterCategory] = useState<string>("All");
+  const [isComparing, setIsComparing] = useState(false);
+  const [adjustments, setAdjustments] = useState({
+    brightness: 0,
+    contrast: 0,
+    saturation: 0,
+    warmth: 0,
+  });
+  const [coverImageUri, setCoverImageUri] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(true);
 
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(1);
   const [sliderWidth, setSliderWidth] = useState(0);
 
-  const previewPlayer = useVideoPlayer(recordedVideoUri, (player) => {
-    player.loop = true;
-    player.muted = true; // Auto-play requires muted on web
-    player.play();
-  });
+  const previewPlayer = useVideoPlayer(
+    mediaType === "video" ? recordedVideoUri : null,
+    (player) => {
+      player.loop = true;
+      player.muted = true; // Auto-play requires muted on web
+      player.play();
+    },
+  );
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (previewPlayer) {
+      if (previewPlayer && mediaType === "video") {
         setCurrentTime(previewPlayer.currentTime);
         setDuration(previewPlayer.duration || 1);
       }
     }, 100);
     return () => clearInterval(interval);
-  }, [previewPlayer]);
+  }, [previewPlayer, mediaType]);
+
+  const activeFilterConfig =
+    TALENT_FILTERS.find((f) => f.name === activeFilter) || TALENT_FILTERS[0];
+
+  const getEffectiveCssFilter = () => {
+    if (isComparing) return "none";
+    const baseFilter = activeFilterConfig.cssFilter(filterIntensity);
+
+    const b = 1 + adjustments.brightness / 100;
+    const c = 1 + adjustments.contrast / 100;
+    const s = 1 + adjustments.saturation / 100;
+    const w = adjustments.warmth;
+
+    const adjustParts: string[] = [];
+    if (b !== 1) adjustParts.push(`brightness(${b.toFixed(2)})`);
+    if (c !== 1) adjustParts.push(`contrast(${c.toFixed(2)})`);
+    if (s !== 1) adjustParts.push(`saturate(${s.toFixed(2)})`);
+    if (w > 0) adjustParts.push(`sepia(${(w / 100).toFixed(2)})`);
+    if (w < 0) adjustParts.push(`hue-rotate(${w}deg)`);
+
+    if (baseFilter === "none" && adjustParts.length === 0) return "none";
+    return [baseFilter !== "none" ? baseFilter : "", ...adjustParts]
+      .filter(Boolean)
+      .join(" ");
+  };
 
   const panResponder = useRef(
     PanResponder.create({
@@ -161,6 +476,252 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     }),
   ).current;
 
+  const [intensitySliderWidth, setIntensitySliderWidth] = useState(0);
+  const intensitySliderWidthRef = useRef(0);
+
+  const intensityPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        const width = intensitySliderWidthRef.current;
+        if (width > 0) {
+          const x = Math.max(0, Math.min(width, evt.nativeEvent.locationX));
+          const val = Math.round((x / width) * 100) / 100;
+          setFilterIntensity(val);
+        }
+      },
+      onPanResponderMove: (evt) => {
+        const width = intensitySliderWidthRef.current;
+        if (width > 0) {
+          const x = Math.max(0, Math.min(width, evt.nativeEvent.locationX));
+          const val = Math.round((x / width) * 100) / 100;
+          setFilterIntensity(val);
+        }
+      },
+    }),
+  ).current;
+
+  const [selectedFineTune, setSelectedFineTune] = useState<
+    "brightness" | "contrast" | "saturation" | "warmth"
+  >("brightness");
+  const selectedFineTuneRef = useRef<
+    "brightness" | "contrast" | "saturation" | "warmth"
+  >("brightness");
+  selectedFineTuneRef.current = selectedFineTune;
+
+  const [fineTuneSliderWidth, setFineTuneSliderWidth] = useState(0);
+  const fineTuneSliderWidthRef = useRef(0);
+
+  const fineTunePanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        const width = fineTuneSliderWidthRef.current;
+        if (width > 0) {
+          const x = Math.max(0, Math.min(width, evt.nativeEvent.locationX));
+          const pct = x / width;
+          const val = Math.round(pct * 100 - 50);
+          setAdjustments((prev) => ({
+            ...prev,
+            [selectedFineTuneRef.current]: Math.max(-50, Math.min(50, val)),
+          }));
+        }
+      },
+      onPanResponderMove: (evt) => {
+        const width = fineTuneSliderWidthRef.current;
+        if (width > 0) {
+          const x = Math.max(0, Math.min(width, evt.nativeEvent.locationX));
+          const pct = x / width;
+          const val = Math.round(pct * 100 - 50);
+          setAdjustments((prev) => ({
+            ...prev,
+            [selectedFineTuneRef.current]: Math.max(-50, Math.min(50, val)),
+          }));
+        }
+      },
+    }),
+  ).current;
+
+  // --- Sound Lab State ---
+  const [selectedSoundTrack, setSelectedSoundTrack] = useState<string>("none");
+  const [userSoundTracks, setUserSoundTracks] = useState<SoundTrack[]>([]);
+  const allSoundTracks = useMemo(
+    () => [...userSoundTracks, ...SOUND_TRACKS],
+    [userSoundTracks],
+  );
+
+  const pickCustomAudio = async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["audio/*"],
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const file = result.assets[0];
+        const fileName = file.name
+          ? file.name.replace(/\.[^/.]+$/, "")
+          : "My Custom Song";
+        const newTrack: SoundTrack = {
+          id: `custom-${Date.now()}`,
+          name: fileName,
+          artist: "Your Upload",
+          genre: "User Music",
+          duration: file.size
+            ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+            : "Audio",
+          accent: "#EC4899",
+          uri: file.uri,
+          isCustom: true,
+        };
+
+        setUserSoundTracks((prev) => [newTrack, ...prev]);
+        setSelectedSoundTrack(newTrack.id);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (error) {
+      console.warn("Error picking custom audio:", error);
+      Alert.alert("Audio Selection", "Unable to select audio file.");
+    }
+  };
+
+  const removeCustomTrack = (trackId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setUserSoundTracks((prev) => prev.filter((t) => t.id !== trackId));
+    if (selectedSoundTrack === trackId) {
+      setSelectedSoundTrack("none");
+    }
+  };
+
+  const [originalAudioVolume, setOriginalAudioVolume] = useState<number>(100);
+  const [musicVolume, setMusicVolume] = useState<number>(80);
+  const [isOriginalMuted, setIsOriginalMuted] = useState<boolean>(false);
+  const [activeAudioEffects, setActiveAudioEffects] = useState<string[]>([
+    "enhance",
+  ]);
+
+  const [origVolSliderWidth, setOrigVolSliderWidth] = useState(0);
+  const origVolSliderWidthRef = useRef(0);
+
+  const origVolPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        const width = origVolSliderWidthRef.current;
+        if (width > 0) {
+          const x = Math.max(0, Math.min(width, evt.nativeEvent.locationX));
+          const val = Math.round((x / width) * 150);
+          setOriginalAudioVolume(val);
+          if (val > 0) setIsOriginalMuted(false);
+        }
+      },
+      onPanResponderMove: (evt) => {
+        const width = origVolSliderWidthRef.current;
+        if (width > 0) {
+          const x = Math.max(0, Math.min(width, evt.nativeEvent.locationX));
+          const val = Math.round((x / width) * 150);
+          setOriginalAudioVolume(val);
+          if (val > 0) setIsOriginalMuted(false);
+        }
+      },
+    }),
+  ).current;
+
+  const [musicVolSliderWidth, setMusicVolSliderWidth] = useState(0);
+  const musicVolSliderWidthRef = useRef(0);
+
+  const musicVolPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        const width = musicVolSliderWidthRef.current;
+        if (width > 0) {
+          const x = Math.max(0, Math.min(width, evt.nativeEvent.locationX));
+          const val = Math.round((x / width) * 100);
+          setMusicVolume(val);
+        }
+      },
+      onPanResponderMove: (evt) => {
+        const width = musicVolSliderWidthRef.current;
+        if (width > 0) {
+          const x = Math.max(0, Math.min(width, evt.nativeEvent.locationX));
+          const val = Math.round((x / width) * 100);
+          setMusicVolume(val);
+        }
+      },
+    }),
+  ).current;
+
+  // --- Captions & Subtitles State ---
+  const [showCaptions, setShowCaptions] = useState<boolean>(false);
+  const [captionText, setCaptionText] = useState<string>(
+    "Step into the spotlight ✨",
+  );
+  const [captionStyle, setCaptionStyle] = useState<
+    "neon" | "classic" | "yellow" | "minimal"
+  >("neon");
+
+  // Draggable caption position & PanResponder
+  const captionPan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const [isDraggingCaption, setIsDraggingCaption] = useState(false);
+
+  const captionPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        setIsDraggingCaption(true);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        // @ts-ignore
+        captionPan.setOffset({
+          // @ts-ignore
+          x: captionPan.x._value,
+          // @ts-ignore
+          y: captionPan.y._value,
+        });
+        captionPan.setValue({ x: 0, y: 0 });
+      },
+      onPanResponderMove: Animated.event(
+        [null, { dx: captionPan.x, dy: captionPan.y }],
+        { useNativeDriver: false },
+      ),
+      onPanResponderRelease: () => {
+        setIsDraggingCaption(false);
+        captionPan.flattenOffset();
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      },
+    }),
+  ).current;
+
+  const resetCaptionPosition = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    captionPan.setOffset({ x: 0, y: 0 });
+    captionPan.setValue({ x: 0, y: 0 });
+  };
+
+  useEffect(() => {
+    if (previewPlayer && mediaType === "video") {
+      try {
+        if (isOriginalMuted) {
+          previewPlayer.muted = true;
+        } else {
+          previewPlayer.muted = false;
+          previewPlayer.volume = Math.max(
+            0,
+            Math.min(1, originalAudioVolume / 100),
+          );
+        }
+      } catch (e) {
+        // Safe catch for browser audio autoplay restrictions
+      }
+    }
+  }, [previewPlayer, isOriginalMuted, originalAudioVolume, mediaType]);
+
   const formatTime = (time: number) => {
     if (isNaN(time) || !isFinite(time)) return "00:00";
     const m = Math.floor(time / 60);
@@ -176,6 +737,23 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   async function toggleRecord() {
     if (!cameraRef.current) return;
 
+    if (cameraMode === "photo") {
+      try {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        const photo = await cameraRef.current.takePictureAsync({
+          quality: 0.95,
+        });
+        if (photo && photo.uri) {
+          setRecordedVideoUri(photo.uri);
+          setMediaType("image");
+          setStep("PREVIEW");
+        }
+      } catch (error) {
+        console.error("Failed to take photo:", error);
+      }
+      return;
+    }
+
     if (isRecording) {
       cameraRef.current.stopRecording();
       setIsRecording(false);
@@ -185,6 +763,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         const video = await cameraRef.current.recordAsync({ maxDuration: 60 });
         if (video && video.uri) {
           setRecordedVideoUri(video.uri);
+          setMediaType("video");
           setStep("PREVIEW");
         }
       } catch (error) {
@@ -222,23 +801,34 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     try {
       const formData = new FormData();
       formData.append("title", title.trim());
-      formData.append("description", "");
+      formData.append("description", captionText.trim() || "");
+      if (selectedSoundTrack !== "none") {
+        formData.append("soundtrack", selectedSoundTrack);
+      }
       formData.append("category", category);
       formData.append("subCategory", subCategory);
       formData.append("purpose", purpose);
       formData.append("location", location);
       formData.append("allowJudging", String(allowJudging));
+      formData.append("filter", activeFilter);
 
       if (recordedVideoUri) {
+        const isImg = mediaType === "image";
+        const filename = isImg ? "photo.jpg" : "video.mp4";
+        const filetype = isImg ? "image/jpeg" : "video/mp4";
+
         if (Platform.OS === "web") {
           const res = await fetch(recordedVideoUri);
           const blob = await res.blob();
-          formData.append("video", blob, "video.mp4");
+          formData.append("video", blob, filename);
+          if (isImg) {
+            formData.append("image", blob, filename);
+          }
         } else {
           formData.append("video", {
             uri: recordedVideoUri,
-            name: "video.mp4",
-            type: "video/mp4",
+            name: filename,
+            type: filetype,
           } as any);
         }
       }
@@ -258,17 +848,59 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   const pickVideo = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: "videos",
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
         allowsEditing: true,
         quality: 1,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setRecordedVideoUri(result.assets[0].uri);
+        setMediaType("video");
         setStep("PREVIEW");
       }
     } catch (error) {
       console.error("Failed to pick video:", error);
+    }
+  };
+
+  const pickPhoto = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 1,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setRecordedVideoUri(result.assets[0].uri);
+        setMediaType("image");
+        setStep("PREVIEW");
+      }
+    } catch (error) {
+      console.error("Failed to pick photo:", error);
+    }
+  };
+
+  const pickMedia = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        allowsEditing: true,
+        quality: 1,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        setRecordedVideoUri(asset.uri);
+        const isImg =
+          asset.type === "image" ||
+          asset.mimeType?.startsWith("image/") ||
+          /\.(jpg|jpeg|png|webp|gif)$/i.test(asset.uri);
+        setMediaType(isImg ? "image" : "video");
+        setStep("PREVIEW");
+      }
+    } catch (error) {
+      console.error("Failed to pick media:", error);
     }
   };
 
@@ -298,9 +930,14 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   const renderHome = () => (
     <View className="flex-1 bg-[#050608] px-6 pt-16">
       <View className="flex-row justify-between items-center mb-8">
-        <Text className="text-white font-serif text-2xl font-bold italic tracking-wider">
-          talent.
-        </Text>
+        <View className="flex-row items-baseline">
+          <Text className="font-bold text-[32px] tracking-tight text-white leading-none font-serif">
+            talent
+          </Text>
+          <Text className="font-bold text-[32px] text-[#E91E76] leading-none ml-[1px] font-serif">
+            .
+          </Text>
+        </View>
         {onClose && (
           <TouchableOpacity onPress={onClose}>
             <X color="#fff" size={24} />
@@ -356,15 +993,6 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         <Text className="text-white font-medium">Drafts • 2</Text>
         <ChevronRight color="#9CA3AF" size={16} className="ml-2" />
       </TouchableOpacity>
-
-      <View className="absolute bottom-10 -left-10 opacity-20 transform -rotate-12">
-        <Text className="text-white text-3xl font-serif italic">
-          Your talent.
-        </Text>
-        <Text className="text-[#E91E76] text-3xl font-serif italic mt-1">
-          Your stage.
-        </Text>
-      </View>
     </View>
   );
 
@@ -437,13 +1065,34 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           </View>
 
           <View className="absolute bottom-0 inset-x-0 pb-12 pt-20 bg-gradient-to-t from-black via-black/50 to-transparent">
-            <View className="flex-row justify-center gap-8 mb-6">
-              <Text className="text-[#E91E76] font-bold text-[14px]">
-                Video
-              </Text>
-              <Text className="text-white/60 font-semibold text-[14px]">
-                Photo
-              </Text>
+            {/* Camera Mode Toggle */}
+            <View className="flex-row justify-center items-center gap-8 mb-6">
+              <TouchableOpacity
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setCameraMode("video");
+                }}
+                className="py-1"
+              >
+                <Text
+                  className={`font-bold text-[14px] tracking-wider uppercase ${cameraMode === "video" ? "text-[#E91E76] border-b-2 border-[#E91E76] pb-0.5" : "text-white/60"}`}
+                >
+                  Video
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setCameraMode("photo");
+                }}
+                className="py-1"
+              >
+                <Text
+                  className={`font-bold text-[14px] tracking-wider uppercase ${cameraMode === "photo" ? "text-[#E91E76] border-b-2 border-[#E91E76] pb-0.5" : "text-white/60"}`}
+                >
+                  Photo
+                </Text>
+              </TouchableOpacity>
             </View>
 
             <View className="flex-row items-center justify-center">
@@ -452,10 +1101,22 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                 className="items-center justify-center"
               >
                 <View
-                  className={`rounded-full border-[4px] items-center justify-center transition-all ${isRecording ? "border-[#E91E76] w-[88px] h-[88px]" : "border-white/50 w-[80px] h-[80px]"}`}
+                  className={`rounded-full border-[4px] items-center justify-center transition-all ${
+                    cameraMode === "photo"
+                      ? "border-white/80 w-[80px] h-[80px]"
+                      : isRecording
+                        ? "border-[#E91E76] w-[88px] h-[88px]"
+                        : "border-white/50 w-[80px] h-[80px]"
+                  }`}
                 >
                   <View
-                    className={`rounded-full bg-[#E91E76] ${isRecording ? "w-[36px] h-[36px] rounded-md" : "w-[64px] h-[64px]"}`}
+                    className={`rounded-full ${
+                      cameraMode === "photo"
+                        ? "bg-white w-[64px] h-[64px]"
+                        : isRecording
+                          ? "bg-[#E91E76] w-[36px] h-[36px] rounded-md"
+                          : "bg-[#E91E76] w-[64px] h-[64px]"
+                    }`}
                   />
                 </View>
               </TouchableOpacity>
@@ -470,55 +1131,81 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     <View className="flex-1 bg-[#050608] pt-14">
       <TopNav title="Upload Performance" onBack={() => setStep("HOME")} />
 
-      <View className="px-5 mt-4">
+      <View className="px-5 mt-2">
         <TouchableOpacity
-          onPress={pickVideo}
-          className="w-full aspect-[4/3] rounded-3xl border-2 border-dashed border-[#E91E76]/50 bg-[#E91E76]/5 items-center justify-center mb-8"
+          onPress={pickMedia}
+          className="w-full aspect-[4/3] rounded-3xl border-2 border-dashed border-[#E91E76]/50 bg-[#E91E76]/5 items-center justify-center mb-6"
         >
-          <UploadCloud color="#E91E76" size={40} className="mb-4" />
+          <UploadCloud color="#E91E76" size={40} className="mb-3" />
           <Text className="text-white font-bold text-lg mb-1">
-            Choose a video
+            Choose a Video or Image
           </Text>
-          <Text className="text-[#9CA3AF] text-sm">
-            Select from your device
+          <Text className="text-[#9CA3AF] text-sm text-center px-4">
+            Select high-res photos or videos up to 3 mins
           </Text>
-          <Text className="text-[#9CA3AF] text-xs mt-1">(Max 3 minutes)</Text>
+          <Text className="text-[#E91E76] text-xs font-semibold mt-2">
+            MP4, MOV, HEVC, JPG, PNG
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={pickMedia}
+          className="flex-row justify-between items-center bg-[#1A1D24] p-4 rounded-2xl mb-2.5 border border-white/5"
+        >
+          <View className="flex-row items-center gap-3.5">
+            <View className="w-10 h-10 rounded-xl bg-white/10 items-center justify-center">
+              <ImageIcon color="#fff" size={20} />
+            </View>
+            <View>
+              <Text className="text-white font-medium text-[15px]">
+                From Gallery (All Media)
+              </Text>
+              <Text className="text-[#9CA3AF] text-[11px]">
+                Photos and Videos from your camera roll
+              </Text>
+            </View>
+          </View>
+          <ChevronRight color="#9CA3AF" size={18} />
         </TouchableOpacity>
 
         <TouchableOpacity
           onPress={pickVideo}
-          className="flex-row justify-between items-center bg-[#1A1D24] p-5 rounded-2xl mb-3"
+          className="flex-row justify-between items-center bg-[#1A1D24] p-4 rounded-2xl mb-2.5 border border-white/5"
         >
-          <View className="flex-row items-center gap-4">
-            <ImageIcon color="#9CA3AF" size={24} />
-            <Text className="text-white font-medium text-[16px]">
-              From Gallery
-            </Text>
+          <View className="flex-row items-center gap-3.5">
+            <View className="w-10 h-10 rounded-xl bg-[#E91E76]/20 items-center justify-center">
+              <FileVideo color="#E91E76" size={20} />
+            </View>
+            <View>
+              <Text className="text-white font-medium text-[15px]">
+                Videos Only
+              </Text>
+              <Text className="text-[#9CA3AF] text-[11px]">
+                Select recorded performances or clips
+              </Text>
+            </View>
           </View>
-          <ChevronRight color="#9CA3AF" size={20} />
+          <ChevronRight color="#9CA3AF" size={18} />
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={pickVideo}
-          className="flex-row justify-between items-center bg-[#1A1D24] p-5 rounded-2xl mb-3"
+          onPress={pickPhoto}
+          className="flex-row justify-between items-center bg-[#1A1D24] p-4 rounded-2xl mb-2.5 border border-white/5"
         >
-          <View className="flex-row items-center gap-4">
-            <FileVideo color="#9CA3AF" size={24} />
-            <Text className="text-white font-medium text-[16px]">
-              From Files
-            </Text>
+          <View className="flex-row items-center gap-3.5">
+            <View className="w-10 h-10 rounded-xl bg-cyan-500/20 items-center justify-center">
+              <ImagePlus color="#38BDF8" size={20} />
+            </View>
+            <View>
+              <Text className="text-white font-medium text-[15px]">
+                Photos & Artwork
+              </Text>
+              <Text className="text-[#9CA3AF] text-[11px]">
+                Stage stills, portraits, and performance photography
+              </Text>
+            </View>
           </View>
-          <ChevronRight color="#9CA3AF" size={20} />
-        </TouchableOpacity>
-
-        <TouchableOpacity className="flex-row justify-between items-center bg-[#1A1D24] p-5 rounded-2xl mb-3">
-          <View className="flex-row items-center gap-4">
-            <Cloud color="#9CA3AF" size={24} />
-            <Text className="text-white font-medium text-[16px]">
-              From Cloud
-            </Text>
-          </View>
-          <ChevronRight color="#9CA3AF" size={20} />
+          <ChevronRight color="#9CA3AF" size={18} />
         </TouchableOpacity>
 
         <Text className="text-center text-[#9CA3AF] text-xs mt-6">
@@ -535,10 +1222,14 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           editMode === "none"
             ? "Preview & Edit"
             : editMode === "trim"
-              ? "Trim Video"
+              ? "Trim Performance"
               : editMode === "filters"
-                ? "Filters"
-                : "Preview & Edit"
+                ? "Filters & Effects"
+                : editMode === "cover"
+                  ? "Cover & Poster"
+                  : editMode === "sound"
+                    ? "Audio & Sound"
+                    : "Captions & Text"
         }
         onBack={() => {
           if (editMode !== "none") {
@@ -551,140 +1242,302 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         rightEl={
           <TouchableOpacity
             onPress={() => setStep("CHOOSE_TALENT")}
-            className="bg-[#E91E76] px-4 py-1.5 rounded-full"
+            className="bg-[#E91E76] px-4 py-1.5 rounded-full flex-row items-center gap-1"
           >
-            <Text className="text-white font-bold">Next</Text>
+            <Text className="text-white font-bold text-sm">Next</Text>
+            <ChevronRight color="#fff" size={16} />
           </TouchableOpacity>
         }
       />
 
-      <View className="flex-1 px-5 pb-5">
+      <View className="flex-1 px-5 pb-2">
+        {/* Pinned Media Preview Viewport (Always visible at the top) */}
         <TouchableOpacity
-          activeOpacity={0.9}
+          activeOpacity={0.95}
           onPress={() => {
-            if (isPlaying) {
-              previewPlayer.pause();
-              setIsPlaying(false);
-            } else {
-              previewPlayer.play();
-              setIsPlaying(true);
+            if (mediaType === "video") {
+              if (isPlaying) {
+                previewPlayer.pause();
+                setIsPlaying(false);
+              } else {
+                previewPlayer.play();
+                setIsPlaying(true);
+              }
             }
           }}
-          className="flex-1 rounded-3xl overflow-hidden bg-black mb-4 border border-white/10 relative justify-center items-center"
+          className="w-full h-[320px] max-h-[44vh] rounded-3xl overflow-hidden bg-black mb-3 border border-white/10 relative justify-center items-center shrink-0"
         >
-          {recordedVideoUri && (
-            <VideoView
-              player={previewPlayer}
-              className="absolute inset-0 w-full h-full"
-              contentFit="cover"
-              nativeControls={false}
-            />
+          {/* Main Content with Filter Applied */}
+          <View className="absolute inset-0 w-full h-full justify-center items-center overflow-hidden">
+            {mediaType === "video" && recordedVideoUri ? (
+              <VideoView
+                player={previewPlayer}
+                className="w-full h-full"
+                contentFit="cover"
+                nativeControls={false}
+                style={[
+                  Platform.OS === "web"
+                    ? ({ filter: getEffectiveCssFilter() } as any)
+                    : {},
+                ]}
+              />
+            ) : recordedVideoUri ? (
+              <Image
+                source={{ uri: recordedVideoUri }}
+                className="w-full h-full"
+                resizeMode="cover"
+                style={[
+                  Platform.OS === "web"
+                    ? ({ filter: getEffectiveCssFilter() } as any)
+                    : {},
+                ]}
+              />
+            ) : null}
+
+            {/* Visual Tone Mapping Overlays for Native & Web */}
+            {!isComparing && activeFilterConfig.overlayColor && (
+              <View
+                pointerEvents="none"
+                style={[
+                  StyleSheet.absoluteFill,
+                  {
+                    backgroundColor: activeFilterConfig.overlayColor,
+                    opacity:
+                      filterIntensity *
+                      (activeFilterConfig.overlayOpacity || 0.6),
+                  },
+                ]}
+              />
+            )}
+            {!isComparing && activeFilterConfig.secondaryOverlay && (
+              <View
+                pointerEvents="none"
+                style={[
+                  StyleSheet.absoluteFill,
+                  {
+                    backgroundColor: activeFilterConfig.secondaryOverlay,
+                    opacity: filterIntensity * 0.12,
+                  },
+                ]}
+              />
+            )}
+            {!isComparing && adjustments.warmth !== 0 && (
+              <View
+                pointerEvents="none"
+                style={[
+                  StyleSheet.absoluteFill,
+                  {
+                    backgroundColor:
+                      adjustments.warmth > 0
+                        ? "rgba(245, 158, 11, 0.2)"
+                        : "rgba(14, 165, 233, 0.2)",
+                    opacity: (Math.abs(adjustments.warmth) / 50) * 0.35,
+                  },
+                ]}
+              />
+            )}
+          </View>
+
+          {/* Floating Filter Badge Top Left */}
+          <View className="absolute top-4 left-4 bg-black/60 px-3 py-1.5 rounded-full flex-row items-center gap-1.5 border border-white/15 backdrop-blur-md z-20">
+            <Aperture color="#E91E76" size={13} />
+            <Text className="text-white text-[11px] font-semibold tracking-wide">
+              {isComparing
+                ? "Original Raw"
+                : `${activeFilter}${activeFilter !== "Original" ? ` • ${Math.round(filterIntensity * 100)}%` : ""}`}
+            </Text>
+          </View>
+
+          {/* Compare Button Top Right */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPressIn={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setIsComparing(true);
+            }}
+            onPressOut={() => {
+              setIsComparing(false);
+            }}
+            className={`absolute top-4 right-4 px-3 py-1.5 rounded-full flex-row items-center gap-1.5 border z-20 backdrop-blur-md transition-all ${
+              isComparing
+                ? "bg-[#E91E76] border-[#E91E76]"
+                : "bg-black/60 border-white/20"
+            }`}
+          >
+            <Eye color="#fff" size={13} />
+            <Text className="text-white text-[11px] font-bold">
+              {isComparing ? "Showing Original" : "Hold to Compare"}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Media Type Badge Bottom Left */}
+          <View className="absolute bottom-4 left-4 bg-black/50 px-2.5 py-1 rounded-full flex-row items-center gap-1.5 border border-white/10 z-10">
+            {mediaType === "image" ? (
+              <>
+                <ImageIcon color="#38BDF8" size={12} />
+                <Text className="text-white/80 text-[10px] font-medium">
+                  HD Photo
+                </Text>
+              </>
+            ) : (
+              <>
+                <Play color="#E91E76" size={10} fill="#E91E76" />
+                <Text className="text-white/80 text-[10px] font-medium">
+                  Video
+                </Text>
+              </>
+            )}
+          </View>
+
+          {/* Live Draggable Subtitle / Caption Overlay */}
+          {showCaptions && captionText.trim().length > 0 && (
+            <Animated.View
+              {...captionPanResponder.panHandlers}
+              style={[
+                {
+                  transform: captionPan.getTranslateTransform(),
+                },
+                Platform.OS === "web" ? ({ cursor: "grab" } as any) : {},
+              ]}
+              className="absolute bottom-14 z-30 self-center items-center"
+            >
+              <View
+                style={[
+                  captionStyle === "neon"
+                    ? {
+                        backgroundColor: "rgba(10, 10, 18, 0.88)",
+                        borderColor: isDraggingCaption ? "#fff" : "#E91E76",
+                        borderWidth: 2,
+                        shadowColor: "#E91E76",
+                        shadowOpacity: 0.9,
+                        shadowRadius: 10,
+                      }
+                    : captionStyle === "yellow"
+                      ? {
+                          backgroundColor: "rgba(0, 0, 0, 0.9)",
+                          borderColor: isDraggingCaption ? "#fff" : "#FACC15",
+                          borderWidth: 2,
+                        }
+                      : captionStyle === "minimal"
+                        ? {
+                            backgroundColor: isDraggingCaption
+                              ? "rgba(0,0,0,0.5)"
+                              : "transparent",
+                            borderColor: isDraggingCaption
+                              ? "rgba(255,255,255,0.4)"
+                              : "transparent",
+                            borderWidth: 1,
+                          }
+                        : {
+                            backgroundColor: "rgba(0, 0, 0, 0.82)",
+                            borderColor: isDraggingCaption
+                              ? "#fff"
+                              : "rgba(255, 255, 255, 0.3)",
+                            borderWidth: 1,
+                          },
+                ]}
+                className={`px-4 py-2 rounded-2xl max-w-[90%] shadow-lg flex-row items-center gap-1.5 ${
+                  isDraggingCaption ? "scale-105" : ""
+                }`}
+              >
+                <Text
+                  style={[
+                    captionStyle === "neon"
+                      ? {
+                          color: "#FFFFFF",
+                          textShadowColor: "#E91E76",
+                          textShadowRadius: 8,
+                        }
+                      : captionStyle === "yellow"
+                        ? { color: "#FACC15", fontWeight: "900" }
+                        : captionStyle === "minimal"
+                          ? {
+                              color: "#FFFFFF",
+                              textShadowColor: "rgba(0,0,0,0.9)",
+                              textShadowRadius: 6,
+                            }
+                          : { color: "#FFFFFF", fontWeight: "700" },
+                  ]}
+                  className="text-center text-xs font-bold tracking-wide select-none"
+                >
+                  {captionText}
+                </Text>
+              </View>
+            </Animated.View>
           )}
 
-          {!isPlaying && (
-            <View className="w-16 h-16 bg-black/50 rounded-full items-center justify-center backdrop-blur-md">
-              <Play color="#fff" size={32} fill="#fff" className="ml-1" />
+          {/* Selected Soundtrack Active Badge */}
+          {selectedSoundTrack !== "none" && (
+            <View className="absolute top-4 right-32 bg-black/60 px-2 py-1 rounded-full flex-row items-center gap-1 border border-[#E91E76]/40 backdrop-blur-md z-20">
+              <Music2 color="#E91E76" size={11} />
+              <Text
+                className="text-white text-[9px] font-semibold max-w-[80px]"
+                numberOfLines={1}
+              >
+                {allSoundTracks.find((s) => s.id === selectedSoundTrack)?.name}
+              </Text>
             </View>
           )}
 
-          {/* Custom Progress Bar matching image */}
-          {editMode !== "trim" && (
-            <View className="absolute bottom-4 left-4 right-4 flex-row items-center gap-3">
+          {/* Video Paused Play Icon */}
+          {mediaType === "video" && !isPlaying && (
+            <View className="w-16 h-16 bg-black/60 rounded-full items-center justify-center backdrop-blur-md z-20 border border-white/20">
+              <Play color="#fff" size={30} fill="#fff" className="ml-1" />
+            </View>
+          )}
+
+          {/* Custom Video Progress Bar */}
+          {mediaType === "video" && editMode !== "trim" && (
+            <View className="absolute bottom-3 right-4 left-24 flex-row items-center gap-2 z-10">
               <View
-                className="flex-1 h-6 justify-center relative"
+                className="flex-1 h-5 justify-center relative"
                 onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
                 {...panResponder.panHandlers}
               >
-                <View className="w-full h-1.5 bg-white/20 rounded-full flex-row items-center pointer-events-none">
+                <View className="w-full h-1 bg-white/25 rounded-full flex-row items-center pointer-events-none">
                   <View
                     style={{ width: `${(currentTime / duration) * 100}%` }}
                     className="h-full bg-[#E91E76] rounded-l-full"
                   />
-                  <View className="w-3.5 h-3.5 bg-white rounded-full -ml-1.5 shadow-md pointer-events-none" />
+                  <View className="w-3 h-3 bg-white rounded-full -ml-1 shadow-md pointer-events-none" />
                 </View>
               </View>
-              <Text className="text-white text-[10px] font-medium drop-shadow-md w-16 text-right">
-                {formatTime(currentTime)} / {formatTime(duration)}
+              <Text className="text-white text-[10px] font-mono opacity-80">
+                {formatTime(currentTime)}
               </Text>
             </View>
           )}
         </TouchableOpacity>
 
-        {/* Main 5 Editor Buttons */}
-        <View className="flex-row justify-between mb-4">
+        {/* Scrollable Controls & Options Section (Scroll up to reveal more options) */}
+        <ScrollView
+          className="flex-1"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 28 }}
+          nestedScrollEnabled={true}
+        >
+          {/* Main 5 Editor Navigation Buttons */}
+          <View className="flex-row justify-between mb-3">
           <TouchableOpacity
-            onPress={() => setEditMode("trim")}
-            className={`w-[18%] aspect-square rounded-2xl items-center justify-center border border-white/10 bg-[#1A1D24] ${editMode === "trim" ? "border-[#E91E76]" : ""}`}
-          >
-            <Scissors
-              color={editMode === "trim" ? "#E91E76" : "#fff"}
-              size={22}
-              className="mb-2"
-            />
-            <Text
-              className={
-                editMode === "trim"
-                  ? "text-[#E91E76] text-[10px]"
-                  : "text-white text-[10px]"
-              }
-            >
-              Trim
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setEditMode("cover")}
-            className={`w-[18%] aspect-square rounded-2xl items-center justify-center border border-white/10 bg-[#1A1D24] ${editMode === "cover" ? "border-[#E91E76]" : ""}`}
-          >
-            <ImageIcon
-              color={editMode === "cover" ? "#E91E76" : "#fff"}
-              size={22}
-              className="mb-2"
-            />
-            <Text
-              className={
-                editMode === "cover"
-                  ? "text-[#E91E76] text-[10px]"
-                  : "text-white text-[10px]"
-              }
-            >
-              Cover
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setEditMode("sound")}
-            className={`w-[18%] aspect-square rounded-2xl items-center justify-center border border-white/10 bg-[#1A1D24] ${editMode === "sound" ? "border-[#E91E76]" : ""}`}
-          >
-            <Music2
-              color={editMode === "sound" ? "#E91E76" : "#fff"}
-              size={22}
-              className="mb-2"
-            />
-            <Text
-              className={
-                editMode === "sound"
-                  ? "text-[#E91E76] text-[10px]"
-                  : "text-white text-[10px]"
-              }
-            >
-              Sound
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setEditMode("filters")}
-            className={`w-[18%] aspect-square rounded-2xl items-center justify-center border border-white/10 bg-[#1A1D24] ${editMode === "filters" ? "border-[#E91E76] border-2" : ""}`}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setEditMode("filters");
+            }}
+            className={`w-[18%] aspect-square rounded-2xl items-center justify-center border bg-[#1A1D24] ${
+              editMode === "filters"
+                ? "border-[#E91E76] bg-[#E91E76]/15"
+                : "border-white/10"
+            }`}
           >
             <Aperture
               color={editMode === "filters" ? "#E91E76" : "#fff"}
               size={22}
-              className="mb-2"
+              className="mb-1"
             />
             <Text
               className={
                 editMode === "filters"
-                  ? "text-[#E91E76] text-[10px]"
+                  ? "text-[#E91E76] text-[10px] font-bold"
                   : "text-white text-[10px]"
               }
             >
@@ -693,18 +1546,106 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setEditMode("caption")}
-            className={`w-[18%] aspect-square rounded-2xl items-center justify-center border border-white/10 bg-[#1A1D24] ${editMode === "caption" ? "border-[#E91E76]" : ""}`}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setEditMode("cover");
+            }}
+            className={`w-[18%] aspect-square rounded-2xl items-center justify-center border bg-[#1A1D24] ${
+              editMode === "cover"
+                ? "border-[#E91E76] bg-[#E91E76]/15"
+                : "border-white/10"
+            }`}
+          >
+            <ImageIcon
+              color={editMode === "cover" ? "#E91E76" : "#fff"}
+              size={22}
+              className="mb-1"
+            />
+            <Text
+              className={
+                editMode === "cover"
+                  ? "text-[#E91E76] text-[10px] font-bold"
+                  : "text-white text-[10px]"
+              }
+            >
+              Cover
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setEditMode("trim");
+            }}
+            className={`w-[18%] aspect-square rounded-2xl items-center justify-center border bg-[#1A1D24] ${
+              editMode === "trim"
+                ? "border-[#E91E76] bg-[#E91E76]/15"
+                : "border-white/10"
+            }`}
+          >
+            <Scissors
+              color={editMode === "trim" ? "#E91E76" : "#fff"}
+              size={22}
+              className="mb-1"
+            />
+            <Text
+              className={
+                editMode === "trim"
+                  ? "text-[#E91E76] text-[10px] font-bold"
+                  : "text-white text-[10px]"
+              }
+            >
+              Trim
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setEditMode("sound");
+            }}
+            className={`w-[18%] aspect-square rounded-2xl items-center justify-center border bg-[#1A1D24] ${
+              editMode === "sound"
+                ? "border-[#E91E76] bg-[#E91E76]/15"
+                : "border-white/10"
+            }`}
+          >
+            <Music2
+              color={editMode === "sound" ? "#E91E76" : "#fff"}
+              size={22}
+              className="mb-1"
+            />
+            <Text
+              className={
+                editMode === "sound"
+                  ? "text-[#E91E76] text-[10px] font-bold"
+                  : "text-white text-[10px]"
+              }
+            >
+              Sound
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setEditMode("caption");
+            }}
+            className={`w-[18%] aspect-square rounded-2xl items-center justify-center border bg-[#1A1D24] ${
+              editMode === "caption"
+                ? "border-[#E91E76] bg-[#E91E76]/15"
+                : "border-white/10"
+            }`}
           >
             <Subtitles
               color={editMode === "caption" ? "#E91E76" : "#fff"}
               size={22}
-              className="mb-2"
+              className="mb-1"
             />
             <Text
               className={
                 editMode === "caption"
-                  ? "text-[#E91E76] text-[10px]"
+                  ? "text-[#E91E76] text-[10px] font-bold"
                   : "text-white text-[10px]"
               }
             >
@@ -714,7 +1655,547 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         </View>
 
         {/* Dynamic Editor Panel */}
-        {editMode === "trim" ? (
+        {editMode === "filters" ? (
+          <View className="w-full bg-[#12141A] rounded-2xl p-3 border border-white/10 mb-3">
+            {/* Presets vs Fine-Tune Sub Tabs */}
+            <View className="flex-row items-center justify-between mb-3 border-b border-white/5 pb-2.5">
+              <View className="flex-row gap-2">
+                <TouchableOpacity
+                  onPress={() => setActiveFilterSubTab("presets")}
+                  className={`px-3 py-1 rounded-full flex-row items-center gap-1.5 ${
+                    activeFilterSubTab === "presets"
+                      ? "bg-[#E91E76]"
+                      : "bg-white/5"
+                  }`}
+                >
+                  <Palette color="#fff" size={13} />
+                  <Text className="text-white text-[11px] font-bold">
+                    Presets
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setActiveFilterSubTab("adjust")}
+                  className={`px-3 py-1 rounded-full flex-row items-center gap-1.5 ${
+                    activeFilterSubTab === "adjust"
+                      ? "bg-[#E91E76]"
+                      : "bg-white/5"
+                  }`}
+                >
+                  <SlidersHorizontal color="#fff" size={13} />
+                  <Text className="text-white text-[11px] font-bold">
+                    Fine-Tune
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Reset Filter Button */}
+              <TouchableOpacity
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setActiveFilter("Original");
+                  setFilterIntensity(0.85);
+                  setAdjustments({
+                    brightness: 0,
+                    contrast: 0,
+                    saturation: 0,
+                    warmth: 0,
+                  });
+                }}
+                className="flex-row items-center gap-1 px-2 py-1 rounded-lg bg-white/5"
+              >
+                <RotateCcw color="#9CA3AF" size={12} />
+                <Text className="text-[#9CA3AF] text-[10px] font-medium">
+                  Reset
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {activeFilterSubTab === "presets" ? (
+              <>
+                {/* Filter Category Pills */}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  className="mb-3"
+                  contentContainerStyle={{ gap: 6 }}
+                >
+                  {["All", "Popular", "Stage", "Mood", "Film", "B&W"].map(
+                    (cat) => (
+                      <TouchableOpacity
+                        key={cat}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setActiveFilterCategory(cat);
+                        }}
+                        className={`px-3 py-1 rounded-full border ${
+                          activeFilterCategory === cat
+                            ? "bg-white/20 border-white/40"
+                            : "bg-transparent border-white/10"
+                        }`}
+                      >
+                        <Text
+                          className={`text-[11px] font-medium ${
+                            activeFilterCategory === cat
+                              ? "text-white font-bold"
+                              : "text-[#9CA3AF]"
+                          }`}
+                        >
+                          {cat}
+                        </Text>
+                      </TouchableOpacity>
+                    ),
+                  )}
+                </ScrollView>
+
+                {/* Filter Cards Carousel with Live Thumbnails */}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 10, paddingRight: 10 }}
+                  className="mb-3"
+                >
+                  {TALENT_FILTERS.filter(
+                    (f) =>
+                      activeFilterCategory === "All" ||
+                      f.category === activeFilterCategory,
+                  ).map((filter) => {
+                    const isSelected = activeFilter === filter.name;
+                    return (
+                      <TouchableOpacity
+                        key={filter.id}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setActiveFilter(filter.name);
+                        }}
+                        className="items-center"
+                        style={{ width: 66 }}
+                      >
+                        <View
+                          className={`w-16 h-16 rounded-2xl overflow-hidden mb-1.5 relative border-2 ${
+                            isSelected
+                              ? "border-[#E91E76] shadow-lg shadow-[#E91E76]/50"
+                              : "border-white/15"
+                          }`}
+                        >
+                          {/* Miniature Real Media Thumbnail with Filter */}
+                          {recordedVideoUri ? (
+                            <Image
+                              source={{ uri: recordedVideoUri }}
+                              className="w-full h-full"
+                              resizeMode="cover"
+                              style={[
+                                Platform.OS === "web"
+                                  ? ({ filter: filter.cssFilter(0.85) } as any)
+                                  : {},
+                              ]}
+                            />
+                          ) : (
+                            <View
+                              className="w-full h-full"
+                              style={{ backgroundColor: filter.previewBg }}
+                            />
+                          )}
+
+                          {/* Color tint overlay on thumbnail */}
+                          {filter.overlayColor && (
+                            <View
+                              pointerEvents="none"
+                              style={[
+                                StyleSheet.absoluteFill,
+                                {
+                                  backgroundColor: filter.overlayColor,
+                                  opacity:
+                                    (filter.overlayOpacity || 0.6) * 0.75,
+                                },
+                              ]}
+                            />
+                          )}
+
+                          {/* Badge tag if any */}
+                          {filter.badge && (
+                            <View className="absolute top-1 left-1 bg-[#E91E76] px-1 py-0.5 rounded-[4px]">
+                              <Text className="text-[7px] font-black text-white">
+                                {filter.badge}
+                              </Text>
+                            </View>
+                          )}
+
+                          {/* Selected Checkmark Indicator */}
+                          {isSelected && (
+                            <View className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-[#E91E76] items-center justify-center border border-white">
+                              <Check color="#fff" size={9} strokeWidth={3} />
+                            </View>
+                          )}
+                        </View>
+
+                        <Text
+                          numberOfLines={1}
+                          className={`text-[11px] font-medium text-center ${
+                            isSelected
+                              ? "text-[#E91E76] font-bold"
+                              : "text-white/80"
+                          }`}
+                        >
+                          {filter.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                {/* Filter Strength / Intensity Draggable Slider */}
+                {activeFilter !== "Original" && (
+                  <View className="bg-white/5 rounded-2xl p-3 border border-white/5">
+                    <View className="flex-row items-center justify-between mb-2">
+                      <View className="flex-row items-center gap-2">
+                        <Sun color="#E91E76" size={15} />
+                        <Text className="text-white text-[12px] font-semibold">
+                          Intensity Slider
+                        </Text>
+                      </View>
+                      <View className="bg-[#E91E76]/20 px-2.5 py-0.5 rounded-full border border-[#E91E76]/40">
+                        <Text className="text-[#E91E76] text-[11px] font-bold">
+                          {Math.round(filterIntensity * 100)}%
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Draggable & Clickable Slider Bar */}
+                    <View
+                      className="h-7 justify-center relative cursor-pointer"
+                      onLayout={(e) => {
+                        const w = e.nativeEvent.layout.width;
+                        setIntensitySliderWidth(w);
+                        intensitySliderWidthRef.current = w;
+                      }}
+                      {...intensityPanResponder.panHandlers}
+                    >
+                      {/* Track Background */}
+                      <View className="w-full h-2 bg-white/10 rounded-full overflow-hidden relative">
+                        <View
+                          style={{ width: `${Math.max(0, Math.min(100, filterIntensity * 100))}%` }}
+                          className="h-full bg-[#E91E76] rounded-full"
+                        />
+                      </View>
+
+                      {/* Slider Draggable Knob */}
+                      <View
+                        style={{
+                          left: `${Math.max(0, Math.min(100, filterIntensity * 100))}%`,
+                          marginLeft: -10,
+                        }}
+                        className="absolute top-1/2 -mt-2.5 w-5 h-5 rounded-full bg-white shadow-md border-2 border-[#E91E76] items-center justify-center pointer-events-none"
+                      >
+                        <View className="w-1.5 h-1.5 rounded-full bg-[#E91E76]" />
+                      </View>
+                    </View>
+
+                    {/* Scale markers */}
+                    <View className="flex-row justify-between px-0.5 mt-1">
+                      {[0, 25, 50, 75, 100].map((mark) => (
+                        <TouchableOpacity
+                          key={mark}
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            setFilterIntensity(mark / 100);
+                          }}
+                        >
+                          <Text
+                            className={`text-[9px] font-semibold ${
+                              Math.round(filterIntensity * 100) === mark
+                                ? "text-[#E91E76] font-bold"
+                                : "text-[#9CA3AF]"
+                            }`}
+                          >
+                            {mark}%
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </>
+            ) : (
+              /* Fine-Tune Adjustments Panel - Styled like Presets with individual option cards and dedicated slider */
+              <>
+                {/* Fine-Tune Option Cards Carousel */}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 10, paddingRight: 10 }}
+                  className="mb-3"
+                >
+                  {FINE_TUNE_OPTIONS.map((opt) => {
+                    const isSelected = selectedFineTune === opt.key;
+                    const currentVal =
+                      adjustments[opt.key as keyof typeof adjustments];
+                    const hasAdjustment = currentVal !== 0;
+                    const IconComponent = opt.icon;
+
+                    return (
+                      <TouchableOpacity
+                        key={opt.key}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setSelectedFineTune(opt.key as any);
+                        }}
+                        className="items-center"
+                        style={{ width: 66 }}
+                      >
+                        <View
+                          className={`w-16 h-16 rounded-2xl overflow-hidden mb-1.5 relative border-2 items-center justify-center ${
+                            isSelected
+                              ? "border-[#E91E76] shadow-lg shadow-[#E91E76]/50 bg-[#E91E76]/15"
+                              : "border-white/15 bg-white/5"
+                          }`}
+                        >
+                          {/* Miniature Real Media Thumbnail with tweak */}
+                          {recordedVideoUri ? (
+                            <Image
+                              source={{ uri: recordedVideoUri }}
+                              className="w-full h-full"
+                              resizeMode="cover"
+                              style={[
+                                Platform.OS === "web"
+                                  ? ({ filter: opt.previewFilter } as any)
+                                  : {},
+                              ]}
+                            />
+                          ) : null}
+
+                          {/* Tint overlay with Icon */}
+                          <View
+                            className="absolute inset-0 items-center justify-center"
+                            style={{
+                              backgroundColor: recordedVideoUri
+                                ? "rgba(10, 10, 15, 0.45)"
+                                : "rgba(255, 255, 255, 0.05)",
+                            }}
+                          >
+                            <IconComponent
+                              color={isSelected ? "#E91E76" : "#FFFFFF"}
+                              size={20}
+                              strokeWidth={2}
+                            />
+                          </View>
+
+                          {/* Current Value Badge if not 0 */}
+                          {hasAdjustment && (
+                            <View className="absolute top-1 left-1 bg-[#E91E76] px-1 py-0.5 rounded-[4px]">
+                              <Text className="text-[7px] font-black text-white">
+                                {currentVal > 0 ? `+${currentVal}` : `${currentVal}`}
+                              </Text>
+                            </View>
+                          )}
+
+                          {/* Selected Checkmark Indicator */}
+                          {isSelected && (
+                            <View className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-[#E91E76] items-center justify-center border border-white">
+                              <Check color="#fff" size={9} strokeWidth={3} />
+                            </View>
+                          )}
+                        </View>
+
+                        <Text
+                          numberOfLines={1}
+                          className={`text-[11px] font-medium text-center ${
+                            isSelected
+                              ? "text-[#E91E76] font-bold"
+                              : "text-white/80"
+                          }`}
+                        >
+                          {opt.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                {/* Dedicated Slider Card for Selected Fine-Tune Option */}
+                {(() => {
+                  const activeOpt =
+                    FINE_TUNE_OPTIONS.find((o) => o.key === selectedFineTune) ||
+                    FINE_TUNE_OPTIONS[0];
+                  const currentVal =
+                    adjustments[activeOpt.key as keyof typeof adjustments];
+                  const ActiveIcon = activeOpt.icon;
+                  const knobPct = Math.max(
+                    0,
+                    Math.min(100, ((currentVal + 50) / 100) * 100),
+                  );
+
+                  return (
+                    <View className="bg-white/5 rounded-2xl p-3 border border-white/5">
+                      <View className="flex-row items-center justify-between mb-2">
+                        <View className="flex-row items-center gap-2">
+                          <ActiveIcon color="#E91E76" size={15} />
+                          <Text className="text-white text-[12px] font-semibold">
+                            {activeOpt.label} Slider
+                          </Text>
+                        </View>
+                        <View className="flex-row items-center gap-2">
+                          {currentVal !== 0 && (
+                            <TouchableOpacity
+                              onPress={() => {
+                                Haptics.impactAsync(
+                                  Haptics.ImpactFeedbackStyle.Light,
+                                );
+                                setAdjustments((prev) => ({
+                                  ...prev,
+                                  [activeOpt.key]: 0,
+                                }));
+                              }}
+                              className="bg-white/10 px-2 py-0.5 rounded-full"
+                            >
+                              <Text className="text-[#9CA3AF] text-[10px] font-medium">
+                                Reset
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                          <View className="bg-[#E91E76]/20 px-2.5 py-0.5 rounded-full border border-[#E91E76]/40">
+                            <Text className="text-[#E91E76] text-[11px] font-bold">
+                              {currentVal > 0
+                                ? `+${currentVal}%`
+                                : `${currentVal}%`}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+
+                      {/* Draggable & Clickable Slider Bar */}
+                      <View
+                        className="h-7 justify-center relative cursor-pointer"
+                        onLayout={(e) => {
+                          const w = e.nativeEvent.layout.width;
+                          setFineTuneSliderWidth(w);
+                          fineTuneSliderWidthRef.current = w;
+                        }}
+                        {...fineTunePanResponder.panHandlers}
+                      >
+                        {/* Track Background */}
+                        <View className="w-full h-2 bg-white/10 rounded-full overflow-hidden relative">
+                          {/* Center zero mark */}
+                          <View className="absolute left-1/2 -ml-[1px] top-0 bottom-0 w-[2px] bg-white/30 z-10" />
+
+                          {/* Active Fill from Center (0) to Knob */}
+                          {currentVal >= 0 ? (
+                            <View
+                              style={{
+                                left: "50%",
+                                width: `${(currentVal / 50) * 50}%`,
+                              }}
+                              className="h-full bg-[#E91E76] rounded-r-full"
+                            />
+                          ) : (
+                            <View
+                              style={{
+                                left: `${50 - (Math.abs(currentVal) / 50) * 50}%`,
+                                width: `${(Math.abs(currentVal) / 50) * 50}%`,
+                              }}
+                              className="h-full bg-[#E91E76] rounded-l-full"
+                            />
+                          )}
+                        </View>
+
+                        {/* Slider Draggable Knob */}
+                        <View
+                          style={{
+                            left: `${knobPct}%`,
+                            marginLeft: -10,
+                          }}
+                          className="absolute top-1/2 -mt-2.5 w-5 h-5 rounded-full bg-white shadow-md border-2 border-[#E91E76] items-center justify-center pointer-events-none"
+                        >
+                          <View className="w-1.5 h-1.5 rounded-full bg-[#E91E76]" />
+                        </View>
+                      </View>
+
+                      {/* Scale markers */}
+                      <View className="flex-row justify-between px-0.5 mt-1">
+                        {[-50, -25, 0, 25, 50].map((mark) => (
+                          <TouchableOpacity
+                            key={mark}
+                            onPress={() => {
+                              Haptics.impactAsync(
+                                Haptics.ImpactFeedbackStyle.Light,
+                              );
+                              setAdjustments((prev) => ({
+                                ...prev,
+                                [activeOpt.key]: mark,
+                              }));
+                            }}
+                          >
+                            <Text
+                              className={`text-[9px] font-semibold ${
+                                currentVal === mark
+                                  ? "text-[#E91E76] font-bold"
+                                  : "text-[#9CA3AF]"
+                              }`}
+                            >
+                              {mark > 0 ? `+${mark}%` : `${mark}%`}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  );
+                })()}
+              </>
+            )}
+          </View>
+        ) : editMode === "cover" ? (
+          /* Cover & Poster Editor Panel */
+          <View className="w-full bg-[#12141A] rounded-2xl p-4 border border-white/10 mb-3">
+            <View className="flex-row justify-between items-center mb-3">
+              <View>
+                <Text className="text-white font-bold text-sm">
+                  Performance Cover Frame
+                </Text>
+                <Text className="text-[#9CA3AF] text-[11px]">
+                  Applied with your current "{activeFilter}" filter
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={pickPhoto}
+                className="bg-[#E91E76] px-3 py-1.5 rounded-full flex-row items-center gap-1"
+              >
+                <ImagePlus color="#fff" size={13} />
+                <Text className="text-white font-bold text-[11px]">Upload</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View className="flex-row gap-3 items-center">
+              <View className="w-16 h-20 rounded-xl overflow-hidden border-2 border-[#E91E76] relative">
+                {recordedVideoUri && (
+                  <Image
+                    source={{ uri: recordedVideoUri }}
+                    className="w-full h-full"
+                    resizeMode="cover"
+                    style={[
+                      Platform.OS === "web"
+                        ? ({ filter: getEffectiveCssFilter() } as any)
+                        : {},
+                    ]}
+                  />
+                )}
+                <View className="absolute bottom-1 inset-x-0 items-center">
+                  <View className="bg-black/60 px-1 py-0.5 rounded">
+                    <Text className="text-white text-[8px] font-bold">ACTIVE</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View className="flex-1">
+                <Text className="text-white text-xs font-semibold mb-1">
+                  Card Poster Ready
+                </Text>
+                <Text className="text-[#9CA3AF] text-[11px] leading-relaxed">
+                  This poster will be shown in the Explore Feed, your Profile, and Stage listings.
+                </Text>
+              </View>
+            </View>
+          </View>
+        ) : editMode === "trim" ? (
           <View className="w-full h-24 mb-4">
             <View className="flex-row justify-between items-center mb-4">
               <Text className="text-white font-medium">
@@ -744,7 +2225,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
               </Text>
             </View>
 
-            {/* Timeline Editor Mock */}
+            {/* Timeline Editor Scrubber */}
             <View
               className="h-14 w-full relative justify-center"
               onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
@@ -774,64 +2255,532 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
               />
             </View>
           </View>
-        ) : editMode === "filters" ? (
-          <View className="w-full h-[85px] mb-4">
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              className="flex-1 w-full"
-            >
-              {[
-                "Original",
-                "Stage",
-                "Studio",
-                "Natural",
-                "Low Light",
-                "B&W",
-                "Live",
-                "Auto Fix",
-              ].map((filter) => (
+        ) : editMode === "sound" ? (
+          /* Sound & Audio Lab Panel */
+          <View className="w-full bg-[#12141A] rounded-2xl p-4 border border-white/10 mb-3 gap-3.5">
+            {/* Header with status */}
+            <View className="flex-row justify-between items-center">
+              <View>
+                <Text className="text-white font-bold text-sm">
+                  Soundtrack & Audio Lab
+                </Text>
+                <Text className="text-[#9CA3AF] text-[11px]">
+                  Balance original live recording & background music
+                </Text>
+              </View>
+              <View className="bg-[#E91E76]/15 px-2.5 py-1 rounded-full border border-[#E91E76]/30 flex-row items-center gap-1">
+                <Music2 color="#E91E76" size={12} />
+                <Text className="text-[#E91E76] text-[10px] font-bold">
+                  {selectedSoundTrack === "none" ? "Raw Mic" : "Mixed Track"}
+                </Text>
+              </View>
+            </View>
+
+            {/* Soundtrack Selection Carousel */}
+            <View>
+              <View className="flex-row justify-between items-center mb-2">
+                <Text className="text-[#9CA3AF] text-[11px] font-semibold uppercase tracking-wider">
+                  Featured & Custom Music
+                </Text>
                 <TouchableOpacity
-                  key={filter}
-                  onPress={() => setActiveFilter(filter)}
-                  className="items-center mr-3"
+                  onPress={pickCustomAudio}
+                  className="bg-[#E91E76]/15 border border-[#E91E76]/40 px-2.5 py-1 rounded-full flex-row items-center gap-1"
                 >
-                  <View
-                    className={`w-14 h-14 rounded-xl overflow-hidden mb-1.5 ${activeFilter === filter ? "border-2 border-[#E91E76]" : ""}`}
-                  >
-                    {/* In a real app this would be a thumbnail of the video with the filter applied */}
-                    <View className="w-full h-full bg-[#2A2D34]" />
-                  </View>
-                  <Text
-                    className={`text-[10px] ${activeFilter === filter ? "text-[#E91E76]" : "text-white/80"}`}
-                  >
-                    {filter}
+                  <Plus color="#E91E76" size={11} strokeWidth={2.5} />
+                  <Text className="text-[#E91E76] text-[10px] font-bold">
+                    Add Your Music
                   </Text>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
+              </View>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8, paddingRight: 8 }}
+              >
+                {/* Upload Your Own Song Card */}
+                <TouchableOpacity
+                  onPress={pickCustomAudio}
+                  className="p-2.5 rounded-2xl border border-dashed border-[#E91E76]/50 bg-[#E91E76]/10 items-center justify-center"
+                  style={{ width: 120, height: 76 }}
+                >
+                  <View className="w-6 h-6 rounded-full bg-[#E91E76] items-center justify-center mb-1 shadow-sm">
+                    <Plus color="#fff" size={14} strokeWidth={3} />
+                  </View>
+                  <Text className="text-white text-[11px] font-bold text-center">
+                    Add Song
+                  </Text>
+                  <Text className="text-[#E91E76] text-[9px] font-medium text-center">
+                    Audio / MP3
+                  </Text>
+                </TouchableOpacity>
+
+                {allSoundTracks.map((track) => {
+                  const isSelected = selectedSoundTrack === track.id;
+                  return (
+                    <TouchableOpacity
+                      key={track.id}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setSelectedSoundTrack(track.id);
+                      }}
+                      className={`p-2.5 rounded-2xl border items-start justify-between relative ${
+                        isSelected
+                          ? "border-[#E91E76] bg-[#E91E76]/15"
+                          : "border-white/10 bg-white/5"
+                      }`}
+                      style={{ width: 132, height: 76 }}
+                    >
+                      <View className="flex-row items-center justify-between w-full">
+                        <View
+                          className="w-6 h-6 rounded-lg items-center justify-center"
+                          style={{
+                            backgroundColor: isSelected
+                              ? "#E91E76"
+                              : "rgba(255, 255, 255, 0.1)",
+                          }}
+                        >
+                          <Music2
+                            color={isSelected ? "#fff" : track.accent}
+                            size={13}
+                          />
+                        </View>
+                        <View className="flex-row items-center gap-1">
+                          {track.isCustom && (
+                            <TouchableOpacity
+                              onPress={(e) => {
+                                e.stopPropagation();
+                                removeCustomTrack(track.id);
+                              }}
+                              className="p-0.5"
+                            >
+                              <Trash2 color="#9CA3AF" size={12} />
+                            </TouchableOpacity>
+                          )}
+                          {isSelected && (
+                            <View className="w-4 h-4 rounded-full bg-[#E91E76] items-center justify-center">
+                              <Check color="#fff" size={9} strokeWidth={3} />
+                            </View>
+                          )}
+                        </View>
+                      </View>
+
+                      <View className="w-full">
+                        <View className="flex-row items-center gap-1">
+                          <Text
+                            numberOfLines={1}
+                            className={`text-xs font-bold flex-1 ${
+                              isSelected ? "text-[#E91E76]" : "text-white"
+                            }`}
+                          >
+                            {track.name}
+                          </Text>
+                          {track.isCustom && (
+                            <View className="bg-[#E91E76]/30 px-1 rounded">
+                              <Text className="text-[7px] text-[#F472B6] font-bold">
+                                MINE
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text
+                          numberOfLines={1}
+                          className="text-[#9CA3AF] text-[10px]"
+                        >
+                          {track.genre} • {track.duration}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            {/* Original Audio Volume Control Card */}
+            <View className="bg-white/5 rounded-2xl p-3 border border-white/5">
+              <View className="flex-row items-center justify-between mb-2">
+                <View className="flex-row items-center gap-2">
+                  <TouchableOpacity
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setIsOriginalMuted(!isOriginalMuted);
+                    }}
+                    className={`w-6 h-6 rounded-full items-center justify-center ${
+                      isOriginalMuted ? "bg-red-500/20" : "bg-white/10"
+                    }`}
+                  >
+                    {isOriginalMuted ? (
+                      <VolumeX color="#EF4444" size={13} />
+                    ) : (
+                      <Volume2 color="#E91E76" size={13} />
+                    )}
+                  </TouchableOpacity>
+                  <Text className="text-white text-[12px] font-semibold">
+                    Original Microphone Audio
+                  </Text>
+                </View>
+
+                <View className="flex-row items-center gap-2">
+                  <TouchableOpacity
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setIsOriginalMuted(!isOriginalMuted);
+                    }}
+                    className="bg-white/10 px-2 py-0.5 rounded-full"
+                  >
+                    <Text className="text-[#9CA3AF] text-[10px] font-medium">
+                      {isOriginalMuted ? "Unmute" : "Mute"}
+                    </Text>
+                  </TouchableOpacity>
+                  <View className="bg-[#E91E76]/20 px-2.5 py-0.5 rounded-full border border-[#E91E76]/40">
+                    <Text className="text-[#E91E76] text-[11px] font-bold">
+                      {isOriginalMuted ? "0%" : `${originalAudioVolume}%`}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Draggable Original Volume Slider */}
+              <View
+                className="h-7 justify-center relative cursor-pointer"
+                onLayout={(e) => {
+                  const w = e.nativeEvent.layout.width;
+                  setOrigVolSliderWidth(w);
+                  origVolSliderWidthRef.current = w;
+                }}
+                {...origVolPanResponder.panHandlers}
+              >
+                <View className="w-full h-2 bg-white/10 rounded-full overflow-hidden relative">
+                  <View
+                    style={{
+                      width: `${isOriginalMuted ? 0 : Math.max(0, Math.min(100, (originalAudioVolume / 150) * 100))}%`,
+                    }}
+                    className="h-full bg-[#E91E76] rounded-full"
+                  />
+                </View>
+                <View
+                  style={{
+                    left: `${isOriginalMuted ? 0 : Math.max(0, Math.min(100, (originalAudioVolume / 150) * 100))}%`,
+                    marginLeft: -10,
+                  }}
+                  className="absolute top-1/2 -mt-2.5 w-5 h-5 rounded-full bg-white shadow-md border-2 border-[#E91E76] items-center justify-center pointer-events-none"
+                >
+                  <View className="w-1.5 h-1.5 rounded-full bg-[#E91E76]" />
+                </View>
+              </View>
+
+              {/* Scale markers */}
+              <View className="flex-row justify-between px-0.5 mt-1">
+                {[0, 50, 100, 150].map((mark) => (
+                  <TouchableOpacity
+                    key={mark}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setOriginalAudioVolume(mark);
+                      setIsOriginalMuted(mark === 0);
+                    }}
+                  >
+                    <Text
+                      className={`text-[9px] font-semibold ${
+                        !isOriginalMuted && originalAudioVolume === mark
+                          ? "text-[#E91E76] font-bold"
+                          : "text-[#9CA3AF]"
+                      }`}
+                    >
+                      {mark}%
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Music Track Volume Slider (if soundtrack selected) */}
+            {selectedSoundTrack !== "none" && (
+              <View className="bg-white/5 rounded-2xl p-3 border border-white/5">
+                <View className="flex-row items-center justify-between mb-2">
+                  <View className="flex-row items-center gap-2">
+                    <Music2 color="#38BDF8" size={14} />
+                    <Text className="text-white text-[12px] font-semibold">
+                      Soundtrack Volume
+                    </Text>
+                  </View>
+                  <View className="bg-[#38BDF8]/20 px-2.5 py-0.5 rounded-full border border-[#38BDF8]/40">
+                    <Text className="text-[#38BDF8] text-[11px] font-bold">
+                      {musicVolume}%
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Draggable Music Volume Slider */}
+                <View
+                  className="h-7 justify-center relative cursor-pointer"
+                  onLayout={(e) => {
+                    const w = e.nativeEvent.layout.width;
+                    setMusicVolSliderWidth(w);
+                    musicVolSliderWidthRef.current = w;
+                  }}
+                  {...musicVolPanResponder.panHandlers}
+                >
+                  <View className="w-full h-2 bg-white/10 rounded-full overflow-hidden relative">
+                    <View
+                      style={{
+                        width: `${Math.max(0, Math.min(100, musicVolume))}%`,
+                      }}
+                      className="h-full bg-[#38BDF8] rounded-full"
+                    />
+                  </View>
+                  <View
+                    style={{
+                      left: `${Math.max(0, Math.min(100, musicVolume))}%`,
+                      marginLeft: -10,
+                    }}
+                    className="absolute top-1/2 -mt-2.5 w-5 h-5 rounded-full bg-white shadow-md border-2 border-[#38BDF8] items-center justify-center pointer-events-none"
+                  >
+                    <View className="w-1.5 h-1.5 rounded-full bg-[#38BDF8]" />
+                  </View>
+                </View>
+
+                {/* Scale markers */}
+                <View className="flex-row justify-between px-0.5 mt-1">
+                  {[0, 25, 50, 75, 100].map((mark) => (
+                    <TouchableOpacity
+                      key={mark}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setMusicVolume(mark);
+                      }}
+                    >
+                      <Text
+                        className={`text-[9px] font-semibold ${
+                          musicVolume === mark
+                            ? "text-[#38BDF8] font-bold"
+                            : "text-[#9CA3AF]"
+                        }`}
+                      >
+                        {mark}%
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* Studio Audio FX Chips */}
+            <View>
+              <Text className="text-[#9CA3AF] text-[11px] font-semibold uppercase tracking-wider mb-2">
+                Studio Audio FX
+              </Text>
+              <View className="flex-row flex-wrap gap-2">
+                {[
+                  { id: "enhance", label: "✨ AI Voice Boost" },
+                  { id: "noiseCut", label: "🔇 Noise Cut" },
+                  { id: "reverb", label: "🎙️ Stage Reverb" },
+                  { id: "bass", label: "🔊 Punchy Bass" },
+                ].map((fx) => {
+                  const isActive = activeAudioEffects.includes(fx.id);
+                  return (
+                    <TouchableOpacity
+                      key={fx.id}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setActiveAudioEffects((prev) =>
+                          isActive
+                            ? prev.filter((x) => x !== fx.id)
+                            : [...prev, fx.id],
+                        );
+                      }}
+                      className={`px-3 py-1.5 rounded-full border flex-row items-center gap-1.5 ${
+                        isActive
+                          ? "bg-[#E91E76]/15 border-[#E91E76]"
+                          : "bg-white/5 border-white/10"
+                      }`}
+                    >
+                      <Text
+                        className={`text-[11px] font-semibold ${
+                          isActive ? "text-[#E91E76]" : "text-[#D1D5DB]"
+                        }`}
+                      >
+                        {fx.label}
+                      </Text>
+                      {isActive && (
+                        <Check color="#E91E76" size={10} strokeWidth={3} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
           </View>
-        ) : editMode !== "none" ? (
-          <View className="w-full h-24 items-center justify-center mb-4">
-            <Text className="text-[#9CA3AF]">Editing feature coming soon.</Text>
+        ) : editMode === "caption" ? (
+          /* Captions & Subtitles Panel */
+          <View className="w-full bg-[#12141A] rounded-2xl p-4 border border-white/10 mb-3 gap-3.5">
+            {/* Header with toggle */}
+            <View className="flex-row justify-between items-center">
+              <View>
+                <Text className="text-white font-bold text-sm">
+                  Captions & Stage Subtitles
+                </Text>
+                <Text className="text-[#9CA3AF] text-[11px]">
+                  Add dynamic lyrics, quotes, or stage dialog
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setShowCaptions(!showCaptions);
+                }}
+                className={`px-3 py-1.5 rounded-full flex-row items-center gap-1.5 ${
+                  showCaptions ? "bg-[#E91E76]" : "bg-white/10"
+                }`}
+              >
+                <Subtitles color="#fff" size={12} />
+                <Text className="text-white text-[11px] font-bold">
+                  {showCaptions ? "Visible" : "Hidden"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Editable Caption Input Field */}
+            <View className="bg-white/5 rounded-xl p-3 border border-white/10">
+              <View className="flex-row justify-between items-center mb-1">
+                <Text className="text-[#9CA3AF] text-[11px] font-semibold uppercase tracking-wider">
+                  Subtitle Text
+                </Text>
+                <Text className="text-[#9CA3AF] text-[10px]">
+                  {captionText.length}/100
+                </Text>
+              </View>
+              <TextInput
+                value={captionText}
+                onChangeText={(text) => {
+                  setCaptionText(text);
+                  if (!showCaptions && text.length > 0) setShowCaptions(true);
+                }}
+                maxLength={100}
+                placeholder="Enter performance quote or lyric..."
+                placeholderTextColor="#6B7280"
+                className="text-white text-xs py-1 px-0 font-medium"
+              />
+            </View>
+
+            {/* Quick Caption Presets */}
+            <View>
+              <Text className="text-[#9CA3AF] text-[11px] font-semibold uppercase tracking-wider mb-2">
+                Quick Preset Phrases
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 6, paddingRight: 6 }}
+              >
+                {[
+                  "Feel the rhythm 🔥",
+                  "Step into the spotlight ✨",
+                  "Live stage energy ⚡",
+                  "Raw performance 🎭",
+                  "Leaving it all on stage 🌟",
+                ].map((phrase) => (
+                  <TouchableOpacity
+                    key={phrase}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setCaptionText(phrase);
+                      setShowCaptions(true);
+                    }}
+                    className={`px-3 py-1.5 rounded-full border ${
+                      captionText === phrase
+                        ? "bg-[#E91E76]/15 border-[#E91E76]"
+                        : "bg-white/5 border-white/10"
+                    }`}
+                  >
+                    <Text
+                      className={`text-[11px] font-medium ${
+                        captionText === phrase
+                          ? "text-[#E91E76] font-bold"
+                          : "text-white/80"
+                      }`}
+                    >
+                      {phrase}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
+            {/* Subtitle Style Presets */}
+            <View className="gap-2">
+              <View className="flex-row justify-between items-center mb-1">
+                <Text className="text-[#9CA3AF] text-[11px] font-semibold uppercase tracking-wider">
+                  Subtitle Style
+                </Text>
+                <TouchableOpacity
+                  onPress={resetCaptionPosition}
+                  className="bg-white/10 px-2.5 py-1 rounded-full flex-row items-center gap-1 border border-white/10"
+                >
+                  <RotateCcw color="#fff" size={10} />
+                  <Text className="text-white text-[10px] font-semibold">Reset Position</Text>
+                </TouchableOpacity>
+              </View>
+                <View className="flex-row bg-white/5 p-1 rounded-xl border border-white/10">
+                  {(
+                    [
+                      { id: "neon", label: "Neon Glow" },
+                      { id: "classic", label: "Dark Pill" },
+                      { id: "yellow", label: "Karaoke Pop" },
+                      { id: "minimal", label: "Clean Shadow" },
+                    ] as const
+                  ).map((st) => (
+                    <TouchableOpacity
+                      key={st.id}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setCaptionStyle(st.id);
+                      }}
+                      className={`flex-1 py-2 rounded-lg items-center ${
+                        captionStyle === st.id
+                          ? "bg-[#E91E76]"
+                          : "bg-transparent"
+                      }`}
+                    >
+                      <Text
+                        className={`text-[10px] font-bold ${
+                          captionStyle === st.id
+                            ? "text-white"
+                            : "text-[#9CA3AF]"
+                        }`}
+                      >
+                        {st.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
           </View>
         ) : null}
 
-        {/* Best Moment Banner */}
-        <View className="bg-[#1A1D24] p-4 rounded-2xl flex-row items-center border border-white/5">
-          <Sparkles color="#fff" size={24} className="mr-3" />
+        {/* AI Best Moment Enhancement Banner */}
+        <View className="bg-[#1A1D24] p-3.5 rounded-2xl flex-row items-center border border-white/5">
+          <Sparkles color="#E91E76" size={22} className="mr-3" />
           <View className="flex-1 mr-2">
             <Text className="text-white font-bold text-sm mb-0.5">
-              Best Moment
+              Auto Color & Filter Match
             </Text>
             <Text className="text-[#9CA3AF] text-[11px]">
-              Let AI find the most engaging part of your video.
+              AI suggests "{activeFilterConfig.name}" for your performance lighting.
             </Text>
           </View>
-          <TouchableOpacity className="bg-[#E91E76] px-5 py-2 rounded-full">
-            <Text className="text-white font-bold text-xs">Try</Text>
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              setActiveFilter("Stage");
+              setFilterIntensity(0.9);
+            }}
+            className="bg-[#E91E76] px-4 py-1.5 rounded-full"
+          >
+            <Text className="text-white font-bold text-xs">Auto Apply</Text>
           </TouchableOpacity>
         </View>
+        </ScrollView>
       </View>
     </View>
   );
@@ -1054,6 +3003,20 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     className="flex-1 text-white p-0 m-0 font-medium"
                   />
                 </View>
+
+                <Text className="text-[#9CA3AF] mb-2 font-medium text-xs uppercase tracking-wider mt-4">
+                  Caption / Subtitle
+                </Text>
+                <View className="flex-row items-center bg-[#1A1D24] border border-white/5 rounded-xl px-4 py-3">
+                  <Subtitles color="#E91E76" size={16} className="mr-2" />
+                  <TextInput
+                    value={captionText}
+                    onChangeText={setCaptionText}
+                    placeholder="Add a performance subtitle..."
+                    placeholderTextColor="#6B7280"
+                    className="flex-1 text-white p-0 m-0 font-medium"
+                  />
+                </View>
               </View>
             </View>
 
@@ -1154,6 +3117,32 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             <View className="flex-row items-center">
               <CheckCircle2 color="#10B981" size={16} className="mr-1.5" />
               <Text className="text-[#10B981] font-medium">On</Text>
+            </View>
+          </View>
+          <View className="flex-row justify-between items-center py-1">
+            <Text className="text-white font-medium">Soundtrack</Text>
+            <View className="flex-row items-center">
+              <Music2 color="#E91E76" size={14} className="mr-1.5" />
+              <Text className="text-[#E91E76] font-medium text-xs">
+                {selectedSoundTrack !== "none"
+                  ? allSoundTracks.find((s) => s.id === selectedSoundTrack)?.name
+                  : "Original Mic Audio"}
+              </Text>
+            </View>
+          </View>
+          <View className="flex-row justify-between items-center py-1">
+            <Text className="text-white font-medium">Captions</Text>
+            <View className="flex-row items-center">
+              <Subtitles
+                color={showCaptions ? "#10B981" : "#9CA3AF"}
+                size={14}
+                className="mr-1.5"
+              />
+              <Text
+                className={`font-medium text-xs ${showCaptions ? "text-[#10B981]" : "text-[#9CA3AF]"}`}
+              >
+                {showCaptions ? "Enabled" : "Off"}
+              </Text>
             </View>
           </View>
           <View className="flex-row justify-between items-center py-1">

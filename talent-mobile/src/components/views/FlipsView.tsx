@@ -65,7 +65,10 @@ export function FlipsView() {
 
         {/* Top Minimalist Header */}
         <View className="absolute top-14 w-full flex-row justify-between items-center px-6 z-20">
-          <Text className="text-white/50 font-serif text-[18px] italic">talent.</Text>
+          <View className="flex-row items-baseline opacity-80">
+            <Text className="font-bold text-[22px] tracking-tight text-white leading-none font-serif">talent</Text>
+            <Text className="font-bold text-[22px] text-[#E91E76] leading-none ml-[1px] font-serif">.</Text>
+          </View>
           <View className="bg-white/10 px-3 py-1.5 rounded-full border border-white/20 backdrop-blur-md">
             <Text className="text-white font-bold tracking-[0.2em] text-[10px]">FLIPS</Text>
           </View>
