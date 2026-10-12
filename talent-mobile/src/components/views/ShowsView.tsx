@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, Modal, SafeAreaView } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image, Modal, SafeAreaView, Platform } from 'react-native';
 import { Ticket, MapPin, Calendar, Star, Users, Music, Play, Navigation, X, Clock, Map, ChevronRight, Check, Camera } from 'lucide-react-native';
 
 export function ShowsView() {
@@ -73,8 +73,20 @@ export function ShowsView() {
             {/* Featured Upcoming */}
             <View className="px-5 mb-8">
               <View className="w-full bg-[#100C09] rounded-3xl overflow-hidden border border-white/10 relative">
-                <Image source={{ uri: 'https://images.unsplash.com/photo-1516280440503-6c8c4a93883a?w=800&q=80' }} className="w-full h-[220px] absolute top-0 opacity-40" />
-                <View className="w-full h-[220px] absolute top-0 bg-gradient-to-t from-[#100C09] to-transparent" />
+                {Platform.OS === 'web' ? (
+                  <video
+                    src="http://localhost:3000/uploads/performer_1.mp4"
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    poster="https://images.unsplash.com/photo-1516280440503-6c8c4a93883a?w=800&q=80"
+                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: 240, objectFit: 'cover', opacity: 0.45 }}
+                  />
+                ) : (
+                  <Image source={{ uri: 'https://images.unsplash.com/photo-1516280440503-6c8c4a93883a?w=800&q=80' }} className="w-full h-[220px] absolute top-0 opacity-40" />
+                )}
+                <View className="w-full h-[240px] absolute top-0 bg-gradient-to-t from-[#100C09] to-transparent" />
                 
                 <View className="p-4">
                   <View className="bg-[#E91E76] self-start px-2 py-1 rounded-md mb-20 flex-row items-center gap-1">
@@ -292,6 +304,23 @@ export function ShowsView() {
                   <Clock color="#E91E76" size={14} />
                   <Text className="text-[#9CA3AF] text-[13px]">8:00 PM IST (Doors open 7:15 PM)</Text>
                 </View>
+              </View>
+
+              {/* Live Stage Video Preview */}
+              <View className="mb-6 rounded-2xl overflow-hidden border border-white/10 aspect-video relative bg-[#12141A]">
+                {Platform.OS === 'web' ? (
+                  <video
+                    src="http://localhost:3000/uploads/performer_1.mp4"
+                    controls
+                    autoPlay
+                    muted
+                    playsInline
+                    poster="https://images.unsplash.com/photo-1516280440503-6c8c4a93883a?w=800&q=80"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <Image source={{ uri: 'https://images.unsplash.com/photo-1516280440503-6c8c4a93883a?w=800&q=80' }} className="w-full h-full opacity-80" />
+                )}
               </View>
 
               {/* Who's Visiting Block */}

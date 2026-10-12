@@ -8,7 +8,7 @@ import Animated, {
   withSpring,
   withTiming
 } from 'react-native-reanimated';
-import { Search, EyeOff, Play, Pause, Maximize2, MoreHorizontal, X, Bookmark, MessageCircle, Send, ChevronDown, ChevronRight, Gauge, MapPin, Flag, UserX, User, Bell } from 'lucide-react-native';
+import { Search, EyeOff, Play, Pause, Maximize2, MoreHorizontal, X, Bookmark, MessageCircle, Send, ChevronDown, ChevronRight, Gauge, MapPin, Flag, UserX, User, Bell, Volume2, VolumeX } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useFeed } from '../../hooks/useFeed';
 import { api } from '../../utils/api';
@@ -16,7 +16,7 @@ import { api } from '../../utils/api';
 const HEADER_HEIGHT = 130;
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// 6 Dummy videos with real data
+// 6 Dummy videos with guaranteed streaming backend video files
 const initialFeedData = [
   {
     id: '1',
@@ -26,7 +26,7 @@ const initialFeedData = [
     avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100',
     videoThumb: 'https://images.unsplash.com/photo-1547153760-18fc86324498?w=800&q=80',
     duration: '0:58',
-    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    videoUrl: 'http://localhost:3000/uploads/performer_1.mp4',
     isRising: true,
     isNearby: false,
     isLive: false,
@@ -46,7 +46,7 @@ const initialFeedData = [
     avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100',
     videoThumb: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&q=80',
     duration: '1:00',
-    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+    videoUrl: 'http://localhost:3000/uploads/performer_2.mp4',
     isRising: false,
     isNearby: true,
     isLive: true,
@@ -55,12 +55,12 @@ const initialFeedData = [
   {
     id: '3',
     author: 'Meera Rao',
-    role: 'Classical Singer • Chennai, India',
-    tags: ['#classical', '#vocals', '#carnatic'],
+    role: 'Classical Violinist • Chennai, India',
+    tags: ['#classical', '#violin', '#carnatic'],
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100',
     videoThumb: 'https://images.unsplash.com/photo-1505228395891-9a51e7e86bf6?w=800&q=80',
     duration: '1:45',
-    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+    videoUrl: 'http://localhost:3000/uploads/performer_3.mp4',
     isRising: true,
     isNearby: false,
     isLive: false,
@@ -69,12 +69,12 @@ const initialFeedData = [
   {
     id: '4',
     author: 'Kabir Shah',
-    role: 'Beatbox Artist • Mumbai, India',
+    role: 'Studio Vocals & Beatbox • Mumbai, India',
     tags: ['#beatbox', '#hiphop', '#vocalpercussion'],
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100',
     videoThumb: 'https://images.unsplash.com/photo-1516280440502-a2fc9977823b?w=800&q=80',
     duration: '0:30',
-    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+    videoUrl: 'http://localhost:3000/uploads/performer_4.mp4',
     isRising: false,
     isNearby: false,
     isLive: true,
@@ -83,12 +83,12 @@ const initialFeedData = [
   {
     id: '5',
     author: 'Ananya Iyer',
-    role: 'Actor • Hyderabad, India',
-    tags: ['#acting', '#monologue', '#drama'],
+    role: 'Street Dancer • Hyderabad, India',
+    tags: ['#dance', '#breakdance', '#hiphop'],
     avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=100',
     videoThumb: 'https://images.unsplash.com/photo-1527224857830-43a7ace8526d?w=800&q=80',
     duration: '2:15',
-    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
+    videoUrl: 'http://localhost:3000/uploads/performer_5.mp4',
     isRising: true,
     isNearby: true,
     isLive: false,
@@ -102,7 +102,7 @@ const initialFeedData = [
     avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100',
     videoThumb: 'https://images.unsplash.com/photo-1510915361894-db8b60106cb1?w=800&q=80',
     duration: '1:10',
-    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4',
+    videoUrl: 'http://localhost:3000/uploads/performer_1.mp4',
     isRising: false,
     isNearby: true,
     isLive: false,
@@ -112,7 +112,7 @@ const initialFeedData = [
 
 function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { video: any, playingVideoId: string | null, setPlayingVideoId: (id: string | null) => void, onPass: () => void }) {
   const router = useRouter();
-  const isPlaying = playingVideoId === video.id;
+  const isPlaying = String(playingVideoId) === String(video.id);
   
   // Interactive States
   const [isKept, setIsKept] = useState(video.isLiked || false);
@@ -124,6 +124,33 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
   const [attachMoment, setAttachMoment] = useState(false);
   
   const [showOptions, setShowOptions] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const [videoError, setVideoError] = useState(false);
+  const videoRef = useRef<any>(null);
+
+  const mainSrc = video.url || video.videoUrl || 'http://localhost:3000/uploads/performer_1.mp4';
+  const fallbackSrc = 'http://localhost:3000/uploads/performer_1.mp4';
+  const srcToUse = videoError ? fallbackSrc : mainSrc;
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && videoRef.current) {
+      videoRef.current.defaultMuted = true;
+      videoRef.current.muted = !isPlaying || isMuted;
+      if (isPlaying) {
+        const p = videoRef.current.play();
+        if (p !== undefined) {
+          p.catch(() => {
+            if (videoRef.current) {
+              videoRef.current.muted = true;
+              videoRef.current.play().catch(() => {});
+            }
+          });
+        }
+      } else {
+        videoRef.current.pause();
+      }
+    }
+  }, [isPlaying, isMuted, srcToUse]);
   
   // Judging States (Press + Move + Release)
   const [judgeScore, setJudgeScore] = useState<number | null>(video.userRating || null);
@@ -216,19 +243,20 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
       {/* Video Container */}
       <View className="relative w-full aspect-[16/9.5] rounded-[16px] overflow-hidden border border-white/10 bg-[#100C09] mb-4">
         {Platform.OS === 'web' ? (
-          isPlaying ? (
-            <video 
-              src={video.url || video.videoUrl} 
-              autoPlay 
-              loop
-              muted={false}
-              playsInline
-              poster={video.videoThumb || video.thumbnailUrl || 'https://images.unsplash.com/photo-1547153760-18fc86324498?w=800&q=80'}
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-            />
-          ) : (
-            <Image source={{ uri: video.videoThumb || video.thumbnailUrl || 'https://images.unsplash.com/photo-1547153760-18fc86324498?w=800&q=80' }} className="w-full h-full opacity-90" />
-          )
+          <video 
+            ref={videoRef}
+            key={`${video.id}-${srcToUse}`}
+            src={srcToUse} 
+            autoPlay 
+            loop
+            muted={!isPlaying || isMuted}
+            playsInline
+            poster={video.videoThumb || video.thumbnailUrl || 'https://images.unsplash.com/photo-1547153760-18fc86324498?w=800&q=80'}
+            onError={() => {
+              if (!videoError) setVideoError(true);
+            }}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+          />
         ) : (
           <View className="flex-1 items-center justify-center bg-black">
              <Image source={{ uri: video.videoThumb || video.thumbnailUrl || 'https://images.unsplash.com/photo-1547153760-18fc86324498?w=800&q=80' }} className="w-full h-full opacity-90 absolute" />
@@ -272,6 +300,23 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
 
         {/* Bottom Right: Controls */}
         <View className="absolute bottom-3 right-3 flex-row items-center gap-2">
+          {Platform.OS === 'web' && (
+            <TouchableOpacity 
+              activeOpacity={0.8} 
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setIsMuted(!isMuted);
+                if (!isPlaying) setPlayingVideoId(video.id);
+              }}
+              className="w-8 h-8 rounded-lg bg-black/60 border border-white/20 items-center justify-center"
+            >
+              {isMuted || !isPlaying ? (
+                <VolumeX color="#fff" size={14} />
+              ) : (
+                <Volume2 color="#E91E76" size={14} />
+              )}
+            </TouchableOpacity>
+          )}
           <TouchableOpacity activeOpacity={0.8} className="w-8 h-8 rounded-lg bg-black/60 border border-white/20 items-center justify-center">
             <Maximize2 color="#fff" size={14} strokeWidth={2} />
           </TouchableOpacity>
@@ -503,16 +548,30 @@ export function HomeView({ user }: { user?: any }) {
   const scrollRef = useRef<ScrollView>(null);
 
   const { videos: feedData, isLoading, refetch } = useFeed();
+  const effectiveFeed = (feedData && feedData.length > 0) ? feedData : initialFeedData;
+  const [extraVideos, setExtraVideos] = useState<any[]>([]);
   const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
 
+  const allFeedItems = [...effectiveFeed, ...extraVideos];
+
   useEffect(() => {
-    if (feedData && feedData.length > 0 && !playingVideoId) {
-      setPlayingVideoId(feedData[0].id);
+    if (allFeedItems && allFeedItems.length > 0 && !playingVideoId) {
+      setPlayingVideoId(allFeedItems[0].id);
     }
-  }, [feedData, playingVideoId]);
+  }, [allFeedItems, playingVideoId]);
+
+  const handleLoadMore = () => {
+    setExtraVideos(prev => [
+      ...prev,
+      ...initialFeedData.map((item, idx) => ({
+        ...item,
+        id: `${item.id}-page-${prev.length + idx + 1}`
+      }))
+    ]);
+  };
   
   // Filter Logic based on Tabs and Search
-  const filteredData = (feedData || []).filter(v => {
+  const filteredData = allFeedItems.filter(v => {
     let matchesTab = true;
     if (activeFeedTab === 'Rising') matchesTab = v.isRising;
     if (activeFeedTab === 'Nearby') matchesTab = v.isNearby;
@@ -544,6 +603,16 @@ export function HomeView({ user }: { user?: any }) {
       lastScrollY.value = currentY;
     },
   });
+
+  const handleScroll = (event: any) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    if (layoutMeasurement && contentOffset && contentSize) {
+      const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 300;
+      if (isCloseToBottom) {
+        handleLoadMore();
+      }
+    }
+  };
 
   const headerStyle = useAnimatedStyle(() => {
     return {
@@ -628,6 +697,7 @@ export function HomeView({ user }: { user?: any }) {
         contentContainerStyle={{ paddingTop: HEADER_HEIGHT + 10, paddingHorizontal: 16, paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
         onScroll={scrollHandler}
+        onMomentumScrollEnd={handleScroll}
         scrollEventThrottle={16}
       >
         {filteredData.length === 0 ? (
@@ -635,15 +705,31 @@ export function HomeView({ user }: { user?: any }) {
             <Text className="text-[#9CA3AF] text-[15px]">No performances found.</Text>
           </View>
         ) : (
-          filteredData.map((video, index) => (
-            <FeedVideoCard 
-              key={video.id} 
-              video={video} 
-              playingVideoId={playingVideoId} 
-              setPlayingVideoId={setPlayingVideoId}
-              onPass={() => handlePass(index)}
-            />
-          ))
+          <>
+            {filteredData.map((video, index) => (
+              <FeedVideoCard 
+                key={video.id} 
+                video={video} 
+                playingVideoId={playingVideoId} 
+                setPlayingVideoId={setPlayingVideoId}
+                onPass={() => handlePass(index)}
+              />
+            ))}
+
+            {/* Seamless Infinite Scroll Loading Indicator */}
+            <View className="py-8 items-center justify-center">
+              <TouchableOpacity 
+                activeOpacity={0.8}
+                onPress={handleLoadMore}
+                className="bg-white/10 px-6 py-3 rounded-full border border-white/20 flex-row items-center gap-2"
+              >
+                <View className="w-2 h-2 rounded-full bg-[#E91E76] animate-pulse" />
+                <Text className="text-white font-medium text-[13px] tracking-wide">
+                  Loading more fresh performances...
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
         )}
       </Animated.ScrollView>
     </View>

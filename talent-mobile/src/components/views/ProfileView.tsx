@@ -58,13 +58,13 @@ const coverImg =
 const avatarImg =
   "https://images.unsplash.com/photo-1493225457124-a1a2a4fa3e93?w=200&q=80";
 
-// Real dummy video URLs
+// Real dummy video URLs served from local backend uploads
 const dummyVideos = [
-  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
+  "http://localhost:3000/uploads/performer_1.mp4",
+  "http://localhost:3000/uploads/performer_2.mp4",
+  "http://localhost:3000/uploads/performer_3.mp4",
+  "http://localhost:3000/uploads/performer_4.mp4",
+  "http://localhost:3000/uploads/performer_5.mp4",
 ];
 
 function VideoPlayerModal({
@@ -74,6 +74,22 @@ function VideoPlayerModal({
   url: string;
   onClose: () => void;
 }) {
+  const videoRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && videoRef.current) {
+      const p = videoRef.current.play();
+      if (p !== undefined) {
+        p.catch(() => {
+          if (videoRef.current) {
+            videoRef.current.muted = true;
+            videoRef.current.play().catch(() => {});
+          }
+        });
+      }
+    }
+  }, [url]);
+
   return (
     <Modal
       visible={true}
@@ -95,9 +111,11 @@ function VideoPlayerModal({
 
         {Platform.OS === "web" ? (
           <video
+            ref={videoRef}
             src={url}
             controls
             autoPlay
+            playsInline
             style={{ width: "100%", maxHeight: "80vh", outline: "none" }}
           />
         ) : (
@@ -415,12 +433,33 @@ function ProfileFeedVideoCard({
   setPlayingVideoId: (id: string | null) => void;
   onPass: () => void;
 }) {
-  const isPlaying = playingVideoId === video.id;
+  const isPlaying = String(playingVideoId) === String(video.id);
   const [isKept, setIsKept] = useState(false);
   const [judgeScore, setJudgeScore] = useState<number | null>(null);
   const [isJudgingActive, setIsJudgingActive] = useState(false);
   const [tempScore, setTempScore] = useState<number>(5.0);
   const [judgedStatusText, setJudgedStatusText] = useState("");
+  const videoRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && videoRef.current) {
+      videoRef.current.defaultMuted = true;
+      videoRef.current.muted = !isPlaying;
+      if (isPlaying) {
+        const p = videoRef.current.play();
+        if (p !== undefined) {
+          p.catch(() => {
+            if (videoRef.current) {
+              videoRef.current.muted = true;
+              videoRef.current.play().catch(() => {});
+            }
+          });
+        }
+      } else {
+        videoRef.current.pause();
+      }
+    }
+  }, [isPlaying, video.videoUrl]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -452,21 +491,16 @@ function ProfileFeedVideoCard({
     <View className="mb-6">
       <View className="relative w-full aspect-[16/9.5] rounded-[16px] overflow-hidden border border-white/10 bg-[#100C09] mb-4">
         {Platform.OS === "web" ? (
-          isPlaying ? (
-            <video
-              src={video.videoUrl}
-              autoPlay
-              loop
-              playsInline
-              poster={video.videoThumb}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            />
-          ) : (
-            <Image
-              source={{ uri: video.videoThumb }}
-              className="w-full h-full opacity-90"
-            />
-          )
+          <video
+            ref={videoRef}
+            src={video.videoUrl}
+            autoPlay
+            loop
+            muted={!isPlaying}
+            playsInline
+            poster={video.videoThumb}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
         ) : (
           <View className="flex-1 items-center justify-center bg-black">
             <Image
@@ -1242,74 +1276,84 @@ export function ProfileView({
                 </View>
               </View>
 
-              {profileData?.videos && profileData.videos.length > 0 ? (
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  onPress={() => playVideo(profileData.videos[0].url)}
-                  className="w-full aspect-[4/3] rounded-[24px] overflow-hidden relative border border-white/5 bg-[#12141A]"
-                >
-                  <Image
-                    source={{
-                      uri: "https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=800&q=80",
-                    }}
-                    className="w-full h-full opacity-80"
-                  />
-                  <View className="absolute inset-0 bg-black/40" />
+              {(() => {
+                const featuredVideoUrl = (profileData?.videos && profileData.videos.length > 0)
+                  ? profileData.videos[0].url
+                  : dummyVideos[0];
+                const featuredTitle = (profileData?.videos && profileData.videos.length > 0)
+                  ? profileData.videos[0].title
+                  : "Acoustic Sunset Sessions";
 
-                  {/* Featured Badge */}
-                  <View className="absolute top-4 left-4 bg-[#E91E76] px-3 py-1.5 rounded-md flex-row items-center gap-1.5 shadow-sm">
-                    <Star color="#fff" fill="#fff" size={12} />
-                    <Text className="text-white text-[10px] font-bold tracking-widest uppercase">
-                      FEATURED • TAP TO PLAY IN HOME FEED VIEW
-                    </Text>
-                  </View>
-
-                  {/* Play Button */}
-                  <View className="absolute top-[50%] left-0 right-0 items-center justify-center -translate-y-1/2">
-                    <View className="w-16 h-16 rounded-full border border-white bg-black/30 items-center justify-center">
-                      <Play
-                        color="#fff"
-                        fill="#fff"
-                        size={24}
-                        style={{ marginLeft: 4 }}
+                return (
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => playVideo(featuredVideoUrl)}
+                    className="w-full aspect-[4/3] rounded-[24px] overflow-hidden relative border border-white/5 bg-[#12141A]"
+                  >
+                    {Platform.OS === "web" ? (
+                      <video
+                        src={featuredVideoUrl}
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        poster="https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=800&q=80"
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
                       />
-                    </View>
-                  </View>
+                    ) : (
+                      <Image
+                        source={{
+                          uri: "https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=800&q=80",
+                        }}
+                        className="w-full h-full opacity-80"
+                      />
+                    )}
+                    <View className="absolute inset-0 bg-black/40" />
 
-                  {/* Bottom Info */}
-                  <View className="absolute bottom-0 left-0 right-0 px-5 py-5">
-                    <Text className="text-white text-[24px] font-serif font-bold tracking-tight mb-2">
-                      {profileData.videos[0].title}
-                    </Text>
-                    <View className="flex-row items-center justify-between">
-                      <View className="flex-row items-center gap-1">
-                        <Text className="text-[#D1D5DB] text-[13px]">
-                          Acoustic Folk • 3.2M views •{" "}
-                        </Text>
-                        <Text className="text-[#E91E76] text-[13px]">
-                          Tap to Judge
-                        </Text>
-                      </View>
-                      <View className="bg-transparent border border-white/20 px-2.5 py-1 rounded-md">
-                        <Text className="text-white text-[11px] font-medium tracking-wide">
-                          03:24
-                        </Text>
+                    {/* Featured Badge */}
+                    <View className="absolute top-4 left-4 bg-[#E91E76] px-3 py-1.5 rounded-md flex-row items-center gap-1.5 shadow-sm">
+                      <Star color="#fff" fill="#fff" size={12} />
+                      <Text className="text-white text-[10px] font-bold tracking-widest uppercase">
+                        FEATURED • TAP TO PLAY FULL
+                      </Text>
+                    </View>
+
+                    {/* Play Button */}
+                    <View className="absolute top-[50%] left-0 right-0 items-center justify-center -translate-y-1/2">
+                      <View className="w-16 h-16 rounded-full border border-white bg-black/30 items-center justify-center">
+                        <Play
+                          color="#fff"
+                          fill="#fff"
+                          size={24}
+                          style={{ marginLeft: 4 }}
+                        />
                       </View>
                     </View>
-                  </View>
-                </TouchableOpacity>
-              ) : (
-                <View className="w-full aspect-[4/3] rounded-[24px] border border-white/5 bg-[#12141A] items-center justify-center p-6">
-                  <Film color="#4B5563" size={48} className="mb-4" />
-                  <Text className="text-white font-bold text-[18px] text-center mb-2">
-                    No performances yet
-                  </Text>
-                  <Text className="text-[#9CA3AF] text-[13px] text-center">
-                    When {profileData?.name || "this artist"} uploads a video,
-                    it will appear here.
-                  </Text>
-                </View>
-              )}
+
+                    {/* Bottom Info */}
+                    <View className="absolute bottom-0 left-0 right-0 px-5 py-5">
+                      <Text className="text-white text-[24px] font-serif font-bold tracking-tight mb-2">
+                        {featuredTitle}
+                      </Text>
+                      <View className="flex-row items-center justify-between">
+                        <View className="flex-row items-center gap-1">
+                          <Text className="text-[#D1D5DB] text-[13px]">
+                            Acoustic Folk • 3.2M views •{" "}
+                          </Text>
+                          <Text className="text-[#E91E76] text-[13px]">
+                            Tap to Watch
+                          </Text>
+                        </View>
+                        <View className="bg-transparent border border-white/20 px-2.5 py-1 rounded-md">
+                          <Text className="text-white text-[11px] font-medium tracking-wide">
+                            03:24
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })()}
             </View>
 
             {/* Performances Row */}
@@ -1339,28 +1383,49 @@ export function ProfileView({
                     title: "Monsoon Motion",
                     time: "03:24",
                     img: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300",
+                    videoUrl: dummyVideos[1],
                   },
                   {
                     title: "City Lights",
                     time: "02:48",
                     img: "https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=300",
+                    videoUrl: dummyVideos[2],
                   },
                   {
                     title: "Falling Again",
                     time: "03:10",
                     img: "https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=300",
+                    videoUrl: dummyVideos[3],
+                  },
+                  {
+                    title: "Studio Pulse",
+                    time: "01:54",
+                    img: "https://images.unsplash.com/photo-1516280440502-a2fc9977823b?w=300",
+                    videoUrl: dummyVideos[4],
                   },
                 ].map((perf, i) => (
                   <TouchableOpacity
                     key={i}
-                    onPress={() => playVideo("dummy")}
+                    onPress={() => playVideo(perf.videoUrl)}
                     activeOpacity={0.8}
                     className={`w-[140px] h-[190px] rounded-[16px] overflow-hidden relative ${i === 0 ? "border-2 border-[#E91E76]" : "border border-white/10"}`}
                   >
-                    <Image
-                      source={{ uri: perf.img }}
-                      className="w-full h-full opacity-80"
-                    />
+                    {Platform.OS === "web" ? (
+                      <video
+                        src={perf.videoUrl}
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        poster={perf.img}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      />
+                    ) : (
+                      <Image
+                        source={{ uri: perf.img }}
+                        className="w-full h-full opacity-80"
+                      />
+                    )}
                     <View className="absolute inset-0 bg-black/40" />
                     <View className="absolute bottom-3 left-3 right-3 flex-row items-end justify-between">
                       <View>
