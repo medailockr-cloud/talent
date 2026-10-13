@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, Image, TouchableOpacity, useWindowDimensions, FlatList, Platform } from 'react-native';
 import { Bookmark, Sparkles, Send, MoreHorizontal, CheckCircle2, ChevronUp, Volume2, VolumeX } from 'lucide-react-native';
 import { useThemeStore } from '../../store/themeStore';
+import { resolveMediaUrl } from '../../utils/api';
 
 const BASE_FLIPS_DATA = [
   { 
@@ -82,9 +83,9 @@ function FlipSlideItem({
   const { theme } = useThemeStore();
   const [videoError, setVideoError] = useState(false);
   const videoRef = useRef<any>(null);
-  const currentVideoSrc = videoError
+  const currentVideoSrc = resolveMediaUrl(videoError
     ? (item.backupVideoUrl || 'http://localhost:3000/uploads/performer_1.mp4')
-    : (item.videoUrl || 'http://localhost:3000/uploads/performer_1.mp4');
+    : (item.videoUrl || 'http://localhost:3000/uploads/performer_1.mp4'));
 
   // Update muted state without resetting video time
   useEffect(() => {

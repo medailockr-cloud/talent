@@ -2,13 +2,13 @@ import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, TouchableOpacity, FlatList, TextInput, Image, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft, Send, Phone, Video, Info } from 'lucide-react-native';
-import { api } from '../../utils/api';
+import { api, BACKEND_URL } from '../../utils/api';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
 import * as Haptics from 'expo-haptics';
 import io from 'socket.io-client';
 
-const SOCKET_URL = 'http://localhost:3000'; // Make sure this matches your backend
+const SOCKET_URL = BACKEND_URL; // Make sure this matches your backend
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams();

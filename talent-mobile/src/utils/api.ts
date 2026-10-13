@@ -2,10 +2,43 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-// Use your computer's local IP address if testing on a real device, 
-// or 10.0.2.2 if testing on an Android emulator.
-// Since we are primarily targeting web right now, localhost is fine.
-const API_URL = 'http://localhost:3000/api';
+import Constants from 'expo-constants';
+
+// Determine the base backend URL dynamically:
+export const getBackendBaseUrl = (): string => {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL.replace(/\/api\/?$/, '');
+  }
+
+  // On Web (browser):
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location) {
+    const hostname = window.location.hostname || 'localhost';
+    const protocol = window.location.protocol || 'http:';
+    // If opening from phone browser via LAN (e.g. 192.168.1.9:8081), hostname is 192.168.1.9
+    return `${protocol}//${hostname}:3000`;
+  }
+
+  // On Native (Expo Go / Android):
+  const hostUri = Constants.expoConfig?.hostUri || (Constants as any)?.manifest2?.extra?.expoGo?.debuggerHost;
+  if (hostUri) {
+    const ip = hostUri.split(':')[0];
+    if (ip && ip !== 'localhost') {
+      return `http://${ip}:3000`;
+    }
+  }
+
+  // Fallback to local machine Wi-Fi IP
+  return 'http://192.168.1.9:3000';
+};
+
+export const BACKEND_URL = getBackendBaseUrl();
+export const API_URL = `${BACKEND_URL}/api`;
+
+export const resolveMediaUrl = (url?: string | null): string => {
+  if (!url) return '';
+  const base = getBackendBaseUrl();
+  return url.replace(/^http:\/\/(localhost|127\.0\.0\.1):3000/, base);
+};
 
 export const api = axios.create({
   baseURL: API_URL,

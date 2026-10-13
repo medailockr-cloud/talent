@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Image, Modal, SafeAreaView, Platform } from 'react-native';
 import { Ticket, MapPin, Calendar, Star, Users, Music, Play, Navigation, X, Clock, Map, ChevronRight, Check, Camera } from 'lucide-react-native';
 import { useThemeStore } from '../../store/themeStore';
+import { resolveMediaUrl } from '../../utils/api';
 
 export function ShowsView() {
   const { theme } = useThemeStore();
@@ -110,7 +111,7 @@ export function ShowsView() {
               <View className="w-full bg-[#100C09] rounded-3xl overflow-hidden border border-white/10 relative">
                 {Platform.OS === 'web' ? (
                   <video
-                    src="http://localhost:3000/uploads/performer_1.mp4"
+                    src={resolveMediaUrl("http://localhost:3000/uploads/performer_1.mp4")}
                     autoPlay
                     loop
                     muted
@@ -382,7 +383,7 @@ export function ShowsView() {
               >
                 {Platform.OS === 'web' ? (
                   <video
-                    src="http://localhost:3000/uploads/performer_1.mp4"
+                    src={resolveMediaUrl("http://localhost:3000/uploads/performer_1.mp4")}
                     controls
                     autoPlay
                     muted

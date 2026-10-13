@@ -59,7 +59,7 @@ import {
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { Switch } from "react-native";
-import { api } from "../../utils/api";
+import { api, resolveMediaUrl } from "../../utils/api";
 import { useAuthStore } from "../../store/authStore";
 import { useThemeStore, THEMES, ThemeId } from "../../store/themeStore";
 
@@ -70,11 +70,11 @@ const avatarImg =
 
 // Real dummy video URLs served from local backend uploads
 const dummyVideos = [
-  "http://localhost:3000/uploads/performer_1.mp4",
-  "http://localhost:3000/uploads/performer_2.mp4",
-  "http://localhost:3000/uploads/performer_3.mp4",
-  "http://localhost:3000/uploads/performer_4.mp4",
-  "http://localhost:3000/uploads/performer_5.mp4",
+  resolveMediaUrl("http://localhost:3000/uploads/performer_1.mp4"),
+  resolveMediaUrl("http://localhost:3000/uploads/performer_2.mp4"),
+  resolveMediaUrl("http://localhost:3000/uploads/performer_3.mp4"),
+  resolveMediaUrl("http://localhost:3000/uploads/performer_4.mp4"),
+  resolveMediaUrl("http://localhost:3000/uploads/performer_5.mp4"),
 ];
 
 // Helper to detect image media

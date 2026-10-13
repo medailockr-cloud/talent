@@ -12,7 +12,7 @@ import Animated, {
 import { Search, EyeOff, Play, Pause, Maximize2, MoreHorizontal, X, Bookmark, MessageCircle, Send, ChevronDown, ChevronRight, Gauge, MapPin, Flag, UserX, User, Bell, Volume2, VolumeX } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useFeed } from '../../hooks/useFeed';
-import { api } from '../../utils/api';
+import { api, resolveMediaUrl } from '../../utils/api';
 import { useThemeStore } from '../../store/themeStore';
 
 const HEADER_HEIGHT = 130;
@@ -158,8 +158,8 @@ function FeedVideoCard({
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  const mainSrc = video.url || video.videoUrl || 'http://localhost:3000/uploads/performer_1.mp4';
-  const fallbackSrc = 'http://localhost:3000/uploads/performer_1.mp4';
+  const mainSrc = resolveMediaUrl(video.url || video.videoUrl || 'http://localhost:3000/uploads/performer_1.mp4');
+  const fallbackSrc = resolveMediaUrl('http://localhost:3000/uploads/performer_1.mp4');
   const srcToUse = videoError ? fallbackSrc : mainSrc;
 
   // Autoplay IntersectionObserver for web
