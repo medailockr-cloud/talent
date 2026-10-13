@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Image, Alert, TextInput, Platform, ScrollView, Modal, Dimensions, PanResponder, KeyboardAvoidingView } from 'react-native';
+import { View, Text, TouchableOpacity, Image, Alert, TextInput, Platform, ScrollView, Modal, Dimensions, PanResponder, KeyboardAvoidingView, ActivityIndicator } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, { 
   useSharedValue, 
   useAnimatedScrollHandler, 
   useAnimatedStyle,
   withSpring,
-  withTiming
+  withTiming,
+  runOnJS
 } from 'react-native-reanimated';
 import { Search, EyeOff, Play, Pause, Maximize2, MoreHorizontal, X, Bookmark, MessageCircle, Send, ChevronDown, ChevronRight, Gauge, MapPin, Flag, UserX, User, Bell, Volume2, VolumeX } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
@@ -132,6 +133,21 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
   const fallbackSrc = 'http://localhost:3000/uploads/performer_1.mp4';
   const srcToUse = videoError ? fallbackSrc : mainSrc;
 
+  const togglePlay = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (isPlaying) {
+      setPlayingVideoId(null);
+      if (Platform.OS === 'web' && videoRef.current) {
+        videoRef.current.pause();
+      }
+    } else {
+      setPlayingVideoId(video.id);
+      if (Platform.OS === 'web' && videoRef.current) {
+        videoRef.current.play().catch(() => {});
+      }
+    }
+  };
+
   useEffect(() => {
     if (Platform.OS === 'web' && videoRef.current) {
       videoRef.current.defaultMuted = true;
@@ -241,13 +257,17 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
   return (
     <View className="mb-6">
       {/* Video Container */}
-      <View className="relative w-full aspect-[16/9.5] rounded-[16px] overflow-hidden border border-white/10 bg-[#100C09] mb-4">
+      <TouchableOpacity 
+        activeOpacity={0.95}
+        onPress={togglePlay}
+        className="relative w-full aspect-[16/9.5] rounded-[16px] overflow-hidden border border-white/10 bg-[#100C09] mb-4"
+      >
         {Platform.OS === 'web' ? (
           <video 
             ref={videoRef}
             key={`${video.id}-${srcToUse}`}
             src={srcToUse} 
-            autoPlay 
+            autoPlay={isPlaying}
             loop
             muted={!isPlaying || isMuted}
             playsInline
@@ -264,32 +284,29 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
         )}
         
         {/* Gradient Overlay Simulation */}
-        <View className="absolute inset-x-0 top-0 h-16 bg-black/40" />
-        <View className="absolute inset-x-0 bottom-0 h-16 bg-black/40" />
+        <View pointerEvents="none" className="absolute inset-x-0 top-0 h-16 bg-black/40" />
+        <View pointerEvents="none" className="absolute inset-x-0 bottom-0 h-16 bg-black/40" />
 
         {/* Top Left: Performance Tag */}
-        <View className="absolute top-4 left-4 flex-row items-center gap-2">
+        <View pointerEvents="none" className="absolute top-4 left-4 flex-row items-center gap-2">
           <Text className="text-[11px] font-bold tracking-[0.1em] text-white uppercase">PERFORMANCE</Text>
           <View className="w-1 h-1 rounded-full bg-white/60" />
           <Text className="text-white text-[11px] font-bold tracking-widest">{video.duration || '0:00'}</Text>
         </View>
 
         {/* Top Right: Popularity Hidden */}
-        <View className="absolute top-3 right-3">
+        <View pointerEvents="none" className="absolute top-3 right-3">
           <View className="px-3 py-1.5 rounded-lg bg-black/60 border border-white/20 flex-row items-center gap-1.5">
             <EyeOff color="#fff" size={12} strokeWidth={2} />
             <Text className="text-[10px] font-bold tracking-[0.1em] text-white uppercase">POPULARITY HIDDEN</Text>
           </View>
         </View>
 
-        {/* Center: Play Button */}
+        {/* Center: Play/Pause Button */}
         <TouchableOpacity 
           activeOpacity={0.8} 
-          className="absolute top-1/2 left-1/2 -ml-7 -mt-7 w-14 h-14 rounded-full bg-black/40 border border-white/80 items-center justify-center"
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            setPlayingVideoId(isPlaying ? null : video.id);
-          }}
+          className="absolute top-1/2 left-1/2 -ml-7 -mt-7 w-14 h-14 rounded-full bg-black/50 border border-white/80 items-center justify-center z-10"
+          onPress={togglePlay}
         >
           {isPlaying ? (
             <Pause color="#fff" fill="#fff" size={24} />
@@ -299,11 +316,12 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
         </TouchableOpacity>
 
         {/* Bottom Right: Controls */}
-        <View className="absolute bottom-3 right-3 flex-row items-center gap-2">
+        <View className="absolute bottom-3 right-3 flex-row items-center gap-2 z-10">
           {Platform.OS === 'web' && (
             <TouchableOpacity 
               activeOpacity={0.8} 
-              onPress={() => {
+              onPress={(e: any) => {
+                if (e && e.stopPropagation) e.stopPropagation();
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 setIsMuted(!isMuted);
                 if (!isPlaying) setPlayingVideoId(video.id);
@@ -317,7 +335,13 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
               )}
             </TouchableOpacity>
           )}
-          <TouchableOpacity activeOpacity={0.8} className="w-8 h-8 rounded-lg bg-black/60 border border-white/20 items-center justify-center">
+          <TouchableOpacity 
+            activeOpacity={0.8} 
+            onPress={(e: any) => {
+              if (e && e.stopPropagation) e.stopPropagation();
+            }}
+            className="w-8 h-8 rounded-lg bg-black/60 border border-white/20 items-center justify-center"
+          >
             <Maximize2 color="#fff" size={14} strokeWidth={2} />
           </TouchableOpacity>
           <View className="h-8 px-3 rounded-lg bg-black/60 border border-white/20 items-center justify-center">
@@ -327,14 +351,14 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
 
         {/* Judging Floating Overlay */}
         {isJudgingActive && (
-          <View className="absolute inset-0 bg-black/60 items-center justify-center z-20">
+          <View pointerEvents="none" className="absolute inset-0 bg-black/60 items-center justify-center z-20">
             <Text className="text-white text-[72px] font-bold tracking-tighter shadow-xl">
               {tempScore.toFixed(1)}
             </Text>
             <Text className="text-white/60 text-[12px] font-medium tracking-widest uppercase mt-4">Slide Up/Down to Adjust</Text>
           </View>
         )}
-      </View>
+      </TouchableOpacity>
 
       <View className="flex-row items-start justify-between mb-4">
         <TouchableOpacity 
@@ -551,24 +575,69 @@ export function HomeView({ user }: { user?: any }) {
   const effectiveFeed = (feedData && feedData.length > 0) ? feedData : initialFeedData;
   const [extraVideos, setExtraVideos] = useState<any[]>([]);
   const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const isLoadingMoreRef = useRef(false);
+  const sentinelRef = useRef<any>(null);
 
   const allFeedItems = [...effectiveFeed, ...extraVideos];
 
+  const hasInitializedPlayingRef = useRef(false);
+
   useEffect(() => {
-    if (allFeedItems && allFeedItems.length > 0 && !playingVideoId) {
+    if (!hasInitializedPlayingRef.current && allFeedItems && allFeedItems.length > 0) {
+      hasInitializedPlayingRef.current = true;
       setPlayingVideoId(allFeedItems[0].id);
     }
-  }, [allFeedItems, playingVideoId]);
+  }, [allFeedItems]);
 
-  const handleLoadMore = () => {
-    setExtraVideos(prev => [
-      ...prev,
-      ...initialFeedData.map((item, idx) => ({
-        ...item,
-        id: `${item.id}-page-${prev.length + idx + 1}`
-      }))
-    ]);
+  const triggerAutoLoadMore = () => {
+    if (isLoadingMoreRef.current) return;
+    isLoadingMoreRef.current = true;
+    setIsLoadingMore(true);
+
+    setTimeout(() => {
+      setExtraVideos(prev => {
+        const sourceList = (feedData && feedData.length > 0) ? feedData : initialFeedData;
+        const newItems = sourceList.map((item, idx) => ({
+          ...item,
+          id: `${item.id}-page-${prev.length + idx + 1}`
+        }));
+        return [...prev, ...newItems];
+      });
+      setIsLoadingMore(false);
+      setTimeout(() => {
+        isLoadingMoreRef.current = false;
+      }, 400);
+    }, 300);
   };
+
+  // IntersectionObserver for automatic infinite loading on Web
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof IntersectionObserver !== 'undefined') {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries[0] && entries[0].isIntersecting) {
+            triggerAutoLoadMore();
+          }
+        },
+        { rootMargin: '500px' }
+      );
+
+      const target = sentinelRef.current;
+      if (target) {
+        const element = target instanceof HTMLElement ? target : (target as any)?._node || (target as any)?.base;
+        if (element && element instanceof HTMLElement) {
+          observer.observe(element);
+        } else if (target && typeof (target as any).querySelector === 'function') {
+          observer.observe(target);
+        }
+      }
+
+      return () => {
+        observer.disconnect();
+      };
+    }
+  }, [allFeedItems.length]);
   
   // Filter Logic based on Tabs and Search
   const filteredData = allFeedItems.filter(v => {
@@ -601,15 +670,23 @@ export function HomeView({ user }: { user?: any }) {
       
       headerTranslateY.value = newTranslateY;
       lastScrollY.value = currentY;
+
+      // Automatically trigger load more when within 600px of bottom
+      const { layoutMeasurement, contentOffset, contentSize } = event;
+      if (layoutMeasurement && contentOffset && contentSize) {
+        if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 600) {
+          runOnJS(triggerAutoLoadMore)();
+        }
+      }
     },
   });
 
   const handleScroll = (event: any) => {
     const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
     if (layoutMeasurement && contentOffset && contentSize) {
-      const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 300;
+      const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 600;
       if (isCloseToBottom) {
-        handleLoadMore();
+        triggerAutoLoadMore();
       }
     }
   };
@@ -716,18 +793,14 @@ export function HomeView({ user }: { user?: any }) {
               />
             ))}
 
-            {/* Seamless Infinite Scroll Loading Indicator */}
-            <View className="py-8 items-center justify-center">
-              <TouchableOpacity 
-                activeOpacity={0.8}
-                onPress={handleLoadMore}
-                className="bg-white/10 px-6 py-3 rounded-full border border-white/20 flex-row items-center gap-2"
-              >
-                <View className="w-2 h-2 rounded-full bg-[#E91E76] animate-pulse" />
-                <Text className="text-white font-medium text-[13px] tracking-wide">
-                  Loading more fresh performances...
+            {/* Seamless Automated Infinite Scroll Loading Indicator */}
+            <View ref={sentinelRef} className="py-10 items-center justify-center">
+              <View className="bg-white/5 border border-white/10 px-5 py-2.5 rounded-full flex-row items-center gap-3">
+                <ActivityIndicator size="small" color="#E91E76" />
+                <Text className="text-[#9CA3AF] font-medium text-[13px] tracking-wide">
+                  {isLoadingMore ? "Fetching fresh performances..." : "Loading more fresh performances..."}
                 </Text>
-              </TouchableOpacity>
+              </View>
             </View>
           </>
         )}

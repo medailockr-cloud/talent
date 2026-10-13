@@ -9,6 +9,9 @@ interface User {
   name?: string;
   avatarUrl?: string;
   bio?: string;
+  title?: string;
+  location?: string;
+  quote?: string;
   followers?: number;
   following?: number;
 }
@@ -62,8 +65,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       } else {
         set({ token: null, user: null, isLoading: false });
       }
-    } catch (error) {
-      console.error('Auth verification failed', error);
+    } catch (error: any) {
+      if (error?.response?.status === 401 || error?.response?.status === 404) {
+        console.log('Session expired or user not found. Stale token cleared.');
+      } else {
+        console.error('Auth verification failed', error);
+      }
       if (Platform.OS === 'web') {
         localStorage.removeItem('token');
       } else {

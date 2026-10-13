@@ -928,7 +928,11 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   // --- Screens ---
 
   const renderHome = () => (
-    <View className="flex-1 bg-[#050608] px-6 pt-16">
+    <ScrollView
+      className="flex-1 bg-[#050608]"
+      contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 40, paddingBottom: 60 }}
+      showsVerticalScrollIndicator={false}
+    >
       <View className="flex-row justify-between items-center mb-8">
         <View className="flex-row items-baseline">
           <Text className="font-bold text-[32px] tracking-tight text-white leading-none font-serif">
@@ -993,7 +997,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         <Text className="text-white font-medium">Drafts • 2</Text>
         <ChevronRight color="#9CA3AF" size={16} className="ml-2" />
       </TouchableOpacity>
-    </View>
+    </ScrollView>
   );
 
   const renderRecord = () => {

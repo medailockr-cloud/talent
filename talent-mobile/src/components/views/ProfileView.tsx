@@ -1025,15 +1025,20 @@ export function ProfileView({
 
             {/* Role & Location */}
             <View className="flex-row items-center justify-center flex-wrap gap-2 mt-2">
-              <Text className="text-[13px] text-[#D1D5DB]">
-                {profileData?.title ? profileData.title.split("•")[0]?.trim() : "Singer"}
-              </Text>
-              {((profileData?.title && profileData.title.split("•").length > 1) || (!profileData?.title)) && (
+              {profileData?.title ? (
+                profileData.title.split("•").map((part: string, idx: number) => (
+                  <React.Fragment key={idx}>
+                    {idx > 0 && <View className="w-1 h-1 rounded-full bg-[#6B7280]" />}
+                    <Text className="text-[13px] text-[#D1D5DB] font-medium">
+                      {part.trim()}
+                    </Text>
+                  </React.Fragment>
+                ))
+              ) : (
                 <>
+                  <Text className="text-[13px] text-[#D1D5DB]">Singer</Text>
                   <View className="w-1 h-1 rounded-full bg-[#6B7280]" />
-                  <Text className="text-[13px] text-[#D1D5DB]">
-                    {profileData?.title ? profileData.title.split("•")[1]?.trim() : "Songwriter"}
-                  </Text>
+                  <Text className="text-[13px] text-[#D1D5DB]">Songwriter</Text>
                 </>
               )}
               <View className="w-1 h-1 rounded-full bg-[#6B7280]" />
@@ -1666,11 +1671,7 @@ export function ProfileView({
                 </Text>
               </View>
               <Text className="text-[#D1D5DB] text-[14px] leading-6">
-                Aarav Nair is a Bengaluru-based singer-songwriter blending
-                stripped-back acoustic arrangements with cinematic vocal
-                modulations. Starting out in underground coffee house sessions,
-                his one-take live recordings have garnered over 3.2M views
-                across blind-judged platforms.
+                {profileData?.bio || "No artist bio added yet. Tap Edit Profile to add your story."}
               </Text>
             </View>
 
@@ -2116,7 +2117,7 @@ export function ProfileView({
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                   Alert.alert(
                     "Request Sent",
-                    "Your booking request has been sent to Aarav Nair!",
+                    `Your booking request has been sent to ${profileData?.name || "the artist"}!`,
                   );
                   setIsInviteModalOpen(false);
                 }}
