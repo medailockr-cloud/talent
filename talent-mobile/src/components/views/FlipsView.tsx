@@ -84,11 +84,23 @@ function FlipSlideItem({
     ? (item.backupVideoUrl || 'http://localhost:3000/uploads/performer_1.mp4')
     : (item.videoUrl || 'http://localhost:3000/uploads/performer_1.mp4');
 
+  // Update muted state without resetting video time
   useEffect(() => {
     if (Platform.OS === 'web' && videoRef.current) {
-      videoRef.current.defaultMuted = true;
       videoRef.current.muted = isMuted;
+    }
+  }, [isMuted]);
+
+  // Handle active slide transitions: stop previous flip, start over when becoming active
+  useEffect(() => {
+    if (Platform.OS === 'web' && videoRef.current) {
       if (isActive) {
+        // Always start over from beginning when this flip becomes active
+        try {
+          videoRef.current.currentTime = 0;
+        } catch (e) {}
+        videoRef.current.defaultMuted = true;
+        videoRef.current.muted = isMuted;
         const p = videoRef.current.play();
         if (p !== undefined) {
           p.catch(() => {
@@ -99,25 +111,52 @@ function FlipSlideItem({
           });
         }
       } else {
-        videoRef.current.pause();
-        videoRef.current.currentTime = 0;
+        // Immediately pause and reset to start when this flip becomes inactive
+        try {
+          videoRef.current.pause();
+          videoRef.current.currentTime = 0;
+        } catch (e) {}
       }
     }
-  }, [isActive, isMuted, currentVideoSrc]);
+  }, [isActive, currentVideoSrc]);
 
   return (
-    <View style={{ height: height, width: width }} className="bg-black relative">
+    <View 
+      style={[
+        { height: height, width: width },
+        Platform.OS === 'web' && ({
+          scrollSnapAlign: 'start',
+          scrollSnapStop: 'always',
+        } as any)
+      ]} 
+      className="bg-black relative"
+    >
       {/* Main Background Media */}
       {Platform.OS === 'web' ? (
         <video 
           ref={videoRef}
           key={`${item.id}-${currentVideoSrc}`}
           src={currentVideoSrc}
-          autoPlay 
+          autoPlay={isActive}
           loop 
           muted={isMuted} 
           playsInline 
           poster={item.image}
+          onLoadedMetadata={() => {
+            if (videoRef.current) {
+              if (isActive) {
+                try {
+                  videoRef.current.currentTime = 0;
+                } catch (e) {}
+                videoRef.current.play().catch(() => {});
+              } else {
+                try {
+                  videoRef.current.pause();
+                  videoRef.current.currentTime = 0;
+                } catch (e) {}
+              }
+            }
+          }}
           onError={() => {
             if (!videoError) setVideoError(true);
           }}
@@ -214,7 +253,10 @@ function FlipSlideItem({
 
         {/* Name & Title */}
         <View className="flex-row items-center gap-2 mb-1">
-          <Text className="text-white text-[38px] font-serif font-bold tracking-tight shadow-black shadow-lg leading-tight">
+          <Text 
+            className="text-white text-[38px] font-serif font-bold tracking-tight leading-tight"
+            style={{ textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 6 }}
+          >
             {item.name}
           </Text>
           {item.isVerified && (
@@ -222,7 +264,10 @@ function FlipSlideItem({
           )}
         </View>
         
-        <Text className="text-[#9CA3AF] text-[15px] font-medium tracking-wide mb-5 shadow-black shadow-sm">
+        <Text 
+          className="text-[#D1D5DB] text-[15px] font-medium tracking-wide mb-5"
+          style={{ textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 }}
+        >
           {item.role}
         </Text>
 
@@ -240,6 +285,12 @@ export function FlipsView() {
   const [flipsData, setFlipsData] = useState(() => BASE_FLIPS_DATA);
   const [activeIndex, setActiveIndex] = useState(0);
   const [isMuted, setIsMuted] = useState(true);
+
+  const flatListRef = useRef<FlatList>(null);
+  const activeIndexRef = useRef(0);
+  activeIndexRef.current = activeIndex;
+  const flipsDataRef = useRef(flipsData);
+  flipsDataRef.current = flipsData;
 
   // Infinite / Unlimited Scrolling Handler
   const handleEndReached = () => {
@@ -262,6 +313,94 @@ export function FlipsView() {
     itemVisiblePercentThreshold: 50,
   }).current;
 
+  const handleScroll = (event: any) => {
+    const offsetY = event.nativeEvent?.contentOffset?.y ?? 0;
+    if (height > 0) {
+      const calculatedIndex = Math.round(offsetY / height);
+      const clampedIndex = Math.max(0, Math.min(flipsData.length - 1, calculatedIndex));
+      setActiveIndex(prev => (prev !== clampedIndex ? clampedIndex : prev));
+    }
+  };
+
+  const getItemLayout = (_: any, index: number) => ({
+    length: height,
+    offset: height * index,
+    index,
+  });
+
+  // Strict 1-flip-at-a-time transition on Web (Wheel + Arrow Keys)
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+
+    let isThrottled = false;
+    const scrollNode = (flatListRef.current as any)?.getScrollableNode?.() || (flatListRef.current as any);
+
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) < 15) return;
+      // Prevent unconstrained continuous momentum skipping past multiple flips
+      e.preventDefault();
+
+      if (isThrottled) return;
+      isThrottled = true;
+
+      const current = activeIndexRef.current;
+      const target = e.deltaY > 0
+        ? Math.min(flipsDataRef.current.length - 1, current + 1)
+        : Math.max(0, current - 1);
+
+      if (target !== current) {
+        flatListRef.current?.scrollToIndex({ index: target, animated: true });
+        setActiveIndex(target);
+      }
+
+      setTimeout(() => {
+        isThrottled = false;
+      }, 400);
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown' || e.key === 'PageDown') {
+        e.preventDefault();
+        if (isThrottled) return;
+        isThrottled = true;
+        const current = activeIndexRef.current;
+        const target = Math.min(flipsDataRef.current.length - 1, current + 1);
+        if (target !== current) {
+          flatListRef.current?.scrollToIndex({ index: target, animated: true });
+          setActiveIndex(target);
+        }
+        setTimeout(() => {
+          isThrottled = false;
+        }, 300);
+      } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+        e.preventDefault();
+        if (isThrottled) return;
+        isThrottled = true;
+        const current = activeIndexRef.current;
+        const target = Math.max(0, current - 1);
+        if (target !== current) {
+          flatListRef.current?.scrollToIndex({ index: target, animated: true });
+          setActiveIndex(target);
+        }
+        setTimeout(() => {
+          isThrottled = false;
+        }, 300);
+      }
+    };
+
+    if (scrollNode && scrollNode.addEventListener) {
+      scrollNode.addEventListener('wheel', onWheel, { passive: false });
+    }
+    window.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      if (scrollNode && scrollNode.removeEventListener) {
+        scrollNode.removeEventListener('wheel', onWheel);
+      }
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [height]);
+
   const renderItem = ({ item, index }: { item: typeof BASE_FLIPS_DATA[0], index: number }) => (
     <FlipSlideItem
       item={item}
@@ -276,6 +415,7 @@ export function FlipsView() {
   return (
     <View className="flex-1 bg-black">
       <FlatList 
+        ref={flatListRef}
         data={flipsData}
         renderItem={renderItem}
         keyExtractor={item => item.id}
@@ -284,14 +424,25 @@ export function FlipsView() {
         snapToInterval={height}
         snapToAlignment="start"
         decelerationRate="fast"
+        disableIntervalMomentum={true}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        getItemLayout={getItemLayout}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         bounces={false}
-        initialNumToRender={3}
-        windowSize={5}
-        removeClippedSubviews={true}
+        initialNumToRender={2}
+        maxToRenderPerBatch={2}
+        windowSize={3}
+        removeClippedSubviews={Platform.OS !== 'web'}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
+        onScrollToIndexFailed={(info) => {
+          setTimeout(() => {
+            flatListRef.current?.scrollToIndex({ index: info.index, animated: true });
+          }, 100);
+        }}
+        style={Platform.OS === 'web' ? ({ scrollSnapType: 'y mandatory' } as any) : undefined}
       />
     </View>
   );
