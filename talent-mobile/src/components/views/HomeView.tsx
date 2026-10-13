@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, Image, Alert, TextInput, Platform, ScrollView, Modal, Dimensions, PanResponder, KeyboardAvoidingView, ActivityIndicator } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, { 
@@ -111,9 +111,28 @@ const initialFeedData = [
   }
 ];
 
-function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { video: any, playingVideoId: string | null, setPlayingVideoId: (id: string | null) => void, onPass: () => void }) {
+function FeedVideoCard({ 
+  video, 
+  playingVideoId, 
+  setPlayingVideoId, 
+  onPass,
+  isMuted,
+  setIsMuted,
+  onVisible,
+  onManualToggle
+}: { 
+  video: any; 
+  playingVideoId: string | null; 
+  setPlayingVideoId: (id: string | null) => void; 
+  onPass: () => void;
+  isMuted: boolean;
+  setIsMuted: (val: boolean) => void;
+  onVisible?: (id: string) => void;
+  onManualToggle?: (id: string, willPlay: boolean) => void;
+}) {
   const router = useRouter();
   const isPlaying = String(playingVideoId) === String(video.id);
+  const containerRef = useRef<any>(null);
   
   // Interactive States
   const [isKept, setIsKept] = useState(video.isLiked || false);
@@ -125,7 +144,6 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
   const [attachMoment, setAttachMoment] = useState(false);
   
   const [showOptions, setShowOptions] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
   const [videoError, setVideoError] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -142,40 +160,100 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
   const fallbackSrc = 'http://localhost:3000/uploads/performer_1.mp4';
   const srcToUse = videoError ? fallbackSrc : mainSrc;
 
+  // Autoplay IntersectionObserver for web
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof IntersectionObserver === 'undefined') return;
+
+    let observer: IntersectionObserver | null = null;
+    let timer: any = null;
+
+    const setupObserver = () => {
+      const node = containerRef.current;
+      const element = (node instanceof HTMLElement ? node : (node as any)?._node || (node as any)?.base)
+        || (typeof document !== 'undefined' ? document.getElementById(`feed-card-${video.id}`) : null);
+
+      if (!element || !(element instanceof HTMLElement)) {
+        timer = setTimeout(setupObserver, 100);
+        return;
+      }
+
+      observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              onVisible?.(video.id);
+            }
+          });
+        },
+        {
+          rootMargin: '-25% 0px -25% 0px',
+          threshold: 0.15,
+        }
+      );
+
+      observer.observe(element);
+    };
+
+    setupObserver();
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      if (observer) observer.disconnect();
+    };
+  }, [video.id, onVisible]);
+
   const togglePlay = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (isPlaying) {
       setPlayingVideoId(null);
+      onManualToggle?.(video.id, false);
       if (Platform.OS === 'web' && videoRef.current) {
         videoRef.current.pause();
       }
     } else {
       setPlayingVideoId(video.id);
+      onManualToggle?.(video.id, true);
       if (Platform.OS === 'web' && videoRef.current) {
         videoRef.current.play().catch(() => {});
       }
     }
   };
 
+  // Sync muted state without resetting video time
+  useEffect(() => {
+    if (Platform.OS === 'web' && videoRef.current) {
+      videoRef.current.muted = isMuted;
+    }
+  }, [isMuted]);
+
+  // Handle active video transitions: start over when becoming playing, pause when stopped
   useEffect(() => {
     if (Platform.OS === 'web' && videoRef.current) {
       videoRef.current.defaultMuted = true;
-      videoRef.current.muted = !isPlaying || isMuted;
+      videoRef.current.muted = isMuted;
       if (isPlaying) {
+        try {
+          videoRef.current.currentTime = 0;
+        } catch (e) {}
+
         const p = videoRef.current.play();
         if (p !== undefined) {
           p.catch(() => {
             if (videoRef.current) {
               videoRef.current.muted = true;
+              setIsMuted(true);
               videoRef.current.play().catch(() => {});
             }
           });
         }
       } else {
-        videoRef.current.pause();
+        try {
+          videoRef.current.pause();
+          videoRef.current.currentTime = 0;
+        } catch (e) {}
       }
     }
-  }, [isPlaying, isMuted, srcToUse]);
+  }, [isPlaying, srcToUse]);
   
   // Judging States (Press + Move + Release + Tap Modal)
   const [judgeScore, setJudgeScore] = useState<number | null>(video.userRating || null);
@@ -291,7 +369,11 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
   };
 
   return (
-    <View className="bg-[#0B0D13] rounded-[24px] p-3 border border-white/10 mb-6 shadow-2xl overflow-hidden">
+    <View 
+      ref={containerRef} 
+      nativeID={`feed-card-${video.id}`}
+      className="bg-[#0B0D13] rounded-[24px] p-3 border border-white/10 mb-6 shadow-2xl overflow-hidden"
+    >
       {/* Video Playback Area */}
       <TouchableOpacity 
         activeOpacity={0.95}
@@ -387,12 +469,16 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
                 onPress={(e: any) => {
                   if (e?.stopPropagation) e.stopPropagation();
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setIsMuted(!isMuted);
-                  if (!isPlaying) setPlayingVideoId(video.id);
+                  const nextMuted = !isMuted;
+                  setIsMuted(nextMuted);
+                  if (!isPlaying) {
+                    setPlayingVideoId(video.id);
+                    onManualToggle?.(video.id, true);
+                  }
                 }}
                 className="w-8 h-8 rounded-full bg-black/60 backdrop-blur-md border border-white/15 items-center justify-center"
               >
-                {isMuted || !isPlaying ? (
+                {isMuted ? (
                   <VolumeX color="#9CA3AF" size={14} />
                 ) : (
                   <Volume2 color="#E91E76" size={14} />
@@ -775,6 +861,10 @@ export function HomeView({ user }: { user?: any }) {
   const effectiveFeed = (feedData && feedData.length > 0) ? feedData : initialFeedData;
   const [extraVideos, setExtraVideos] = useState<any[]>([]);
   const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
+  const [isGlobalMuted, setIsGlobalMuted] = useState(true);
+  const manuallyPausedIdRef = useRef<string | null>(null);
+  const autoPlayDebounceRef = useRef<any>(null);
+
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const isLoadingMoreRef = useRef(false);
   const sentinelRef = useRef<any>(null);
@@ -789,6 +879,21 @@ export function HomeView({ user }: { user?: any }) {
       setPlayingVideoId(allFeedItems[0].id);
     }
   }, [allFeedItems]);
+
+  const handleCardVisible = useCallback((id: string) => {
+    if (manuallyPausedIdRef.current === id) return;
+    if (autoPlayDebounceRef.current) {
+      clearTimeout(autoPlayDebounceRef.current);
+    }
+    autoPlayDebounceRef.current = setTimeout(() => {
+      manuallyPausedIdRef.current = null;
+      setPlayingVideoId(id);
+    }, 120);
+  }, []);
+
+  const handleManualToggle = useCallback((id: string, willPlay: boolean) => {
+    manuallyPausedIdRef.current = willPlay ? null : id;
+  }, []);
 
   const triggerAutoLoadMore = () => {
     if (isLoadingMoreRef.current) return;
@@ -849,6 +954,16 @@ export function HomeView({ user }: { user?: any }) {
     return matchesTab;
   });
 
+  // Switch tabs auto-play first card of new tab
+  useEffect(() => {
+    manuallyPausedIdRef.current = null;
+    if (filteredData.length > 0) {
+      setPlayingVideoId(filteredData[0].id);
+    } else {
+      setPlayingVideoId(null);
+    }
+  }, [activeFeedTab]);
+
   const scrollY = useSharedValue(0);
   const lastScrollY = useSharedValue(0);
   const headerTranslateY = useSharedValue(0);
@@ -888,6 +1003,17 @@ export function HomeView({ user }: { user?: any }) {
       if (isCloseToBottom) {
         triggerAutoLoadMore();
       }
+
+      // Fallback autoplay calculation for Native platforms
+      if (Platform.OS !== 'web' && filteredData.length > 0) {
+        const approximateCardHeight = Dimensions.get('window').width * (5/4) + 160;
+        const index = Math.round(contentOffset.y / approximateCardHeight);
+        const target = filteredData[Math.min(Math.max(0, index), filteredData.length - 1)];
+        if (target && target.id !== playingVideoId && manuallyPausedIdRef.current !== target.id) {
+          manuallyPausedIdRef.current = null;
+          setPlayingVideoId(target.id);
+        }
+      }
     }
   };
 
@@ -909,10 +1035,9 @@ export function HomeView({ user }: { user?: any }) {
   const handlePass = (currentIndex: number) => {
     if (scrollRef.current && filteredData.length > currentIndex + 1) {
       // Calculate approximate offset: Header + (Card height + Margin) * nextIndex
-      // A more robust way in React Native is using flatlist, but with ScrollView we estimate
       const approximateCardHeight = Dimensions.get('window').width * (5/4) + 160;
       scrollRef.current.scrollTo({ y: (currentIndex + 1) * approximateCardHeight, animated: true });
-      // Pause current, maybe auto-play next
+      manuallyPausedIdRef.current = null;
       setPlayingVideoId(filteredData[currentIndex + 1].id);
     }
   };
@@ -975,6 +1100,7 @@ export function HomeView({ user }: { user?: any }) {
         showsVerticalScrollIndicator={false}
         onScroll={scrollHandler}
         onMomentumScrollEnd={handleScroll}
+        onScrollEndDrag={handleScroll}
         scrollEventThrottle={16}
       >
         {filteredData.length === 0 ? (
@@ -990,6 +1116,10 @@ export function HomeView({ user }: { user?: any }) {
                 playingVideoId={playingVideoId} 
                 setPlayingVideoId={setPlayingVideoId}
                 onPass={() => handlePass(index)}
+                isMuted={isGlobalMuted}
+                setIsMuted={setIsGlobalMuted}
+                onVisible={handleCardVisible}
+                onManualToggle={handleManualToggle}
               />
             ))}
 
