@@ -255,19 +255,22 @@ function FeedVideoCard({
     }
   }, [isPlaying, srcToUse]);
   
-  // Judging States (Press + Move + Release + Tap Modal)
+  // Judging States (Press + Slide Up/Down Gesture)
   const [judgeScore, setJudgeScore] = useState<number | null>(video.userRating || null);
   const [isJudgingActive, setIsJudgingActive] = useState(false);
   const [tempScore, setTempScore] = useState<number>(video.userRating || 5.0);
-  const [showJudgeModal, setShowJudgeModal] = useState(false);
 
   const judgeScoreRef = useRef<number | null>(video.userRating || null);
   const tempScoreRef = useRef<number>(video.userRating || 5.0);
-  const isDraggingRef = useRef(false);
   const startScoreRef = useRef<number>(video.userRating || 5.0);
+  const startClientYRef = useRef<number>(0);
 
   useEffect(() => {
     judgeScoreRef.current = judgeScore;
+    if (judgeScore !== null) {
+      tempScoreRef.current = judgeScore;
+      setTempScore(judgeScore);
+    }
   }, [judgeScore]);
 
   const saveScore = (score: number) => {
@@ -280,52 +283,89 @@ function FeedVideoCard({
     api.post(`/videos/${video.id}/rate`, { score: finalScore }).catch(err => console.error("Rate err:", err));
   };
 
-  // Judging PanResponder
+  const handleGestureStart = (clientY?: number) => {
+    const initial = judgeScoreRef.current ?? 5.0;
+    startScoreRef.current = initial;
+    tempScoreRef.current = initial;
+    setTempScore(initial);
+    setIsJudgingActive(true);
+    if (clientY !== undefined) {
+      startClientYRef.current = clientY;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handleGestureMoveDelta = (deltaY: number) => {
+    // Negative deltaY (dragging UP) increases score, positive deltaY (dragging DOWN) decreases.
+    // Sensitivity: 15 pixels = 0.1 score change
+    const deltaScore = -deltaY / 15;
+    let newScore = startScoreRef.current + deltaScore;
+    newScore = Math.max(1.0, Math.min(10.0, newScore));
+    const rounded = parseFloat(newScore.toFixed(1));
+
+    if (Math.floor(rounded) !== Math.floor(tempScoreRef.current)) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
+    }
+
+    tempScoreRef.current = rounded;
+    setTempScore(rounded);
+  };
+
+  const handleGestureEnd = () => {
+    setIsJudgingActive(false);
+    saveScore(tempScoreRef.current);
+  };
+
+  // Judging PanResponder for Touch on Native
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 4,
+      onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: () => {
-        isDraggingRef.current = false;
-        const initial = judgeScoreRef.current ?? 5.0;
-        startScoreRef.current = initial;
-        tempScoreRef.current = initial;
-        setTempScore(initial);
-        setIsJudgingActive(true);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        handleGestureStart();
       },
       onPanResponderMove: (_, gestureState) => {
-        if (Math.abs(gestureState.dy) > 6) {
-          isDraggingRef.current = true;
-        }
-        // Move UP (negative dy) increases score, DOWN (positive dy) decreases.
-        // Sensitivity: 15 pixels = 0.1 score change
-        const delta = -gestureState.dy / 15;
-        let newScore = startScoreRef.current + delta;
-        newScore = Math.max(1.0, Math.min(10.0, newScore));
-        const rounded = parseFloat(newScore.toFixed(1));
-        
-        if (Math.floor(rounded) !== Math.floor(tempScoreRef.current)) {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
-        }
-        
-        tempScoreRef.current = rounded;
-        setTempScore(rounded);
+        handleGestureMoveDelta(gestureState.dy);
       },
       onPanResponderRelease: () => {
-        setIsJudgingActive(false);
-        if (isDraggingRef.current) {
-          saveScore(tempScoreRef.current);
-        } else {
-          // Tap without drag: open interactive judge sheet
-          setShowJudgeModal(true);
-        }
+        handleGestureEnd();
       },
       onPanResponderTerminate: () => {
         setIsJudgingActive(false);
       }
     })
   ).current;
+
+  // Web Pointer Drag Handlers (ultra smooth on desktop mouse & trackpad)
+  const webPointerHandlers = Platform.OS === 'web' ? {
+    onPointerDown: (e: any) => {
+      e.preventDefault();
+      try {
+        e.currentTarget?.setPointerCapture?.(e.pointerId);
+      } catch (err) {}
+      handleGestureStart(e.clientY);
+    },
+    onPointerMove: (e: any) => {
+      if (isJudgingActive) {
+        e.preventDefault();
+        const deltaY = e.clientY - startClientYRef.current;
+        handleGestureMoveDelta(deltaY);
+      }
+    },
+    onPointerUp: (e: any) => {
+      if (isJudgingActive) {
+        try {
+          e.currentTarget?.releasePointerCapture?.(e.pointerId);
+        } catch (err) {}
+        handleGestureEnd();
+      }
+    },
+    onPointerCancel: () => {
+      if (isJudgingActive) {
+        setIsJudgingActive(false);
+      }
+    }
+  } : {};
 
   const handleKeepToggle = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -506,14 +546,17 @@ function FeedVideoCard({
 
         {/* Judging Floating Overlay */}
         {isJudgingActive && (
-          <View pointerEvents="none" className="absolute inset-0 bg-black/70 backdrop-blur-sm items-center justify-center z-30">
+          <View pointerEvents="none" className="absolute inset-0 bg-black/75 backdrop-blur-sm items-center justify-center z-30">
             <Text 
-              className="text-white text-[76px] font-black tracking-tighter"
-              style={{ textShadowColor: 'rgba(233,30,118,0.5)', textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 16 }}
+              className="text-white text-[82px] font-black tracking-tighter"
+              style={{ textShadowColor: 'rgba(233,30,118,0.6)', textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 20 }}
             >
               {tempScore.toFixed(1)}
             </Text>
-            <Text className="text-[#E91E76] text-[12px] font-bold tracking-widest uppercase mt-3">★ Slide Up / Down to Score ★</Text>
+            <View className="flex-row items-center gap-2 bg-[#E91E76]/25 border border-[#E91E76] px-4 py-1.5 rounded-full mt-3">
+              <Gauge color="#E91E76" size={14} />
+              <Text className="text-[#E91E76] text-[11px] font-bold tracking-widest uppercase">Slide ↕ to Score • Release to Set</Text>
+            </View>
           </View>
         )}
       </TouchableOpacity>
@@ -571,24 +614,33 @@ function FeedVideoCard({
           </TouchableOpacity>
         </View>
 
-        {/* JUDGE Button */}
-        <View {...panResponder.panHandlers}>
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => setShowJudgeModal(true)}
-            className={`rounded-full h-[36px] px-4 flex-row items-center gap-2 shadow-lg ${
-              judgeScore !== null 
+        {/* SCROLLING JUDGE BUTTON with Direct Drag Gesture */}
+        <View 
+          {...panResponder.panHandlers}
+          {...webPointerHandlers}
+          style={{
+            touchAction: 'none',
+            userSelect: 'none',
+            cursor: 'ns-resize'
+          } as any}
+          className={`rounded-full h-[36px] px-4 flex-row items-center gap-2 shadow-lg select-none ${
+            isJudgingActive
+              ? 'bg-[#E91E76] scale-105 shadow-[#E91E76]/50'
+              : judgeScore !== null 
                 ? 'bg-[#E91E76]/20 border border-[#E91E76]' 
                 : 'bg-[#E91E76]'
-            }`}
-          >
-            <Gauge color={judgeScore !== null ? "#E91E76" : "#fff"} size={14} />
-            <Text className={`text-[11px] font-bold tracking-wider uppercase ${
-              judgeScore !== null ? 'text-[#E91E76]' : 'text-white'
-            }`}>
-              {judgeScore !== null ? `${judgeScore.toFixed(1)} ★` : 'JUDGE'}
-            </Text>
-          </TouchableOpacity>
+          }`}
+        >
+          <Gauge color={judgeScore !== null && !isJudgingActive ? "#E91E76" : "#fff"} size={14} />
+          <Text className={`text-[11px] font-bold tracking-wider uppercase select-none ${
+            judgeScore !== null && !isJudgingActive ? 'text-[#E91E76]' : 'text-white'
+          }`}>
+            {isJudgingActive 
+              ? `${tempScore.toFixed(1)} ★` 
+              : judgeScore !== null 
+                ? `${judgeScore.toFixed(1)} ★` 
+                : 'JUDGE ↕'}
+          </Text>
         </View>
       </View>
 
@@ -731,119 +783,6 @@ function FeedVideoCard({
               </KeyboardAvoidingView>
             </View>
           </View>
-        </Modal>
-      )}
-      {/* Interactive Judging Sheet / Modal */}
-      {showJudgeModal && (
-        <Modal visible={true} transparent={true} animationType="fade" onRequestClose={() => setShowJudgeModal(false)}>
-          <TouchableOpacity activeOpacity={1} onPress={() => setShowJudgeModal(false)} className="flex-1 bg-black/75 justify-end items-center">
-            <TouchableOpacity activeOpacity={1} onPress={(e: any) => e.stopPropagation?.()} className="bg-[#171922] w-full max-w-md rounded-t-3xl pb-10 pt-5 px-6 border-t border-white/10">
-              <View className="w-10 h-1 bg-white/20 rounded-full self-center mb-5" />
-              
-              <View className="flex-row items-center justify-between mb-3">
-                <View className="flex-row items-center gap-2">
-                  <Gauge color="#E91E76" size={20} />
-                  <Text className="text-white text-lg font-bold">Judge Performance</Text>
-                </View>
-                <TouchableOpacity onPress={() => setShowJudgeModal(false)} className="p-1">
-                  <X color="#9CA3AF" size={20} />
-                </TouchableOpacity>
-              </View>
-
-              <Text className="text-[#9CA3AF] text-xs mb-5">Rate this performance on a scale of 1.0 to 10.0</Text>
-
-              {/* Big Score Display */}
-              <View className="items-center justify-center my-2">
-                <View className="w-28 h-28 rounded-full bg-[#E91E76]/10 border-2 border-[#E91E76] items-center justify-center shadow-lg shadow-[#E91E76]/30">
-                  <Text className="text-white text-4xl font-extrabold tracking-tight">
-                    {tempScore.toFixed(1)}
-                  </Text>
-                  <Text className="text-[#E91E76] text-[10px] font-bold tracking-widest uppercase mt-0.5">SCORE</Text>
-                </View>
-              </View>
-
-              {/* Score Stepper Controls (- / +) */}
-              <View className="flex-row items-center justify-center gap-4 my-4">
-                <TouchableOpacity 
-                  onPress={() => {
-                    const next = Math.max(1.0, parseFloat((tempScore - 0.5).toFixed(1)));
-                    setTempScore(next);
-                    tempScoreRef.current = next;
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }}
-                  className="w-12 h-10 rounded-xl bg-white/10 border border-white/15 items-center justify-center active:bg-white/20"
-                >
-                  <Text className="text-white text-sm font-bold">-0.5</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  onPress={() => {
-                    const next = Math.max(1.0, parseFloat((tempScore - 0.1).toFixed(1)));
-                    setTempScore(next);
-                    tempScoreRef.current = next;
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }}
-                  className="w-10 h-10 rounded-xl bg-white/10 border border-white/15 items-center justify-center active:bg-white/20"
-                >
-                  <Text className="text-white text-sm font-bold">-0.1</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  onPress={() => {
-                    const next = Math.min(10.0, parseFloat((tempScore + 0.1).toFixed(1)));
-                    setTempScore(next);
-                    tempScoreRef.current = next;
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }}
-                  className="w-10 h-10 rounded-xl bg-white/10 border border-white/15 items-center justify-center active:bg-white/20"
-                >
-                  <Text className="text-white text-sm font-bold">+0.1</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  onPress={() => {
-                    const next = Math.min(10.0, parseFloat((tempScore + 0.5).toFixed(1)));
-                    setTempScore(next);
-                    tempScoreRef.current = next;
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }}
-                  className="w-12 h-10 rounded-xl bg-white/10 border border-white/15 items-center justify-center active:bg-white/20"
-                >
-                  <Text className="text-white text-sm font-bold">+0.5</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Quick Preset Buttons */}
-              <View className="flex-row items-center justify-center gap-1.5 mb-6 flex-wrap">
-                {[6.0, 7.0, 8.0, 8.5, 9.0, 9.5, 10.0].map((val) => (
-                  <TouchableOpacity
-                    key={val}
-                    onPress={() => {
-                      setTempScore(val);
-                      tempScoreRef.current = val;
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    }}
-                    className={`px-3 py-1.5 rounded-lg border ${tempScore === val ? 'bg-[#E91E76] border-[#E91E76]' : 'bg-white/5 border-white/10'}`}
-                  >
-                    <Text className={`text-xs font-semibold ${tempScore === val ? 'text-white' : 'text-[#9CA3AF]'}`}>{val.toFixed(1)}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* Submit Button */}
-              <TouchableOpacity
-                onPress={() => {
-                  saveScore(tempScore);
-                  setShowJudgeModal(false);
-                }}
-                className="w-full bg-[#E91E76] h-12 rounded-xl items-center justify-center shadow-lg shadow-[#E91E76]/40"
-              >
-                <Text className="text-white font-bold text-base tracking-wide">
-                  Confirm Rating • {tempScore.toFixed(1)} ★
-                </Text>
-              </TouchableOpacity>
-            </TouchableOpacity>
-          </TouchableOpacity>
         </Modal>
       )}
     </View>
