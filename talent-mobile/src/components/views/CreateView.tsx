@@ -79,6 +79,8 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import { api } from "../../utils/api";
+import { useUIStore } from "../../store/uiStore";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // --- Types & Filter Configurations ---
 export interface TalentFilter {
@@ -355,6 +357,7 @@ type CreateStep =
   | "SUCCESS";
 
 export function CreateView({ onClose }: { onClose?: () => void }) {
+  const insets = useSafeAreaInsets();
   // --- Permissions ---
   const [facing, setFacing] = useState<"front" | "back">(
     Platform.OS === "web" ? "front" : "back",
@@ -364,6 +367,14 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
   // --- State ---
   const [step, setStep] = useState<CreateStep>("HOME");
+  const { setIsTabBarHidden } = useUIStore();
+
+  useEffect(() => {
+    setIsTabBarHidden(step !== "HOME");
+    return () => {
+      setIsTabBarHidden(false);
+    };
+  }, [step, setIsTabBarHidden]);
   const [recordedVideoUri, setRecordedVideoUri] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<"video" | "image">("video");
   const [cameraMode, setCameraMode] = useState<"video" | "photo">("video");
@@ -774,33 +785,46 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   }
 
   const handlePublish = async () => {
+    if (!recordedVideoUri) {
+      Alert.alert("No Media", "Please record or select a video before publishing.");
+      return;
+    }
+
     setStep("UPLOADING");
+    setUploadProgress(15);
 
-    // Simulate upload progress
-    let progress = 0;
+    // Smoothly advance progress while upload completes
     const interval = setInterval(() => {
-      progress += 10;
-      setUploadProgress(progress);
-      if (progress >= 100) {
-        clearInterval(interval);
+      setUploadProgress((prev) => (prev < 90 ? prev + 15 : prev));
+    }, 250);
 
-        // Execute real upload here
-        submitToServer()
-          .then(() => {
-            setStep("SUCCESS");
-          })
-          .catch((err) => {
-            console.error(err);
-            setStep("SUMMARY"); // revert on error
-          });
-      }
-    }, 300);
+    try {
+      await submitToServer();
+      clearInterval(interval);
+      setUploadProgress(100);
+      setTimeout(() => {
+        setStep("SUCCESS");
+      }, 400);
+    } catch (err: any) {
+      clearInterval(interval);
+      console.error("Upload failed:", err);
+      const serverMsg =
+        err?.response?.data?.error ||
+        err?.message ||
+        "Upload failed. Please try again.";
+      Alert.alert("Upload Error", serverMsg);
+      setStep("SUMMARY"); // revert on error
+    }
   };
 
   const submitToServer = async () => {
     try {
+      if (!recordedVideoUri) {
+        throw new Error("No media selected to publish.");
+      }
+
       const formData = new FormData();
-      formData.append("title", title.trim());
+      formData.append("title", title.trim() || "Untitled Performance");
       formData.append("description", captionText.trim() || "");
       if (selectedSoundTrack !== "none") {
         formData.append("soundtrack", selectedSoundTrack);
@@ -812,35 +836,31 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       formData.append("allowJudging", String(allowJudging));
       formData.append("filter", activeFilter);
 
-      if (recordedVideoUri) {
-        const isImg = mediaType === "image";
-        const filename = isImg ? "photo.jpg" : "video.mp4";
-        const filetype = isImg ? "image/jpeg" : "video/mp4";
+      const isImg = mediaType === "image";
+      const filename = isImg ? "photo.jpg" : "video.mp4";
+      const filetype = isImg ? "image/jpeg" : "video/mp4";
 
-        if (Platform.OS === "web") {
-          const res = await fetch(recordedVideoUri);
-          const blob = await res.blob();
-          formData.append("video", blob, filename);
-          if (isImg) {
-            formData.append("image", blob, filename);
-          }
-        } else {
-          formData.append("video", {
-            uri: recordedVideoUri,
-            name: filename,
-            type: filetype,
-          } as any);
+      if (Platform.OS === "web") {
+        const res = await fetch(recordedVideoUri);
+        const blob = await res.blob();
+        formData.append("video", blob, filename);
+        if (isImg) {
+          formData.append("image", blob, filename);
         }
+      } else {
+        formData.append("video", {
+          uri: recordedVideoUri,
+          name: filename,
+          type: filetype,
+        } as any);
       }
 
-      console.log("Sending to server...");
-      await api.post("/videos", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
+      console.log("Sending video to server...");
+      // Do NOT explicitly set 'Content-Type': 'multipart/form-data'.
+      // Axios and the browser automatically attach the multipart boundary required by Multer.
+      await api.post("/videos", formData);
     } catch (e) {
-      console.error(e);
+      console.error("submitToServer error:", e);
       throw e;
     }
   };
@@ -914,7 +934,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     onBack: () => void;
     rightEl?: React.ReactNode;
   }) => (
-    <View className="flex-row items-center justify-between px-5 mb-8">
+    <View className="flex-row items-center justify-between px-5 mb-5">
       <TouchableOpacity onPress={onBack} className="p-1 -ml-1">
         <ChevronLeft color="#fff" size={28} />
       </TouchableOpacity>
@@ -1132,7 +1152,15 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   };
 
   const renderUpload = () => (
-    <View className="flex-1 bg-[#050608] pt-14">
+    <ScrollView 
+      className="flex-1 bg-[#050608]"
+      contentContainerStyle={{
+        flexGrow: 1,
+        paddingTop: Math.max(insets.top, 20),
+        paddingBottom: Math.max(insets.bottom, 28),
+      }}
+      showsVerticalScrollIndicator={false}
+    >
       <TopNav title="Upload Performance" onBack={() => setStep("HOME")} />
 
       <View className="px-5 mt-2">
@@ -1216,7 +1244,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           Supported: MP4, MOV, HEVC{"\n"}Max size: 500 MB
         </Text>
       </View>
-    </View>
+    </ScrollView>
   );
 
   const renderPreview = () => (
@@ -2790,16 +2818,24 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   );
 
   const renderChooseTalent = () => (
-    <View className="flex-1 bg-[#050608] pt-14">
+    <ScrollView
+      className="flex-1 bg-[#050608]"
+      contentContainerStyle={{
+        flexGrow: 1,
+        paddingTop: Math.max(insets.top, 20),
+        paddingBottom: Math.max(insets.bottom, 24),
+      }}
+      showsVerticalScrollIndicator={false}
+    >
       <TopNav onBack={() => setStep("PREVIEW")} />
       <Text className="text-white text-[28px] font-bold px-5 mb-2">
         What are you showing?
       </Text>
-      <Text className="text-[#9CA3AF] px-5 mb-8">
+      <Text className="text-[#9CA3AF] px-5 mb-6">
         Choose the main talent category.
       </Text>
 
-      <View className="flex-row flex-wrap px-3 mb-6">
+      <View className="flex-row flex-wrap px-3 mb-4">
         {[
           "Dance",
           "Voice",
@@ -2824,7 +2860,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       </View>
 
       {category === "Dance" && (
-        <View className="px-5">
+        <View className="px-5 mb-4">
           <Text className="text-white font-medium mb-3">
             Dance styles{" "}
             <Text className="text-[#9CA3AF] text-sm">(optional)</Text>
@@ -2859,26 +2895,35 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         </View>
       )}
 
-      <View className="mt-auto px-5 pb-10 pt-4">
+      <View className="mt-auto px-5 pt-6 pb-2">
         <TouchableOpacity
           onPress={() => setStep("SET_PURPOSE")}
-          className="bg-[#E91E76] w-full py-4 rounded-full items-center"
+          className="bg-[#E91E76] w-full py-4 rounded-full items-center shadow-lg"
+          activeOpacity={0.85}
         >
           <Text className="text-white font-bold text-[16px]">Continue</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </ScrollView>
   );
 
   const renderSetPurpose = () => (
-    <View className="flex-1 bg-[#050608] pt-14">
+    <ScrollView
+      className="flex-1 bg-[#050608]"
+      contentContainerStyle={{
+        flexGrow: 1,
+        paddingTop: Math.max(insets.top, 20),
+        paddingBottom: Math.max(insets.bottom, 24),
+      }}
+      showsVerticalScrollIndicator={false}
+    >
       <TopNav onBack={() => setStep("CHOOSE_TALENT")} />
       <Text className="text-white text-[28px] font-bold px-5 mb-2">
         What do you want from this performance?
       </Text>
-      <Text className="text-[#9CA3AF] px-5 mb-8">Choose your main goal.</Text>
+      <Text className="text-[#9CA3AF] px-5 mb-6">Choose your main goal.</Text>
 
-      <View className="px-5 gap-4">
+      <View className="px-5 gap-3.5">
         {[
           {
             id: "Get Discovered",
@@ -2920,7 +2965,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           <TouchableOpacity
             key={item.id}
             onPress={() => setPurpose(item.id)}
-            className={`w-full p-5 rounded-2xl border-2 flex-row items-center ${purpose === item.id ? "border-[#E91E76] bg-[#E91E76]/5" : "border-white/5 bg-[#1A1D24]"}`}
+            className={`w-full p-4.5 rounded-2xl border-2 flex-row items-center ${purpose === item.id ? "border-[#E91E76] bg-[#E91E76]/5" : "border-white/5 bg-[#1A1D24]"}`}
           >
             <View className="w-12 items-center justify-center">
               {item.icon}
@@ -2939,15 +2984,16 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         ))}
       </View>
 
-      <View className="mt-auto px-5 pb-10 pt-4">
+      <View className="mt-auto px-5 pt-6 pb-2">
         <TouchableOpacity
           onPress={() => setStep("DETAILS")}
-          className="bg-[#E91E76] w-full py-4 rounded-full items-center"
+          className="bg-[#E91E76] w-full py-4 rounded-full items-center shadow-lg"
+          activeOpacity={0.85}
         >
           <Text className="text-white font-bold text-[16px]">Continue</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </ScrollView>
   );
 
   const renderDetails = () => (
@@ -3052,7 +3098,10 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         </View>
       </ScrollView>
 
-      <View className="px-5 pb-10 pt-4 bg-[#050608]">
+      <View 
+        style={{ paddingBottom: Math.max(insets.bottom, 20) }}
+        className="px-5 pt-3 bg-[#050608]"
+      >
         <TouchableOpacity
           className={`w-full py-4 rounded-full items-center justify-center ${title.trim() ? "bg-[#E91E76]" : "bg-[#E91E76]/50"}`}
           activeOpacity={0.8}
@@ -3066,12 +3115,20 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   );
 
   const renderSummary = () => (
-    <View className="flex-1 bg-[#050608] pt-14">
+    <ScrollView
+      className="flex-1 bg-[#050608]"
+      contentContainerStyle={{
+        flexGrow: 1,
+        paddingTop: Math.max(insets.top, 20),
+        paddingBottom: Math.max(insets.bottom, 24),
+      }}
+      showsVerticalScrollIndicator={false}
+    >
       <TopNav onBack={() => setStep("DETAILS")} />
       <Text className="text-white text-[28px] font-bold px-5 mb-2">
         Ready to Publish?
       </Text>
-      <Text className="text-[#9CA3AF] px-5 mb-8">Here's a quick summary.</Text>
+      <Text className="text-[#9CA3AF] px-5 mb-6">Here's a quick summary.</Text>
 
       <View className="px-5">
         <View className="bg-[#1A1D24] rounded-2xl p-4 flex-row mb-6 border border-white/5">
@@ -3164,10 +3221,10 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         </TouchableOpacity>
       </View>
 
-      <View className="mt-auto px-5 pb-10">
+      <View className="mt-auto px-5 pt-6 pb-2">
         <TouchableOpacity
-          className="w-full py-4 rounded-full items-center justify-center bg-[#E91E76]"
-          activeOpacity={0.8}
+          className="w-full py-4 rounded-full items-center justify-center bg-[#E91E76] shadow-lg"
+          activeOpacity={0.85}
           onPress={handlePublish}
         >
           <Text className="text-white font-bold text-[16px]">
@@ -3175,7 +3232,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           </Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </ScrollView>
   );
 
   const renderUploading = () => (

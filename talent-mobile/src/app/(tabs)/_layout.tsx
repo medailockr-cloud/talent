@@ -1,11 +1,14 @@
-import { Tabs } from 'expo-router';
+import { Tabs, usePathname } from 'expo-router';
 import { Home, PlaySquare, PlusSquare, Ticket, User } from 'lucide-react-native';
 import { useAuthStore } from '../../store/authStore';
+import { useUIStore } from '../../store/uiStore';
 import { Image, View, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabsLayout() {
   const { user } = useAuthStore();
+  const { isTabBarHidden } = useUIStore();
+  const pathname = usePathname();
   const insets = useSafeAreaInsets();
 
   const isWeb = Platform.OS === 'web';
@@ -21,17 +24,22 @@ export default function TabsLayout() {
       ? 54 + bottomInset
       : 58 + bottomInset;
 
+  const defaultTabBarStyle = {
+    backgroundColor: '#000000',
+    borderTopColor: '#222222',
+    height: tabHeight,
+    paddingTop: isWeb ? 4 : 6,
+    paddingBottom: bottomInset,
+  };
+
+  const isCreateRoute = pathname ? pathname.includes('create') : false;
+  const hideTabBar = isTabBarHidden && isCreateRoute;
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          backgroundColor: '#000000',
-          borderTopColor: '#222222',
-          height: tabHeight,
-          paddingTop: isWeb ? 4 : 6,
-          paddingBottom: bottomInset,
-        },
+        tabBarStyle: hideTabBar ? { display: 'none' } : defaultTabBarStyle,
         tabBarLabelStyle: {
           fontSize: 10,
           fontWeight: '600',
@@ -63,6 +71,7 @@ export default function TabsLayout() {
         options={{
           title: 'Create',
           tabBarIcon: ({ color }) => <PlusSquare color={color} size={22} />,
+          tabBarStyle: hideTabBar ? { display: 'none' } : defaultTabBarStyle,
         }}
       />
       <Tabs.Screen

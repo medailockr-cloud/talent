@@ -330,7 +330,7 @@ app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
 
     const video = await prisma.video.create({
       data: { 
-        title, 
+        title: (title && title.trim()) || 'Untitled Performance', 
         description: description || '', 
         url, 
         category: category || null,
@@ -350,7 +350,9 @@ app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
     
     // Trigger HLS Transcoding via BullMQ Background Worker if it's a local upload
     if (!cloudUpload && req.file.path) {
-      videoQueue.add('transcode', { inputPath: req.file.path, videoId: video.id });
+      videoQueue.add('transcode', { inputPath: req.file.path, videoId: video.id }).catch((err: any) => {
+        console.error('[BullMQ Worker] Transcoding queue error:', err);
+      });
     }
     
     res.json(video);
@@ -1291,4 +1293,17 @@ app.post('/api/shows/:showId/book', requireAuth, async (req: any, res: any) => {
     res.status(500).json({ error: 'Booking failed' });
   }
 });
+
+// Global error handler (handles Multer errors, boundary issues, etc.)
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  if (err) {
+    console.error('Unhandled request error:', err);
+    if (!res.headersSent) {
+      const status = err.status || (err.message && err.message.includes('Multipart') ? 400 : 500);
+      return res.status(status).json({ error: err.message || 'Internal server error' });
+    }
+  }
+  next();
+});
+
 

@@ -866,9 +866,7 @@ export function ProfileView({
         }
       }
 
-      const res = await api.put("/profile/me", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const res = await api.put("/profile/me", formData);
       
       const updatedProfile = res.data;
       setProfileData({ ...profileData, ...updatedProfile });

@@ -127,7 +127,16 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
   const [showOptions, setShowOptions] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [videoError, setVideoError] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const videoRef = useRef<any>(null);
+
+  const formatTime = (sec: number) => {
+    if (!sec || isNaN(sec) || !isFinite(sec)) return '0:00';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
 
   const mainSrc = video.url || video.videoUrl || 'http://localhost:3000/uploads/performer_1.mp4';
   const fallbackSrc = 'http://localhost:3000/uploads/performer_1.mp4';
@@ -282,12 +291,12 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
   };
 
   return (
-    <View className="mb-6">
-      {/* Video Container */}
+    <View className="bg-[#0B0D13] rounded-[24px] p-3 border border-white/10 mb-6 shadow-2xl overflow-hidden">
+      {/* Video Playback Area */}
       <TouchableOpacity 
         activeOpacity={0.95}
         onPress={togglePlay}
-        className="relative w-full aspect-[16/9.5] rounded-[16px] overflow-hidden border border-white/10 bg-[#100C09] mb-4"
+        className="relative w-full aspect-[4/5] rounded-[18px] overflow-hidden border border-white/10 bg-[#000] mb-3.5"
       >
         {Platform.OS === 'web' ? (
           <video 
@@ -299,6 +308,12 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
             muted={!isPlaying || isMuted}
             playsInline
             poster={video.videoThumb || video.thumbnailUrl || 'https://images.unsplash.com/photo-1547153760-18fc86324498?w=800&q=80'}
+            onTimeUpdate={(e: any) => {
+              if (e?.target) setCurrentTime(e.target.currentTime);
+            }}
+            onLoadedMetadata={(e: any) => {
+              if (e?.target) setDuration(e.target.duration);
+            }}
             onError={() => {
               if (!videoError) setVideoError(true);
             }}
@@ -306,160 +321,202 @@ function FeedVideoCard({ video, playingVideoId, setPlayingVideoId, onPass }: { v
           />
         ) : (
           <View className="flex-1 items-center justify-center bg-black">
-             <Image source={{ uri: video.videoThumb || video.thumbnailUrl || 'https://images.unsplash.com/photo-1547153760-18fc86324498?w=800&q=80' }} className="w-full h-full opacity-90 absolute" />
+            <Image 
+              source={{ uri: video.videoThumb || video.thumbnailUrl || 'https://images.unsplash.com/photo-1547153760-18fc86324498?w=800&q=80' }} 
+              className="w-full h-full opacity-90 absolute" 
+              resizeMode="cover"
+            />
           </View>
         )}
         
-        {/* Gradient Overlay Simulation */}
-        <View pointerEvents="none" className="absolute inset-x-0 top-0 h-16 bg-black/40" />
-        <View pointerEvents="none" className="absolute inset-x-0 bottom-0 h-16 bg-black/40" />
+        {/* Smooth Cinematic Vignette Gradient Overlay (No harsh center band) */}
+        <View 
+          pointerEvents="none" 
+          className="absolute inset-0 z-[1]"
+          style={Platform.OS === 'web' ? ({
+            background: 'linear-gradient(180deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.05) 24%, rgba(0,0,0,0.05) 65%, rgba(0,0,0,0.85) 100%)'
+          } as any) : undefined}
+        />
 
-        {/* Top Left: Performance Tag */}
-        <View pointerEvents="none" className="absolute top-4 left-4 flex-row items-center gap-2">
-          <Text className="text-[11px] font-bold tracking-[0.1em] text-white uppercase">PERFORMANCE</Text>
-          <View className="w-1 h-1 rounded-full bg-white/60" />
-          <Text className="text-white text-[11px] font-bold tracking-widest">{video.duration || '0:00'}</Text>
-        </View>
+        {/* Top Header Row: Category Badge & Hidden Metrics (Guaranteed Non-Colliding) */}
+        <View pointerEvents="none" className="absolute top-3.5 inset-x-3.5 flex-row items-center justify-between z-10">
+          <View className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15">
+            <View className="w-1.5 h-1.5 rounded-full bg-[#E91E76]" />
+            <Text className="text-[10px] font-bold tracking-wider text-white uppercase">PERFORMANCE</Text>
+            <View className="w-1 h-1 rounded-full bg-white/40" />
+            <Text className="text-white/80 text-[10px] font-semibold">{formatTime(duration) || video.duration || '0:58'}</Text>
+          </View>
 
-        {/* Top Right: Popularity Hidden */}
-        <View pointerEvents="none" className="absolute top-3 right-3">
-          <View className="px-3 py-1.5 rounded-lg bg-black/60 border border-white/20 flex-row items-center gap-1.5">
-            <EyeOff color="#fff" size={12} strokeWidth={2} />
-            <Text className="text-[10px] font-bold tracking-[0.1em] text-white uppercase">POPULARITY HIDDEN</Text>
+          <View className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 flex-row items-center gap-1.5">
+            <EyeOff color="#E91E76" size={11} strokeWidth={2.2} />
+            <Text className="text-[9px] font-bold tracking-wider text-white uppercase">METRICS HIDDEN</Text>
           </View>
         </View>
 
-        {/* Center: Play/Pause Button */}
-        <TouchableOpacity 
-          activeOpacity={0.8} 
-          className="absolute top-1/2 left-1/2 -ml-7 -mt-7 w-14 h-14 rounded-full bg-black/50 border border-white/80 items-center justify-center z-10"
-          onPress={togglePlay}
-        >
-          {isPlaying ? (
-            <Pause color="#fff" fill="#fff" size={24} />
-          ) : (
-            <Play color="#fff" fill="#fff" size={24} className="ml-1" />
-          )}
-        </TouchableOpacity>
+        {/* Center Play Button Overlay (Visible ONLY when paused) */}
+        {!isPlaying && (
+          <View pointerEvents="none" className="absolute inset-0 items-center justify-center z-10">
+            <View className="w-16 h-16 rounded-full bg-black/65 backdrop-blur-md border border-white/30 items-center justify-center shadow-2xl">
+              <Play color="#fff" fill="#fff" size={26} className="ml-1" />
+            </View>
+          </View>
+        )}
 
-        {/* Bottom Right: Controls */}
-        <View className="absolute bottom-3 right-3 flex-row items-center gap-2 z-10">
-          {Platform.OS === 'web' && (
+        {/* Bottom Playback Scrubber Line */}
+        <View pointerEvents="none" className="absolute bottom-0 inset-x-0 h-[3px] bg-white/20 z-20 overflow-hidden">
+          <View 
+            className="h-full bg-[#E91E76]" 
+            style={{ width: `${duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0}%` }} 
+          />
+        </View>
+
+        {/* Bottom Controls Bar */}
+        <View className="absolute bottom-3 inset-x-3.5 flex-row items-center justify-between z-10">
+          {/* Left: Time Badge */}
+          <View className="h-8 px-3 rounded-full bg-black/60 backdrop-blur-md border border-white/15 flex-row items-center">
+            <Text className="text-[11px] font-medium text-white tracking-wider">
+              {formatTime(currentTime)} / {formatTime(duration) || video.duration || '0:58'}
+            </Text>
+          </View>
+
+          {/* Right: Audio & Fullscreen Buttons */}
+          <View className="flex-row items-center gap-2">
+            {Platform.OS === 'web' && (
+              <TouchableOpacity 
+                activeOpacity={0.8} 
+                onPress={(e: any) => {
+                  if (e?.stopPropagation) e.stopPropagation();
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setIsMuted(!isMuted);
+                  if (!isPlaying) setPlayingVideoId(video.id);
+                }}
+                className="w-8 h-8 rounded-full bg-black/60 backdrop-blur-md border border-white/15 items-center justify-center"
+              >
+                {isMuted || !isPlaying ? (
+                  <VolumeX color="#9CA3AF" size={14} />
+                ) : (
+                  <Volume2 color="#E91E76" size={14} />
+                )}
+              </TouchableOpacity>
+            )}
             <TouchableOpacity 
               activeOpacity={0.8} 
               onPress={(e: any) => {
-                if (e && e.stopPropagation) e.stopPropagation();
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setIsMuted(!isMuted);
-                if (!isPlaying) setPlayingVideoId(video.id);
+                if (e?.stopPropagation) e.stopPropagation();
+                if (Platform.OS === 'web' && videoRef.current) {
+                  if (document.fullscreenElement) {
+                    document.exitFullscreen?.().catch(() => {});
+                  } else {
+                    videoRef.current.requestFullscreen?.().catch(() => {});
+                  }
+                }
               }}
-              className="w-8 h-8 rounded-lg bg-black/60 border border-white/20 items-center justify-center"
+              className="w-8 h-8 rounded-full bg-black/60 backdrop-blur-md border border-white/15 items-center justify-center"
             >
-              {isMuted || !isPlaying ? (
-                <VolumeX color="#fff" size={14} />
-              ) : (
-                <Volume2 color="#E91E76" size={14} />
-              )}
+              <Maximize2 color="#fff" size={13} strokeWidth={2} />
             </TouchableOpacity>
-          )}
-          <TouchableOpacity 
-            activeOpacity={0.8} 
-            onPress={(e: any) => {
-              if (e && e.stopPropagation) e.stopPropagation();
-            }}
-            className="w-8 h-8 rounded-lg bg-black/60 border border-white/20 items-center justify-center"
-          >
-            <Maximize2 color="#fff" size={14} strokeWidth={2} />
-          </TouchableOpacity>
-          <View className="h-8 px-3 rounded-lg bg-black/60 border border-white/20 items-center justify-center">
-            <Text className="text-[12px] font-medium text-white tracking-wider">{video.duration || '0:00'} / {video.duration || '0:00'}</Text>
           </View>
         </View>
 
         {/* Judging Floating Overlay */}
         {isJudgingActive && (
-          <View pointerEvents="none" className="absolute inset-0 bg-black/60 items-center justify-center z-20">
+          <View pointerEvents="none" className="absolute inset-0 bg-black/70 backdrop-blur-sm items-center justify-center z-30">
             <Text 
-              className="text-white text-[72px] font-bold tracking-tighter"
-              style={{ textShadowColor: 'rgba(0,0,0,0.7)', textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 12 }}
+              className="text-white text-[76px] font-black tracking-tighter"
+              style={{ textShadowColor: 'rgba(233,30,118,0.5)', textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 16 }}
             >
               {tempScore.toFixed(1)}
             </Text>
-            <Text className="text-white/60 text-[12px] font-medium tracking-widest uppercase mt-4">Slide Up/Down to Adjust</Text>
+            <Text className="text-[#E91E76] text-[12px] font-bold tracking-widest uppercase mt-3">★ Slide Up / Down to Score ★</Text>
           </View>
         )}
       </TouchableOpacity>
 
-      <View className="flex-row items-start justify-between mb-4">
+      {/* Author Profile Row */}
+      <View className="flex-row items-center justify-between px-1 mb-3">
         <TouchableOpacity 
           activeOpacity={0.8}
-          className="flex-row items-center gap-3"
+          className="flex-row items-center gap-3 flex-1 mr-2"
           onPress={() => {
             const userId = video.authorId || video.author?.id || video.id;
             router.push(`/profile/${userId}` as any);
           }}
         >
-          <View className="w-[42px] h-[42px] rounded-full overflow-hidden border border-white/10">
+          <View className="w-11 h-11 rounded-full overflow-hidden border-2 border-white/15 shadow-md">
             <Image source={{ uri: video.avatar || video.authorAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100' }} className="w-full h-full" />
           </View>
-          <View>
-            <Text className="text-white text-[16px] font-bold mb-0.5">{video.author}</Text>
-            <View className="flex-row items-center gap-1.5 mb-1.5">
+          <View className="flex-1">
+            <Text className="text-white text-[15px] font-bold mb-0.5" numberOfLines={1}>{video.author}</Text>
+            <View className="flex-row items-center gap-1.5 mb-1">
               <Text className="text-[#9CA3AF] text-[11px]">{(video.role || 'Artist').split('•')[0].trim()}</Text>
               <Text className="text-[#9CA3AF] text-[11px]">•</Text>
               <MapPin color="#9CA3AF" size={10} />
               <Text className="text-[#9CA3AF] text-[11px]">{(video.role || 'World').split('•')[1]?.trim() || 'World'}</Text>
             </View>
-            <View className="flex-row items-center gap-2">
-              {(video.tags || video.hashtags || []).map((tag: string, idx: number) => (
-                <Text key={idx} className="text-[#6B7280] text-[11px]">{tag}</Text>
-              ))}
+            <View className="flex-row items-center gap-1.5 flex-wrap">
+              {(video.tags || video.hashtags || ['#performance', '#talent']).slice(0, 3).map((tag: any, idx: number) => {
+                const tagText = typeof tag === 'string' ? tag : tag?.name ? `#${tag.name}` : '#performance';
+                return (
+                  <Text key={idx} className="text-[#E91E76]/80 text-[10px] font-medium">{tagText}</Text>
+                );
+              })}
             </View>
           </View>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => setShowOptions(true)} className="w-8 h-8 rounded-full bg-white/5 items-center justify-center mt-1">
+        <TouchableOpacity onPress={() => setShowOptions(true)} className="w-9 h-9 rounded-full bg-white/5 items-center justify-center">
           <MoreHorizontal color="#9CA3AF" size={16} />
         </TouchableOpacity>
       </View>
 
-      {/* Actions Row */}
-      <View className="flex-row items-center justify-between px-1">
-        <View className="flex-row items-center gap-5">
-          <TouchableOpacity onPress={handleKeepToggle} activeOpacity={0.7} className="items-center gap-1.5 min-w-[36px]">
-            <Bookmark color={isKept ? "#E91E76" : "#fff"} fill={isKept ? "#E91E76" : "transparent"} size={22} strokeWidth={1.5} />
+      {/* Main Actions Row */}
+      <View className="flex-row items-center justify-between px-2 pt-2.5 border-t border-white/5">
+        <View className="flex-row items-center gap-6">
+          <TouchableOpacity onPress={handleKeepToggle} activeOpacity={0.7} className="items-center gap-1 min-w-[38px]">
+            <Bookmark color={isKept ? "#E91E76" : "#fff"} fill={isKept ? "#E91E76" : "transparent"} size={22} strokeWidth={1.7} />
             <Text className={`text-[9px] font-bold tracking-widest uppercase ${isKept ? 'text-[#E91E76]' : 'text-[#9CA3AF]'}`}>{keptText}</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setIsCommenting(true); }} activeOpacity={0.7} className="items-center gap-1.5 min-w-[36px]">
-            <MessageCircle color="#fff" size={22} strokeWidth={1.5} />
+          <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setIsCommenting(true); }} activeOpacity={0.7} className="items-center gap-1 min-w-[38px]">
+            <MessageCircle color="#fff" size={22} strokeWidth={1.7} />
             <Text className="text-[#9CA3AF] text-[9px] font-bold tracking-widest uppercase">TALK</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPass(); }} activeOpacity={0.7} className="items-center gap-1.5 pb-0.5 min-w-[36px]">
-            <Send color="#fff" size={22} strokeWidth={1.5} style={{ transform: [{ rotate: '45deg' }], marginLeft: -4, marginBottom: 2 }} />
+          <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPass(); }} activeOpacity={0.7} className="items-center gap-1 min-w-[38px]">
+            <Send color="#fff" size={21} strokeWidth={1.7} style={{ transform: [{ rotate: '45deg' }], marginLeft: -3, marginBottom: 1 }} />
             <Text className="text-[#9CA3AF] text-[9px] font-bold tracking-widest uppercase">PASS</Text>
           </TouchableOpacity>
         </View>
 
-        <View className="flex-col items-end pt-1">
-          {/* JUDGE BUTTON with Gesture + Tap Support */}
-          <View {...panResponder.panHandlers}>
-            <View className={`rounded-full h-[32px] px-3.5 flex-row items-center gap-1.5 mb-2 cursor-pointer ${judgeScore !== null ? 'bg-[#E91E76]/15 border border-[#E91E76]' : 'bg-[#E91E76]'}`}>
-              <Gauge color={judgeScore !== null ? "#E91E76" : "#fff"} size={13} />
-              <Text className={`text-[10px] font-bold tracking-wider uppercase mt-0.5 ${judgeScore !== null ? 'text-[#E91E76]' : 'text-white'}`}>
-                {judgeScore !== null ? `${judgeScore.toFixed(1)} ★` : 'JUDGE'}
-              </Text>
-            </View>
-          </View>
-          <View className="flex-row items-center gap-2 pr-1">
-            <Text className="text-[#6B7280] text-[9px] uppercase tracking-wider">Presence</Text>
-            <View className="w-1 h-1 rounded-full bg-[#E91E76]/80" />
-            <Text className="text-[#6B7280] text-[9px] uppercase tracking-wider">Originality</Text>
-            <View className="w-1 h-1 rounded-full bg-[#E91E76]/80" />
-            <Text className="text-[#6B7280] text-[9px] uppercase tracking-wider">Craft</Text>
-          </View>
+        {/* JUDGE Button */}
+        <View {...panResponder.panHandlers}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => setShowJudgeModal(true)}
+            className={`rounded-full h-[36px] px-4 flex-row items-center gap-2 shadow-lg ${
+              judgeScore !== null 
+                ? 'bg-[#E91E76]/20 border border-[#E91E76]' 
+                : 'bg-[#E91E76]'
+            }`}
+          >
+            <Gauge color={judgeScore !== null ? "#E91E76" : "#fff"} size={14} />
+            <Text className={`text-[11px] font-bold tracking-wider uppercase ${
+              judgeScore !== null ? 'text-[#E91E76]' : 'text-white'
+            }`}>
+              {judgeScore !== null ? `${judgeScore.toFixed(1)} ★` : 'JUDGE'}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
-      
-      <View className="w-full h-[1px] bg-white/5 mt-5" />
+
+      {/* Judging Criteria Footer Row - Completely Separated to Prevent Cramping */}
+      <View className="flex-row items-center justify-between pt-2.5 mt-2 border-t border-white/5 px-2">
+        <Text className="text-[#6B7280] text-[10px] font-medium tracking-wide">Judging criteria</Text>
+        <View className="flex-row items-center gap-2">
+          <Text className="text-[#9CA3AF] text-[9px] font-semibold uppercase tracking-wider">Presence</Text>
+          <View className="w-1 h-1 rounded-full bg-[#E91E76]/70" />
+          <Text className="text-[#9CA3AF] text-[9px] font-semibold uppercase tracking-wider">Originality</Text>
+          <View className="w-1 h-1 rounded-full bg-[#E91E76]/70" />
+          <Text className="text-[#9CA3AF] text-[9px] font-semibold uppercase tracking-wider">Craft</Text>
+        </View>
+      </View>
 
       {/* Options Menu Sheet */}
       {showOptions && (
@@ -853,7 +910,7 @@ export function HomeView({ user }: { user?: any }) {
     if (scrollRef.current && filteredData.length > currentIndex + 1) {
       // Calculate approximate offset: Header + (Card height + Margin) * nextIndex
       // A more robust way in React Native is using flatlist, but with ScrollView we estimate
-      const approximateCardHeight = Dimensions.get('window').width * (9.5/16) + 180;
+      const approximateCardHeight = Dimensions.get('window').width * (5/4) + 160;
       scrollRef.current.scrollTo({ y: (currentIndex + 1) * approximateCardHeight, animated: true });
       // Pause current, maybe auto-play next
       setPlayingVideoId(filteredData[currentIndex + 1].id);
