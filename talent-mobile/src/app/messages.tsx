@@ -3,10 +3,12 @@ import { View, Text, TouchableOpacity, FlatList, Image, ActivityIndicator } from
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Edit } from 'lucide-react-native';
 import { api } from '../utils/api';
+import { useThemeStore } from '../store/themeStore';
 import * as Haptics from 'expo-haptics';
 
 export default function MessagesScreen() {
   const router = useRouter();
+  const { theme } = useThemeStore();
   const [conversations, setConversations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -32,20 +34,21 @@ export default function MessagesScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         router.push(`/chat/${item.user.id}` as any);
       }}
-      className="flex-row items-center gap-4 py-4 border-b border-white/5"
+      style={{ borderBottomColor: theme.border }}
+      className="flex-row items-center gap-4 py-4 border-b"
     >
       <Image
         source={{ uri: item.user.avatarUrl || 'https://via.placeholder.com/150' }}
         className="w-14 h-14 rounded-full"
       />
       <View className="flex-1">
-        <Text className="text-white font-bold text-[16px]">{item.user.name || item.user.username}</Text>
-        <Text className="text-[#9CA3AF] text-[14px] mt-1" numberOfLines={1}>
+        <Text style={{ color: theme.text }} className="font-bold text-[16px]">{item.user.name || item.user.username}</Text>
+        <Text style={{ color: theme.textSecondary }} className="text-[14px] mt-1" numberOfLines={1}>
           {item.lastMessage ? item.lastMessage.text : 'Start a conversation'}
         </Text>
       </View>
       {item.lastMessage && (
-        <Text className="text-[#6B7280] text-[12px]">
+        <Text style={{ color: theme.textSecondary }} className="text-[12px]">
           {new Date(item.lastMessage.createdAt).toLocaleDateString()}
         </Text>
       )}
@@ -53,33 +56,35 @@ export default function MessagesScreen() {
   );
 
   return (
-    <View className="flex-1 bg-[#050608] px-5 pt-12">
+    <View className="flex-1 px-5 pt-12" style={{ backgroundColor: theme.bg }}>
       {/* Header */}
       <View className="flex-row items-center justify-between pb-6">
         <TouchableOpacity
           activeOpacity={0.7}
           onPress={() => router.back()}
-          className="w-10 h-10 rounded-full bg-white/5 items-center justify-center"
+          style={{ backgroundColor: theme.surfaceBg }}
+          className="w-10 h-10 rounded-full items-center justify-center"
         >
-          <ChevronLeft color="#fff" size={24} />
+          <ChevronLeft color={theme.text} size={24} />
         </TouchableOpacity>
-        <Text className="text-white text-[20px] font-bold">Messages</Text>
+        <Text style={{ color: theme.text }} className="text-[20px] font-bold">Messages</Text>
         <TouchableOpacity
           activeOpacity={0.7}
           onPress={() => {}}
-          className="w-10 h-10 rounded-full bg-white/5 items-center justify-center"
+          style={{ backgroundColor: theme.surfaceBg }}
+          className="w-10 h-10 rounded-full items-center justify-center"
         >
-          <Edit color="#fff" size={20} />
+          <Edit color={theme.text} size={20} />
         </TouchableOpacity>
       </View>
 
       {loading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#E91E76" />
+          <ActivityIndicator color={theme.primary} />
         </View>
       ) : conversations.length === 0 ? (
         <View className="flex-1 items-center justify-center">
-          <Text className="text-[#9CA3AF] text-[16px]">No messages yet.</Text>
+          <Text style={{ color: theme.textSecondary }} className="text-[16px]">No messages yet.</Text>
         </View>
       ) : (
         <FlatList

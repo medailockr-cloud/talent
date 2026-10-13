@@ -2,12 +2,14 @@ import { Tabs, usePathname } from 'expo-router';
 import { Home, PlaySquare, PlusSquare, Ticket, User } from 'lucide-react-native';
 import { useAuthStore } from '../../store/authStore';
 import { useUIStore } from '../../store/uiStore';
+import { useThemeStore } from '../../store/themeStore';
 import { Image, View, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabsLayout() {
   const { user } = useAuthStore();
   const { isTabBarHidden } = useUIStore();
+  const { theme } = useThemeStore();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
 
@@ -25,8 +27,8 @@ export default function TabsLayout() {
       : 58 + bottomInset;
 
   const defaultTabBarStyle = {
-    backgroundColor: '#000000',
-    borderTopColor: '#222222',
+    backgroundColor: theme.tabBg,
+    borderTopColor: theme.tabBorder,
     height: tabHeight,
     paddingTop: isWeb ? 4 : 6,
     paddingBottom: bottomInset,
@@ -46,11 +48,11 @@ export default function TabsLayout() {
           marginTop: 1,
           lineHeight: 12,
         },
-        tabBarIconStyle: {
-          marginTop: 1,
-        },
-        tabBarActiveTintColor: '#ffffff',
-        tabBarInactiveTintColor: '#888888',
+        tabBarItemStyle: {
+          outline: 'none',
+        } as any,
+        tabBarActiveTintColor: theme.tabActiveTint,
+        tabBarInactiveTintColor: theme.tabInactiveTint,
       }}>
       <Tabs.Screen
         name="index"

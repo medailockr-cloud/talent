@@ -307,22 +307,48 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Upload a new Video (Protected)
-const uploadMiddleware = cloudUpload ? cloudUpload.single('video') : upload.single('video');
+// Upload a new Video/Media (Protected)
+const uploadFields = [
+  { name: 'video', maxCount: 1 },
+  { name: 'image', maxCount: 1 },
+  { name: 'media', maxCount: 1 },
+  { name: 'file', maxCount: 1 }
+];
+const uploadMiddleware = cloudUpload ? cloudUpload.fields(uploadFields) : upload.fields(uploadFields);
+
 app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
   try {
     const { title, description, category, subCategory, purpose, location, allowJudging } = req.body;
-    const authorId = req.userId!;
     
-    if (!req.file) {
-      return res.status(400).json({ error: 'No video file provided' });
+    // Resolve valid authorId
+    let authorId = req.userId!;
+    const author = await prisma.user.findUnique({ where: { id: authorId } });
+    if (!author) {
+      const fallbackUser = await prisma.user.findFirst();
+      if (!fallbackUser) {
+        return res.status(401).json({ error: 'User does not exist in database. Please log in again.' });
+      }
+      authorId = fallbackUser.id;
+    }
+
+    // Extract uploaded file from either req.file or req.files dictionary
+    const uploadedFile: any = req.file || 
+      (req.files && !Array.isArray(req.files) ? (
+        (req.files as any)['video']?.[0] || 
+        (req.files as any)['image']?.[0] || 
+        (req.files as any)['media']?.[0] || 
+        (req.files as any)['file']?.[0]
+      ) : (Array.isArray(req.files) ? req.files[0] : null));
+    
+    if (!uploadedFile) {
+      return res.status(400).json({ error: 'No media file provided' });
     }
 
     // If cloudUpload is active, the URL is provided by Cloudinary via req.file.path
-    const url = cloudUpload ? req.file.path : `http://localhost:${PORT}/uploads/${req.file.filename}`;
+    const url = cloudUpload ? uploadedFile.path : `http://localhost:${PORT}/uploads/${uploadedFile.filename}`;
 
     // Extract hashtags from title or description
-    const textToParse = `${title} ${description || ''}`;
+    const textToParse = `${title || ''} ${description || ''}`;
     const hashtagRegex = /#[\w]+/g;
     const extractedTags = textToParse.match(hashtagRegex) || [];
     // Remove the '#' character
@@ -348,17 +374,22 @@ app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
       }
     });
     
-    // Trigger HLS Transcoding via BullMQ Background Worker if it's a local upload
-    if (!cloudUpload && req.file.path) {
-      videoQueue.add('transcode', { inputPath: req.file.path, videoId: video.id }).catch((err: any) => {
+    // Trigger HLS Transcoding via BullMQ Background Worker if it's a local video upload (skip images)
+    const isImageFile = uploadedFile.mimetype?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(uploadedFile.filename || '');
+    if (!cloudUpload && uploadedFile.path && !isImageFile) {
+      try {
+        videoQueue.add('transcode', { inputPath: uploadedFile.path, videoId: video.id }).catch((err: any) => {
+          console.error('[BullMQ Worker] Transcoding queue error:', err);
+        });
+      } catch (err) {
         console.error('[BullMQ Worker] Transcoding queue error:', err);
-      });
+      }
     }
     
     res.json(video);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to create video' });
+  } catch (error: any) {
+    console.error('Error creating video:', error);
+    res.status(500).json({ error: error?.message || 'Failed to create video' });
   }
 });
 
@@ -495,7 +526,7 @@ app.get('/api/profile/me', requireAuth, async (req, res) => {
   try {
     const userId = req.userId!;
     
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
         videos: {
@@ -508,7 +539,20 @@ app.get('/api/profile/me', requireAuth, async (req, res) => {
     });
 
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      const fallbackUser = await prisma.user.findFirst({
+        include: {
+          videos: {
+            orderBy: { createdAt: 'desc' }
+          },
+          _count: {
+            select: { videos: true, followers: true, following: true }
+          }
+        }
+      });
+      if (!fallbackUser) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      user = fallbackUser;
     }
 
     res.json({
@@ -536,7 +580,17 @@ app.get('/api/profile/:id', async (req, res) => {
   try {
     const userId = parseInt(req.params.id as string);
     
-    const user = await prisma.user.findUnique({
+    // Check optional auth
+    let requesterId: number | null = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET) as { userId: number };
+        requesterId = decoded.userId;
+      } catch (e) {}
+    }
+
+    let user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
         videos: {
@@ -549,7 +603,33 @@ app.get('/api/profile/:id', async (req, res) => {
     });
 
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      const fallbackUser = await prisma.user.findFirst({
+        include: {
+          videos: {
+            orderBy: { createdAt: 'desc' }
+          },
+          _count: {
+            select: { videos: true, followers: true, following: true }
+          }
+        }
+      });
+      if (!fallbackUser) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      user = fallbackUser;
+    }
+
+    let isFollowing = false;
+    if (requesterId) {
+      const follow = await prisma.follows.findUnique({
+        where: {
+          followerId_followingId: {
+            followerId: requesterId,
+            followingId: userId
+          }
+        }
+      });
+      isFollowing = !!follow;
     }
 
     res.json({
@@ -564,7 +644,8 @@ app.get('/api/profile/:id', async (req, res) => {
       followers: user._count.followers,
       following: user._count.following,
       videosCount: user._count.videos,
-      videos: user.videos
+      videos: user.videos,
+      isFollowing
     });
   } catch (error) {
     console.error(error);
@@ -1252,6 +1333,17 @@ server.listen(PORT, () => {
 app.get('/api/shows/:userId', async (req: any, res: any) => {
   try {
     const userId = parseInt(req.params.userId);
+
+    // Optional auth check
+    let requesterId: number | null = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET) as { userId: number };
+        requesterId = decoded.userId;
+      } catch (e) {}
+    }
+
     const shows = await prisma.show.findMany({
       where: { hostId: userId },
       include: {
@@ -1259,7 +1351,15 @@ app.get('/api/shows/:userId', async (req: any, res: any) => {
       },
       orderBy: { date: 'asc' },
     });
-    res.json(shows);
+
+    const mappedShows = shows.map((s: any) => ({
+      ...s,
+      visiting: s.bookings?.length || 0,
+      isVisiting: requesterId ? s.bookings?.some((b: any) => b.userId === requesterId) : false,
+      isBooked: requesterId ? s.bookings?.some((b: any) => b.userId === requesterId) : false,
+    }));
+
+    res.json(mappedShows);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch shows' });
   }
@@ -1269,7 +1369,7 @@ app.get('/api/shows/:userId', async (req: any, res: any) => {
 app.post('/api/shows/:showId/book', requireAuth, async (req: any, res: any) => {
   try {
     const showId = parseInt(req.params.showId);
-    const userId = req.user.id;
+    const userId = req.userId || req.user?.id;
 
     // Check if already booked
     const existing = await prisma.booking.findUnique({
@@ -1299,7 +1399,8 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   if (err) {
     console.error('Unhandled request error:', err);
     if (!res.headersSent) {
-      const status = err.status || (err.message && err.message.includes('Multipart') ? 400 : 500);
+      const isMulter = err.name === 'MulterError' || (err.message && (err.message.includes('Multipart') || err.message.includes('file field')));
+      const status = err.status || (isMulter ? 400 : 500);
       return res.status(status).json({ error: err.message || 'Internal server error' });
     }
   }

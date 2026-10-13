@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft, Send, Phone, Video, Info } from 'lucide-react-native';
 import { api } from '../../utils/api';
 import { useAuthStore } from '../../store/authStore';
+import { useThemeStore } from '../../store/themeStore';
 import * as Haptics from 'expo-haptics';
 import io from 'socket.io-client';
 
@@ -13,6 +14,7 @@ export default function ChatScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const { user, token } = useAuthStore();
+  const { theme } = useThemeStore();
   const [messages, setMessages] = useState<any[]>([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -90,27 +92,34 @@ export default function ChatScreen() {
             className="w-8 h-8 rounded-full mr-2 self-end"
           />
         )}
-        <View className={`max-w-[75%] rounded-2xl px-4 py-3 ${isMine ? 'bg-[#E91E76] rounded-br-sm' : 'bg-white/10 rounded-bl-sm'}`}>
-          <Text className="text-white text-[15px]">{item.text}</Text>
+        <View 
+          style={isMine ? { backgroundColor: theme.primary } : { backgroundColor: theme.surfaceBg }}
+          className={`max-w-[75%] rounded-2xl px-4 py-3 ${isMine ? 'rounded-br-sm' : 'rounded-bl-sm'}`}
+        >
+          <Text style={{ color: isMine ? '#ffffff' : theme.text }} className="text-[15px]">{item.text}</Text>
         </View>
       </View>
     );
   };
 
   return (
-    <View className="flex-1 bg-[#050608]">
+    <View className="flex-1" style={{ backgroundColor: theme.bg }}>
       {/* Header */}
-      <View className="pt-12 pb-4 px-5 flex-row items-center justify-between border-b border-white/5">
+      <View 
+        style={{ borderBottomColor: theme.border }}
+        className="pt-12 pb-4 px-5 flex-row items-center justify-between border-b"
+      >
         <TouchableOpacity
           activeOpacity={0.7}
           onPress={() => router.back()}
-          className="w-10 h-10 rounded-full bg-white/5 items-center justify-center -ml-2"
+          style={{ backgroundColor: theme.surfaceBg }}
+          className="w-10 h-10 rounded-full items-center justify-center -ml-2"
         >
-          <ChevronLeft color="#fff" size={24} />
+          <ChevronLeft color={theme.text} size={24} />
         </TouchableOpacity>
         
         {loading ? (
-           <ActivityIndicator size="small" color="#E91E76" />
+           <ActivityIndicator size="small" color={theme.primary} />
         ) : (
           <TouchableOpacity 
             activeOpacity={0.7}
@@ -122,18 +131,18 @@ export default function ChatScreen() {
               className="w-9 h-9 rounded-full"
             />
             <View>
-              <Text className="text-white font-bold text-[16px]">{otherUser?.name || otherUser?.username}</Text>
-              <Text className="text-[#9CA3AF] text-[12px]">@{otherUser?.username}</Text>
+              <Text style={{ color: theme.text }} className="font-bold text-[16px]">{otherUser?.name || otherUser?.username}</Text>
+              <Text style={{ color: theme.textSecondary }} className="text-[12px]">@{otherUser?.username}</Text>
             </View>
           </TouchableOpacity>
         )}
 
         <View className="flex-row items-center gap-4">
           <TouchableOpacity activeOpacity={0.7}>
-            <Phone color="#fff" size={20} />
+            <Phone color={theme.text} size={20} />
           </TouchableOpacity>
           <TouchableOpacity activeOpacity={0.7}>
-            <Video color="#fff" size={22} />
+            <Video color={theme.text} size={22} />
           </TouchableOpacity>
         </View>
       </View>
@@ -155,14 +164,21 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <View className="px-5 py-3 pb-8 flex-row items-center gap-3 border-t border-white/5 bg-[#050608]">
-          <View className="flex-1 bg-white/10 rounded-full flex-row items-center px-4 py-3 min-h-[44px]">
+        <View 
+          style={{ borderTopColor: theme.border, backgroundColor: theme.bg }}
+          className="px-5 py-3 pb-8 flex-row items-center gap-3 border-t"
+        >
+          <View 
+            style={{ backgroundColor: theme.surfaceBg }}
+            className="flex-1 rounded-full flex-row items-center px-4 py-3 min-h-[44px]"
+          >
             <TextInput
               value={inputText}
               onChangeText={setInputText}
               placeholder="Message..."
-              placeholderTextColor="#9CA3AF"
-              className="flex-1 text-white text-[15px]"
+              placeholderTextColor={theme.textSecondary}
+              style={{ color: theme.text }}
+              className="flex-1 text-[15px]"
               multiline
               maxLength={500}
             />
@@ -171,9 +187,10 @@ export default function ChatScreen() {
             onPress={sendMessage}
             disabled={!inputText.trim()}
             activeOpacity={0.7}
-            className={`w-11 h-11 rounded-full items-center justify-center ${inputText.trim() ? 'bg-[#E91E76]' : 'bg-white/10'}`}
+            style={{ backgroundColor: inputText.trim() ? theme.primary : theme.surfaceBg }}
+            className="w-11 h-11 rounded-full items-center justify-center"
           >
-            <Send color={inputText.trim() ? "#fff" : "#9CA3AF"} size={18} style={{ marginLeft: -2, transform: [{ rotate: '45deg' }] }} />
+            <Send color={inputText.trim() ? "#fff" : theme.textSecondary} size={18} style={{ marginLeft: -2, transform: [{ rotate: '45deg' }] }} />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

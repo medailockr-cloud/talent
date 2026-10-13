@@ -14,6 +14,7 @@ interface User {
   quote?: string;
   followers?: number;
   following?: number;
+  email?: string;
 }
 
 interface AuthState {

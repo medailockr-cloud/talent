@@ -3,8 +3,10 @@ import { View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform
 import * as Haptics from 'expo-haptics';
 import { Eye, EyeOff } from 'lucide-react-native';
 import { api } from '../../utils/api';
+import { useThemeStore } from '../../store/themeStore';
 
 export function AuthView({ onAuthSuccess }: { onAuthSuccess: (token: string, user: any) => void }) {
+  const { theme } = useThemeStore();
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -65,14 +67,15 @@ export function AuthView({ onAuthSuccess }: { onAuthSuccess: (token: string, use
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="flex-1 bg-[#050608] justify-center px-8"
+      style={{ backgroundColor: theme.bg }}
+      className="flex-1 justify-center px-8"
     >
       <View className="mb-10 items-center">
         <View className="flex-row items-baseline mb-4">
-          <Text className="font-bold text-[44px] tracking-[-0.02em] text-white leading-none">talent</Text>
-          <Text className="font-bold text-[44px] text-[#E91E76] leading-none ml-[0.5px]">.</Text>
+          <Text style={{ color: theme.text }} className="font-bold text-[44px] tracking-[-0.02em] leading-none">talent</Text>
+          <Text style={{ color: theme.primary }} className="font-bold text-[44px] leading-none ml-[0.5px]">.</Text>
         </View>
-        <Text className="text-[#9CA3AF] text-center">
+        <Text style={{ color: theme.textSecondary }} className="text-center">
           {isLogin ? 'Welcome back! Sign in to continue.' : 'Join the community of talented creators.'}
         </Text>
       </View>
@@ -80,48 +83,54 @@ export function AuthView({ onAuthSuccess }: { onAuthSuccess: (token: string, use
       <View className="space-y-4">
         {!isLogin && (
           <View>
-            <Text className="text-white font-medium mb-1.5 ml-1">Full Name</Text>
+            <Text style={{ color: theme.text }} className="font-medium mb-1.5 ml-1">Full Name</Text>
             <TextInput
               value={name}
               onChangeText={setName}
               placeholder="e.g. Jane Doe"
-              placeholderTextColor="#4B5563"
-              className="w-full bg-[#1A1D24] text-white px-5 py-4 rounded-2xl border border-white/5"
+              placeholderTextColor={theme.textSecondary}
+              style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border, color: theme.text }}
+              className="w-full px-5 py-4 rounded-2xl border"
             />
           </View>
         )}
 
         <View>
-          <Text className="text-white font-medium mb-1.5 ml-1">Username</Text>
+          <Text style={{ color: theme.text }} className="font-medium mb-1.5 ml-1">Username</Text>
           <TextInput
             value={username}
             onChangeText={setUsername}
             autoCapitalize="none"
             placeholder="e.g. janedoe"
-            placeholderTextColor="#4B5563"
-            className="w-full bg-[#1A1D24] text-white px-5 py-4 rounded-2xl border border-white/5"
+            placeholderTextColor={theme.textSecondary}
+            style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border, color: theme.text }}
+            className="w-full px-5 py-4 rounded-2xl border"
           />
         </View>
 
         <View>
-          <Text className="text-white font-medium mb-1.5 ml-1">Password</Text>
-          <View className="flex-row items-center w-full bg-[#1A1D24] rounded-2xl border border-white/5 pr-4">
+          <Text style={{ color: theme.text }} className="font-medium mb-1.5 ml-1">Password</Text>
+          <View 
+            style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+            className="flex-row items-center w-full rounded-2xl border pr-4"
+          >
             <TextInput
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
               placeholder="••••••••"
-              placeholderTextColor="#4B5563"
-              className="flex-1 text-white px-5 py-4"
+              placeholderTextColor={theme.textSecondary}
+              style={{ color: theme.text }}
+              className="flex-1 px-5 py-4"
             />
             <TouchableOpacity 
               onPress={() => setShowPassword(!showPassword)}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               {showPassword ? (
-                <EyeOff size={20} color="#9CA3AF" />
+                <EyeOff size={20} color={theme.textSecondary} />
               ) : (
-                <Eye size={20} color="#9CA3AF" />
+                <Eye size={20} color={theme.textSecondary} />
               )}
             </TouchableOpacity>
           </View>
@@ -132,7 +141,8 @@ export function AuthView({ onAuthSuccess }: { onAuthSuccess: (token: string, use
         ) : null}
 
         <TouchableOpacity 
-          className="w-full bg-[#E91E76] py-4 rounded-2xl mt-4 items-center justify-center flex-row"
+          style={{ backgroundColor: theme.primary }}
+          className="w-full py-4 rounded-2xl mt-4 items-center justify-center flex-row"
           activeOpacity={0.8}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -157,9 +167,9 @@ export function AuthView({ onAuthSuccess }: { onAuthSuccess: (token: string, use
             setError('');
           }}
         >
-          <Text className="text-[#9CA3AF]">
+          <Text style={{ color: theme.textSecondary }}>
             {isLogin ? "Don't have an account? " : "Already have an account? "}
-            <Text className="text-[#E91E76] font-semibold">
+            <Text style={{ color: theme.primary }} className="font-semibold">
               {isLogin ? 'Sign up' : 'Sign in'}
             </Text>
           </Text>

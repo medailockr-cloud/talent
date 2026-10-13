@@ -4,18 +4,20 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useColorScheme } from 'react-native';
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '../store/authStore';
+import { useThemeStore } from '../store/themeStore';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const { checkAuth, token, isLoading } = useAuthStore();
+  const { loadTheme, theme } = useThemeStore();
   const segments = useSegments();
   const router = useRouter();
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    checkAuth().finally(() => {
+    Promise.all([checkAuth(), loadTheme()]).finally(() => {
       setIsReady(true);
       SplashScreen.hideAsync();
     });
@@ -38,7 +40,7 @@ export default function RootLayout() {
   if (!isReady || isLoading) return null; // Or a splash loading screen
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={theme.isDark ? DarkTheme : DefaultTheme}>
       <Slot />
     </ThemeProvider>
   );

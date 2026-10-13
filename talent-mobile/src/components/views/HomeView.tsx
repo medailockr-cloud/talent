@@ -13,6 +13,7 @@ import { Search, EyeOff, Play, Pause, Maximize2, MoreHorizontal, X, Bookmark, Me
 import { useRouter } from 'expo-router';
 import { useFeed } from '../../hooks/useFeed';
 import { api } from '../../utils/api';
+import { useThemeStore } from '../../store/themeStore';
 
 const HEADER_HEIGHT = 130;
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -131,6 +132,7 @@ function FeedVideoCard({
   onManualToggle?: (id: string, willPlay: boolean) => void;
 }) {
   const router = useRouter();
+  const { theme } = useThemeStore();
   const isPlaying = String(playingVideoId) === String(video.id);
   const containerRef = useRef<any>(null);
   
@@ -226,16 +228,12 @@ function FeedVideoCard({
     }
   }, [isMuted]);
 
-  // Handle active video transitions: start over when becoming playing, pause when stopped
+  // Handle active video transitions: resume from paused time when playing, pause when stopped
   useEffect(() => {
     if (Platform.OS === 'web' && videoRef.current) {
       videoRef.current.defaultMuted = true;
       videoRef.current.muted = isMuted;
       if (isPlaying) {
-        try {
-          videoRef.current.currentTime = 0;
-        } catch (e) {}
-
         const p = videoRef.current.play();
         if (p !== undefined) {
           p.catch(() => {
@@ -249,7 +247,6 @@ function FeedVideoCard({
       } else {
         try {
           videoRef.current.pause();
-          videoRef.current.currentTime = 0;
         } catch (e) {}
       }
     }
@@ -412,7 +409,8 @@ function FeedVideoCard({
     <View 
       ref={containerRef} 
       nativeID={`feed-card-${video.id}`}
-      className="bg-[#0B0D13] rounded-[24px] p-3 border border-white/10 mb-6 shadow-2xl overflow-hidden"
+      style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+      className="rounded-[24px] p-3 border mb-6 shadow-2xl overflow-hidden"
     >
       {/* Video Playback Area */}
       <TouchableOpacity 
@@ -487,8 +485,8 @@ function FeedVideoCard({
         {/* Bottom Playback Scrubber Line */}
         <View pointerEvents="none" className="absolute bottom-0 inset-x-0 h-[3px] bg-white/20 z-20 overflow-hidden">
           <View 
-            className="h-full bg-[#E91E76]" 
-            style={{ width: `${duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0}%` }} 
+            className="h-full" 
+            style={{ backgroundColor: theme.primary, width: `${duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0}%` }} 
           />
         </View>
 
@@ -521,7 +519,7 @@ function FeedVideoCard({
                 {isMuted ? (
                   <VolumeX color="#9CA3AF" size={14} />
                 ) : (
-                  <Volume2 color="#E91E76" size={14} />
+                  <Volume2 color={theme.primary} size={14} />
                 )}
               </TouchableOpacity>
             )}
@@ -553,9 +551,12 @@ function FeedVideoCard({
             >
               {tempScore.toFixed(1)}
             </Text>
-            <View className="flex-row items-center gap-2 bg-[#E91E76]/25 border border-[#E91E76] px-4 py-1.5 rounded-full mt-3">
-              <Gauge color="#E91E76" size={14} />
-              <Text className="text-[#E91E76] text-[11px] font-bold tracking-widest uppercase">Slide ↕ to Score • Release to Set</Text>
+            <View 
+              style={{ backgroundColor: theme.primary + '25', borderColor: theme.primary }}
+              className="flex-row items-center gap-2 border px-4 py-1.5 rounded-full mt-3"
+            >
+              <Gauge color={theme.primary} size={14} />
+              <Text style={{ color: theme.primary }} className="text-[11px] font-bold tracking-widest uppercase">Slide ↕ to Score • Release to Set</Text>
             </View>
           </View>
         )}
@@ -571,46 +572,56 @@ function FeedVideoCard({
             router.push(`/profile/${userId}` as any);
           }}
         >
-          <View className="w-11 h-11 rounded-full overflow-hidden border-2 border-white/15 shadow-md">
+          <View 
+            style={{ borderColor: theme.border }}
+            className="w-11 h-11 rounded-full overflow-hidden border-2 shadow-md"
+          >
             <Image source={{ uri: video.avatar || video.authorAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100' }} className="w-full h-full" />
           </View>
           <View className="flex-1">
-            <Text className="text-white text-[15px] font-bold mb-0.5" numberOfLines={1}>{video.author}</Text>
+            <Text style={{ color: theme.text }} className="text-[15px] font-bold mb-0.5" numberOfLines={1}>{video.author}</Text>
             <View className="flex-row items-center gap-1.5 mb-1">
-              <Text className="text-[#9CA3AF] text-[11px]">{(video.role || 'Artist').split('•')[0].trim()}</Text>
-              <Text className="text-[#9CA3AF] text-[11px]">•</Text>
-              <MapPin color="#9CA3AF" size={10} />
-              <Text className="text-[#9CA3AF] text-[11px]">{(video.role || 'World').split('•')[1]?.trim() || 'World'}</Text>
+              <Text style={{ color: theme.textSecondary }} className="text-[11px]">{(video.role || 'Artist').split('•')[0].trim()}</Text>
+              <Text style={{ color: theme.textSecondary }} className="text-[11px]">•</Text>
+              <MapPin color={theme.textSecondary} size={10} />
+              <Text style={{ color: theme.textSecondary }} className="text-[11px]">{(video.role || 'World').split('•')[1]?.trim() || 'World'}</Text>
             </View>
             <View className="flex-row items-center gap-1.5 flex-wrap">
               {(video.tags || video.hashtags || ['#performance', '#talent']).slice(0, 3).map((tag: any, idx: number) => {
                 const tagText = typeof tag === 'string' ? tag : tag?.name ? `#${tag.name}` : '#performance';
                 return (
-                  <Text key={idx} className="text-[#E91E76]/80 text-[10px] font-medium">{tagText}</Text>
+                  <Text key={idx} style={{ color: theme.primary }} className="text-[10px] font-medium opacity-80">{tagText}</Text>
                 );
               })}
             </View>
           </View>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => setShowOptions(true)} className="w-9 h-9 rounded-full bg-white/5 items-center justify-center">
-          <MoreHorizontal color="#9CA3AF" size={16} />
+        <TouchableOpacity 
+          onPress={() => setShowOptions(true)} 
+          style={{ backgroundColor: theme.surfaceBg }}
+          className="w-9 h-9 rounded-full items-center justify-center"
+        >
+          <MoreHorizontal color={theme.textSecondary} size={16} />
         </TouchableOpacity>
       </View>
 
       {/* Main Actions Row */}
-      <View className="flex-row items-center justify-between px-2 pt-2.5 border-t border-white/5">
+      <View 
+        style={{ borderTopColor: theme.border }}
+        className="flex-row items-center justify-between px-2 pt-2.5 border-t"
+      >
         <View className="flex-row items-center gap-6">
           <TouchableOpacity onPress={handleKeepToggle} activeOpacity={0.7} className="items-center gap-1 min-w-[38px]">
-            <Bookmark color={isKept ? "#E91E76" : "#fff"} fill={isKept ? "#E91E76" : "transparent"} size={22} strokeWidth={1.7} />
-            <Text className={`text-[9px] font-bold tracking-widest uppercase ${isKept ? 'text-[#E91E76]' : 'text-[#9CA3AF]'}`}>{keptText}</Text>
+            <Bookmark color={isKept ? theme.primary : theme.text} fill={isKept ? theme.primary : "transparent"} size={22} strokeWidth={1.7} />
+            <Text style={{ color: isKept ? theme.primary : theme.textSecondary }} className="text-[9px] font-bold tracking-widest uppercase">{keptText}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setIsCommenting(true); }} activeOpacity={0.7} className="items-center gap-1 min-w-[38px]">
-            <MessageCircle color="#fff" size={22} strokeWidth={1.7} />
-            <Text className="text-[#9CA3AF] text-[9px] font-bold tracking-widest uppercase">TALK</Text>
+            <MessageCircle color={theme.text} size={22} strokeWidth={1.7} />
+            <Text style={{ color: theme.textSecondary }} className="text-[9px] font-bold tracking-widest uppercase">TALK</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPass(); }} activeOpacity={0.7} className="items-center gap-1 min-w-[38px]">
-            <Send color="#fff" size={21} strokeWidth={1.7} style={{ transform: [{ rotate: '45deg' }], marginLeft: -3, marginBottom: 1 }} />
-            <Text className="text-[#9CA3AF] text-[9px] font-bold tracking-widest uppercase">PASS</Text>
+            <Send color={theme.text} size={21} strokeWidth={1.7} style={{ transform: [{ rotate: '45deg' }], marginLeft: -3, marginBottom: 1 }} />
+            <Text style={{ color: theme.textSecondary }} className="text-[9px] font-bold tracking-widest uppercase">PASS</Text>
           </TouchableOpacity>
         </View>
 
@@ -621,20 +632,24 @@ function FeedVideoCard({
           style={{
             touchAction: 'none',
             userSelect: 'none',
-            cursor: 'ns-resize'
+            cursor: 'ns-resize',
+            backgroundColor: isJudgingActive 
+              ? theme.primary 
+              : judgeScore !== null 
+                ? theme.primary + '25' 
+                : theme.primary,
+            borderColor: judgeScore !== null && !isJudgingActive ? theme.primary : undefined,
+            borderWidth: judgeScore !== null && !isJudgingActive ? 1 : 0,
           } as any}
           className={`rounded-full h-[36px] px-4 flex-row items-center gap-2 shadow-lg select-none ${
-            isJudgingActive
-              ? 'bg-[#E91E76] scale-105 shadow-[#E91E76]/50'
-              : judgeScore !== null 
-                ? 'bg-[#E91E76]/20 border border-[#E91E76]' 
-                : 'bg-[#E91E76]'
+            isJudgingActive ? 'scale-105' : ''
           }`}
         >
-          <Gauge color={judgeScore !== null && !isJudgingActive ? "#E91E76" : "#fff"} size={14} />
-          <Text className={`text-[11px] font-bold tracking-wider uppercase select-none ${
-            judgeScore !== null && !isJudgingActive ? 'text-[#E91E76]' : 'text-white'
-          }`}>
+          <Gauge color={judgeScore !== null && !isJudgingActive ? theme.primary : "#fff"} size={14} />
+          <Text 
+            style={{ color: judgeScore !== null && !isJudgingActive ? theme.primary : '#ffffff' }}
+            className="text-[11px] font-bold tracking-wider uppercase select-none"
+          >
             {isJudgingActive 
               ? `${tempScore.toFixed(1)} ★` 
               : judgeScore !== null 
@@ -645,14 +660,17 @@ function FeedVideoCard({
       </View>
 
       {/* Judging Criteria Footer Row - Completely Separated to Prevent Cramping */}
-      <View className="flex-row items-center justify-between pt-2.5 mt-2 border-t border-white/5 px-2">
-        <Text className="text-[#6B7280] text-[10px] font-medium tracking-wide">Judging criteria</Text>
+      <View 
+        style={{ borderTopColor: theme.border }}
+        className="flex-row items-center justify-between pt-2.5 mt-2 border-t px-2"
+      >
+        <Text style={{ color: theme.textSecondary }} className="text-[10px] font-medium tracking-wide">Judging criteria</Text>
         <View className="flex-row items-center gap-2">
-          <Text className="text-[#9CA3AF] text-[9px] font-semibold uppercase tracking-wider">Presence</Text>
-          <View className="w-1 h-1 rounded-full bg-[#E91E76]/70" />
-          <Text className="text-[#9CA3AF] text-[9px] font-semibold uppercase tracking-wider">Originality</Text>
-          <View className="w-1 h-1 rounded-full bg-[#E91E76]/70" />
-          <Text className="text-[#9CA3AF] text-[9px] font-semibold uppercase tracking-wider">Craft</Text>
+          <Text style={{ color: theme.textSecondary }} className="text-[9px] font-semibold uppercase tracking-wider">Presence</Text>
+          <View style={{ backgroundColor: theme.primary }} className="w-1 h-1 rounded-full opacity-70" />
+          <Text style={{ color: theme.textSecondary }} className="text-[9px] font-semibold uppercase tracking-wider">Originality</Text>
+          <View style={{ backgroundColor: theme.primary }} className="w-1 h-1 rounded-full opacity-70" />
+          <Text style={{ color: theme.textSecondary }} className="text-[9px] font-semibold uppercase tracking-wider">Craft</Text>
         </View>
       </View>
 
@@ -660,19 +678,31 @@ function FeedVideoCard({
       {showOptions && (
         <Modal visible={true} transparent={true} animationType="fade">
           <TouchableOpacity activeOpacity={1} onPress={() => setShowOptions(false)} className="flex-1 bg-black/60 justify-end">
-            <View className="bg-[#171922] w-full rounded-t-2xl pb-8 pt-4 px-4 border-t border-white/10">
-              <View className="w-10 h-1 bg-white/20 rounded-full self-center mb-6" />
+            <View 
+              style={{ backgroundColor: theme.cardBg, borderTopColor: theme.border }}
+              className="w-full rounded-t-2xl pb-8 pt-4 px-4 border-t"
+            >
+              <View 
+                style={{ backgroundColor: theme.textSecondary + '40' }}
+                className="w-10 h-1 rounded-full self-center mb-6" 
+              />
               <TouchableOpacity onPress={() => { 
                 setShowOptions(false); 
                 const userId = video.authorId || video.author?.id || video.id;
                 router.push(`/profile/${userId}` as any);
-              }} className="flex-row items-center gap-4 py-4 border-b border-white/5">
-                <User color="#fff" size={20} />
-                <Text className="text-white text-[15px] font-medium">View profile</Text>
+              }} 
+                style={{ borderBottomColor: theme.border }}
+                className="flex-row items-center gap-4 py-4 border-b"
+              >
+                <User color={theme.text} size={20} />
+                <Text style={{ color: theme.text }} className="text-[15px] font-medium">View profile</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => { setShowOptions(false); Alert.alert('Hidden', 'Performance hidden.'); }} className="flex-row items-center gap-4 py-4 border-b border-white/5">
-                <UserX color="#fff" size={20} />
-                <Text className="text-white text-[15px] font-medium">Not interested</Text>
+              <TouchableOpacity onPress={() => { setShowOptions(false); Alert.alert('Hidden', 'Performance hidden.'); }} 
+                style={{ borderBottomColor: theme.border }}
+                className="flex-row items-center gap-4 py-4 border-b"
+              >
+                <UserX color={theme.text} size={20} />
+                <Text style={{ color: theme.text }} className="text-[15px] font-medium">Not interested</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => { setShowOptions(false); Alert.alert('Reported', 'Performance reported for review.'); }} className="flex-row items-center gap-4 py-4">
                 <Flag color="#EF4444" size={20} />
@@ -687,58 +717,74 @@ function FeedVideoCard({
       {isCommenting && (
         <Modal visible={true} transparent={true} animationType="slide">
           <View className="flex-1 justify-end bg-black/50">
-            <View className="bg-[#101217] w-full h-[75%] rounded-t-3xl border-t border-white/10 flex-col pb-6 shadow-2xl">
-              <View className="flex-row justify-between items-center p-5 border-b border-white/5">
+            <View 
+              style={{ backgroundColor: theme.cardBg, borderTopColor: theme.border }}
+              className="w-full h-[75%] rounded-t-3xl border-t flex-col pb-6 shadow-2xl"
+            >
+              <View 
+                style={{ borderBottomColor: theme.border }}
+                className="flex-row justify-between items-center p-5 border-b"
+              >
                 <View>
-                  <Text className="text-white text-[16px] font-bold tracking-wider">TALK</Text>
-                  <Text className="text-[#9CA3AF] text-[12px] mt-0.5">{video.author}</Text>
+                  <Text style={{ color: theme.text }} className="text-[16px] font-bold tracking-wider">TALK</Text>
+                  <Text style={{ color: theme.textSecondary }} className="text-[12px] mt-0.5">{video.author}</Text>
                 </View>
-                <TouchableOpacity onPress={() => setIsCommenting(false)} className="w-8 h-8 bg-white/5 rounded-full items-center justify-center">
-                  <X color="#9CA3AF" size={18} />
+                <TouchableOpacity 
+                  onPress={() => setIsCommenting(false)} 
+                  style={{ backgroundColor: theme.surfaceBg }}
+                  className="w-8 h-8 rounded-full items-center justify-center"
+                >
+                  <X color={theme.textSecondary} size={18} />
                 </TouchableOpacity>
               </View>
               
               <ScrollView className="flex-1 p-5" showsVerticalScrollIndicator={false}>
                 {comments.length === 0 ? (
-                  <Text className="text-[#6B7280] text-[13px] text-center mt-10">No comments yet. Start the conversation!</Text>
+                  <Text style={{ color: theme.textSecondary }} className="text-[13px] text-center mt-10">No comments yet. Start the conversation!</Text>
                 ) : (
                   comments.map((c: any) => (
                     <View key={c.id} className="mb-6">
                       <View className="flex-row items-start gap-3">
-                        <View className="w-8 h-8 rounded-full bg-[#1A1D24] items-center justify-center border border-white/5 overflow-hidden">
+                        <View 
+                          style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                          className="w-8 h-8 rounded-full items-center justify-center border overflow-hidden"
+                        >
                           {c.user === 'You' ? (
                              <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100' }} className="w-full h-full" />
                           ) : (
-                             <Text className="text-[#9CA3AF] text-xs font-bold">{c.user.charAt(0)}</Text>
+                             <Text style={{ color: theme.textSecondary }} className="text-xs font-bold">{c.user.charAt(0)}</Text>
                           )}
                         </View>
                         <View className="flex-1">
                           <View className="flex-row items-center gap-2 mb-1">
-                            <Text className="text-[#9CA3AF] text-[12px] font-medium">{c.user}</Text>
-                            <Text className="text-[#4B5563] text-[10px]">{c.time}</Text>
-                            {c.isArtist && <Text className="bg-[#E91E76]/20 text-[#E91E76] text-[8px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-widest">Artist</Text>}
-                            {c.isFeedback && <Text className="bg-blue-500/20 text-blue-400 text-[8px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-widest">Feedback</Text>}
-                            {c.isOpportunity && <Text className="bg-emerald-500/20 text-emerald-400 text-[8px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-widest">Opportunity</Text>}
-                            {c.isQuestion && <Text className="bg-amber-500/20 text-amber-400 text-[8px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-widest">Question</Text>}
+                            <Text style={{ color: theme.text }} className="text-[12px] font-medium">{c.user}</Text>
+                            <Text style={{ color: theme.textSecondary }} className="text-[10px]">{c.time}</Text>
+                            {c.isArtist && <Text style={{ backgroundColor: theme.primary + '20', color: theme.primary }} className="text-[8px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-widest">Artist</Text>}
+                            {c.isFeedback && <Text className="bg-blue-500/20 text-blue-500 text-[8px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-widest">Feedback</Text>}
+                            {c.isOpportunity && <Text className="bg-emerald-500/20 text-emerald-500 text-[8px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-widest">Opportunity</Text>}
+                            {c.isQuestion && <Text className="bg-amber-500/20 text-amber-500 text-[8px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-widest">Question</Text>}
                             {c.timestamp && (
-                              <TouchableOpacity className="bg-white/10 rounded-full px-2 py-0.5 ml-1">
-                                <Text className="text-white text-[9px] font-medium">○ {c.timestamp}</Text>
+                              <TouchableOpacity 
+                                style={{ backgroundColor: theme.surfaceBg }}
+                                className="rounded-full px-2 py-0.5 ml-1"
+                              >
+                                <Text style={{ color: theme.text }} className="text-[9px] font-medium">○ {c.timestamp}</Text>
                               </TouchableOpacity>
                             )}
                           </View>
-                          <Text className="text-white/90 text-[13px] leading-5">{c.text}</Text>
+                          <Text style={{ color: theme.text }} className="text-[13px] leading-5">{c.text}</Text>
                           
                           <View className="flex-row items-center gap-4 mt-2">
                             <TouchableOpacity>
-                              <Text className="text-[#6B7280] text-[11px] font-medium">Reply</Text>
+                              <Text style={{ color: theme.textSecondary }} className="text-[11px] font-medium">Reply</Text>
                             </TouchableOpacity>
                             {c.isOpportunity ? (
                               <TouchableOpacity>
-                                <Text className="text-emerald-400 text-[11px] font-bold">Connect</Text>
+                                <Text className="text-emerald-500 text-[11px] font-bold">Connect</Text>
                               </TouchableOpacity>
                             ) : (
                               <TouchableOpacity onPress={() => toggleUseful(c.id)}>
-                                <Text className={`text-[11px] font-medium ${c.isUseful ? 'text-[#E91E76]' : 'text-[#6B7280]'}`}>
+                                <Text style={{ color: c.isUseful ? theme.primary : theme.textSecondary }} className="text-[11px] font-medium">
                                   {c.isUseful ? 'Useful ✓' : 'Useful'}
                                 </Text>
                               </TouchableOpacity>
@@ -753,30 +799,53 @@ function FeedVideoCard({
               </ScrollView>
               
               <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-                <View className="p-4 border-t border-white/5 bg-[#101217]">
+                <View 
+                  style={{ borderTopColor: theme.border, backgroundColor: theme.cardBg }}
+                  className="p-4 border-t"
+                >
                   <View className="flex-row items-center gap-3">
-                    <View className="w-8 h-8 rounded-full overflow-hidden border border-white/10">
+                    <View 
+                      style={{ borderColor: theme.border }}
+                      className="w-8 h-8 rounded-full overflow-hidden border"
+                    >
                       <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100' }} className="w-full h-full" />
                     </View>
                     <TextInput
                       value={commentText}
                       onChangeText={setCommentText}
                       placeholder="Talk about this performance..."
-                      placeholderTextColor="#6B7280"
-                      className="flex-1 bg-[#1A1D24] text-white text-[13px] px-4 py-2.5 rounded-full border border-white/5"
+                      placeholderTextColor={theme.textSecondary}
+                      style={{ 
+                        backgroundColor: theme.surfaceBg, 
+                        borderColor: theme.border,
+                        color: theme.text 
+                      }}
+                      className="flex-1 text-[13px] px-4 py-2.5 rounded-full border"
                       onSubmitEditing={handlePostComment}
                       returnKeyType="send"
                     />
-                    <TouchableOpacity onPress={handlePostComment} disabled={!commentText.trim()} className={`w-8 h-8 rounded-full items-center justify-center ${commentText.trim() ? 'bg-[#E91E76]' : 'bg-white/10'}`}>
-                      <Send color={commentText.trim() ? "#fff" : "#6B7280"} size={14} style={{ transform: [{ rotate: '45deg' }], marginLeft: -2 }} />
+                    <TouchableOpacity 
+                      onPress={handlePostComment} 
+                      disabled={!commentText.trim()} 
+                      style={{ backgroundColor: commentText.trim() ? theme.primary : theme.surfaceBg }}
+                      className="w-8 h-8 rounded-full items-center justify-center"
+                    >
+                      <Send color={commentText.trim() ? "#fff" : theme.textSecondary} size={14} style={{ transform: [{ rotate: '45deg' }], marginLeft: -2 }} />
                     </TouchableOpacity>
                   </View>
                   <View className="flex-row items-center gap-4 mt-3 ml-11">
-                    <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setAttachMoment(!attachMoment); }} className={`flex-row items-center gap-1.5 px-2.5 py-1 rounded-full ${attachMoment ? 'bg-[#E91E76]/20' : 'bg-white/5'}`}>
-                      <Text className={`text-[10px] font-medium ${attachMoment ? 'text-[#E91E76]' : 'text-[#9CA3AF]'}`}>○ Attach moment</Text>
+                    <TouchableOpacity 
+                      onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setAttachMoment(!attachMoment); }} 
+                      style={attachMoment ? { backgroundColor: theme.primary + '25', borderColor: theme.primary } : { backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                      className="flex-row items-center gap-1.5 px-2.5 py-1 rounded-full border"
+                    >
+                      <Text style={{ color: attachMoment ? theme.primary : theme.textSecondary }} className="text-[10px] font-medium">○ Attach moment</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity className="flex-row items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5">
-                      <Text className="text-[#9CA3AF] text-[10px] font-medium">🎤 Voice</Text>
+                    <TouchableOpacity 
+                      style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                      className="flex-row items-center gap-1.5 px-2.5 py-1 rounded-full border"
+                    >
+                      <Text style={{ color: theme.textSecondary }} className="text-[10px] font-medium">🎤 Voice</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -790,6 +859,7 @@ function FeedVideoCard({
 }
 
 export function HomeView({ user }: { user?: any }) {
+  const { theme } = useThemeStore();
   const [activeFeedTab, setActiveFeedTab] = useState('For You');
   
   // Search & Filters state removed for dedicated screens
@@ -964,10 +1034,10 @@ export function HomeView({ user }: { user?: any }) {
       left: 0,
       right: 0,
       zIndex: 10,
-      backgroundColor: '#050608',
+      backgroundColor: theme.headerBg,
       paddingBottom: 8,
       borderBottomWidth: 1,
-      borderBottomColor: 'rgba(255,255,255,0.03)'
+      borderBottomColor: theme.border
     };
   });
 
@@ -981,22 +1051,22 @@ export function HomeView({ user }: { user?: any }) {
     }
   };
   return (
-    <View className="flex-1 bg-[#050608]">
+    <View className="flex-1" style={{ backgroundColor: theme.bg }}>
       <Animated.View style={headerStyle}>
         <View className="px-5 pt-12 pb-4 flex-row items-center justify-between">
           <View className="flex-row items-baseline">
-            <Text className="font-bold text-[32px] tracking-tight text-white leading-none font-serif">talent</Text>
-            <Text className="font-bold text-[32px] text-[#E91E76] leading-none ml-[1px] font-serif">.</Text>
+            <Text className="font-bold text-[32px] tracking-tight leading-none font-serif" style={{ color: theme.text }}>talent</Text>
+            <Text className="font-bold text-[32px] leading-none ml-[1px] font-serif" style={{ color: theme.primary }}>.</Text>
           </View>
           <View className="flex-row items-center gap-6">
             <TouchableOpacity activeOpacity={0.7} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/search' as any); }}>
-              <Search color="#E5E7EB" size={24} strokeWidth={2} />
+              <Search color={theme.text} size={24} strokeWidth={2} />
             </TouchableOpacity>
             <TouchableOpacity activeOpacity={0.7} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/messages' as any); }}>
-              <MessageCircle color="#E5E7EB" size={24} strokeWidth={2} />
+              <MessageCircle color={theme.text} size={24} strokeWidth={2} />
             </TouchableOpacity>
             <TouchableOpacity activeOpacity={0.7} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/notifications' as any); }}>
-              <Bell color="#E5E7EB" size={24} strokeWidth={2} />
+              <Bell color={theme.text} size={24} strokeWidth={2} />
             </TouchableOpacity>
           </View>
         </View>
@@ -1013,18 +1083,20 @@ export function HomeView({ user }: { user?: any }) {
                   // Reset scroll
                   scrollRef.current?.scrollTo({ y: 0, animated: true });
                 }}
-                className={`h-[36px] px-5 rounded-full flex-row items-center justify-center ${
-                  isActive ? 'bg-[#130711] border border-[#E91E76]/80' : 'bg-[#13151C] border border-white/5'
-                }`}
+                style={isActive ? { backgroundColor: theme.primary + '20', borderColor: theme.primary } : { backgroundColor: theme.cardBg, borderColor: theme.border }}
+                className="h-[36px] px-5 rounded-full flex-row items-center justify-center border"
               >
-                <Text className={`text-[13px] ${isActive ? 'text-white font-bold' : 'text-[#D1D5DB] font-medium'}`}>
+                <Text 
+                  style={{ color: isActive ? theme.text : theme.textSecondary }}
+                  className={`text-[13px] ${isActive ? 'font-bold' : 'font-medium'}`}
+                >
                   {tab}
                 </Text>
                 {tab === 'Live' && (
-                  <View className="w-1.5 h-1.5 rounded-full bg-[#E91E76] ml-2 -mt-1" />
+                  <View style={{ backgroundColor: theme.primary }} className="w-1.5 h-1.5 rounded-full ml-2 -mt-1" />
                 )}
                 {tab === 'All Genres' && (
-                  <ChevronDown color="#D1D5DB" size={14} className="ml-1" />
+                  <ChevronDown color={theme.textSecondary} size={14} className="ml-1" />
                 )}
               </TouchableOpacity>
             )
@@ -1044,7 +1116,7 @@ export function HomeView({ user }: { user?: any }) {
       >
         {filteredData.length === 0 ? (
           <View className="items-center justify-center py-20">
-            <Text className="text-[#9CA3AF] text-[15px]">No performances found.</Text>
+            <Text style={{ color: theme.textSecondary }} className="text-[15px]">No performances found.</Text>
           </View>
         ) : (
           <>
@@ -1064,9 +1136,12 @@ export function HomeView({ user }: { user?: any }) {
 
             {/* Seamless Automated Infinite Scroll Loading Indicator */}
             <View ref={sentinelRef} className="py-10 items-center justify-center">
-              <View className="bg-white/5 border border-white/10 px-5 py-2.5 rounded-full flex-row items-center gap-3">
-                <ActivityIndicator size="small" color="#E91E76" />
-                <Text className="text-[#9CA3AF] font-medium text-[13px] tracking-wide">
+              <View 
+                style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+                className="border px-5 py-2.5 rounded-full flex-row items-center gap-3"
+              >
+                <ActivityIndicator size="small" color={theme.primary} />
+                <Text style={{ color: theme.textSecondary }} className="font-medium text-[13px] tracking-wide">
                   {isLoadingMore ? "Fetching fresh performances..." : "Loading more fresh performances..."}
                 </Text>
               </View>

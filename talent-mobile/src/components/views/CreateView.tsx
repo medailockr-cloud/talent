@@ -81,6 +81,8 @@ import * as DocumentPicker from "expo-document-picker";
 import { api } from "../../utils/api";
 import { useUIStore } from "../../store/uiStore";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
+import { useThemeStore } from "../../store/themeStore";
 
 // --- Types & Filter Configurations ---
 export interface TalentFilter {
@@ -357,7 +359,9 @@ type CreateStep =
   | "SUCCESS";
 
 export function CreateView({ onClose }: { onClose?: () => void }) {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { theme } = useThemeStore();
   // --- Permissions ---
   const [facing, setFacing] = useState<"front" | "back">(
     Platform.OS === "web" ? "front" : "back",
@@ -844,9 +848,6 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         const res = await fetch(recordedVideoUri);
         const blob = await res.blob();
         formData.append("video", blob, filename);
-        if (isImg) {
-          formData.append("image", blob, filename);
-        }
       } else {
         formData.append("video", {
           uri: recordedVideoUri,
@@ -855,10 +856,10 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         } as any);
       }
 
-      console.log("Sending video to server...");
+      console.log("Sending media to server...");
       // Do NOT explicitly set 'Content-Type': 'multipart/form-data'.
       // Axios and the browser automatically attach the multipart boundary required by Multer.
-      await api.post("/videos", formData);
+      await api.post("/videos", formData, { timeout: 120000 });
     } catch (e) {
       console.error("submitToServer error:", e);
       throw e;
@@ -936,10 +937,10 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   }) => (
     <View className="flex-row items-center justify-between px-5 mb-5">
       <TouchableOpacity onPress={onBack} className="p-1 -ml-1">
-        <ChevronLeft color="#fff" size={28} />
+        <ChevronLeft color={theme.text} size={28} />
       </TouchableOpacity>
       {title && (
-        <Text className="text-white font-semibold text-lg">{title}</Text>
+        <Text className="font-semibold text-lg" style={{ color: theme.text }}>{title}</Text>
       )}
       <View className="min-w-[28px] items-end">{rightEl}</View>
     </View>
@@ -949,33 +950,35 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
   const renderHome = () => (
     <ScrollView
-      className="flex-1 bg-[#050608]"
+      className="flex-1"
+      style={{ backgroundColor: theme.bg }}
       contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 40, paddingBottom: 60 }}
       showsVerticalScrollIndicator={false}
     >
       <View className="flex-row justify-between items-center mb-8">
         <View className="flex-row items-baseline">
-          <Text className="font-bold text-[32px] tracking-tight text-white leading-none font-serif">
+          <Text className="font-bold text-[32px] tracking-tight leading-none font-serif" style={{ color: theme.text }}>
             talent
           </Text>
-          <Text className="font-bold text-[32px] text-[#E91E76] leading-none ml-[1px] font-serif">
+          <Text className="font-bold text-[32px] leading-none ml-[1px] font-serif" style={{ color: theme.primary }}>
             .
           </Text>
         </View>
         {onClose && (
-          <TouchableOpacity onPress={onClose}>
-            <X color="#fff" size={24} />
+          <TouchableOpacity onPress={onClose} className="p-1">
+            <X color={theme.text} size={24} />
           </TouchableOpacity>
         )}
       </View>
 
-      <Text className="text-white text-4xl font-serif mt-4 mb-2">Create</Text>
-      <Text className="text-[#9CA3AF] text-lg mb-12">
+      <Text className="text-4xl font-serif mt-4 mb-2" style={{ color: theme.text }}>Create</Text>
+      <Text className="text-lg mb-12" style={{ color: theme.textSecondary }}>
         Show what you can do.
       </Text>
 
       <TouchableOpacity
-        className="bg-[#E91E76] w-full rounded-2xl p-5 mb-4 flex-row items-center"
+        className="w-full rounded-2xl p-5 mb-4 flex-row items-center shadow-lg"
+        style={{ backgroundColor: theme.primary }}
         onPress={() => {
           if (!camPermission?.granted) requestCamPermission();
           if (!micPermission?.granted) requestMicPermission();
@@ -995,27 +998,34 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       </TouchableOpacity>
 
       <TouchableOpacity
-        className="bg-[#1A1D24] border border-white/10 w-full rounded-2xl p-5 mb-4 flex-row items-center"
+        className="w-full rounded-2xl p-5 mb-4 flex-row items-center border"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
         onPress={() => setStep("UPLOAD")}
       >
-        <View className="bg-white/10 p-3 rounded-full mr-4">
-          <Upload color="#fff" size={24} />
+        <View className="p-3 rounded-full mr-4" style={{ backgroundColor: theme.surfaceBg }}>
+          <Upload color={theme.text} size={24} />
         </View>
         <View className="flex-1">
-          <Text className="text-white font-bold text-lg mb-1">
+          <Text className="font-bold text-lg mb-1" style={{ color: theme.text }}>
             Upload Performance
           </Text>
-          <Text className="text-[#9CA3AF] text-sm">
+          <Text className="text-sm" style={{ color: theme.textSecondary }}>
             Choose from your device
           </Text>
         </View>
-        <ChevronRight color="#fff" size={20} opacity={0.5} />
+        <ChevronRight color={theme.textSecondary} size={20} opacity={0.5} />
       </TouchableOpacity>
 
-      <TouchableOpacity className="bg-[#1A1D24] border border-white/10 rounded-2xl p-4 flex-row items-center self-start px-6 mt-2">
-        <Folder color="#9CA3AF" size={20} className="mr-3" />
-        <Text className="text-white font-medium">Drafts • 2</Text>
-        <ChevronRight color="#9CA3AF" size={16} className="ml-2" />
+      <TouchableOpacity 
+        className="rounded-2xl p-4 flex-row items-center self-start px-6 mt-2 border"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+        onPress={() => {
+          Alert.alert("Drafts", "You have 2 saved drafts available in studio cache.");
+        }}
+      >
+        <Folder color={theme.textSecondary} size={20} className="mr-3" />
+        <Text className="font-medium" style={{ color: theme.text }}>Drafts • 2</Text>
+        <ChevronRight color={theme.textSecondary} size={16} className="ml-2" />
       </TouchableOpacity>
     </ScrollView>
   );
@@ -1153,7 +1163,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
   const renderUpload = () => (
     <ScrollView 
-      className="flex-1 bg-[#050608]"
+      className="flex-1"
+      style={{ backgroundColor: theme.bg }}
       contentContainerStyle={{
         flexGrow: 1,
         paddingTop: Math.max(insets.top, 20),
@@ -1166,81 +1177,85 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       <View className="px-5 mt-2">
         <TouchableOpacity
           onPress={pickMedia}
-          className="w-full aspect-[4/3] rounded-3xl border-2 border-dashed border-[#E91E76]/50 bg-[#E91E76]/5 items-center justify-center mb-6"
+          className="w-full aspect-[4/3] rounded-3xl border-2 border-dashed items-center justify-center mb-6"
+          style={{ backgroundColor: theme.primary + '10', borderColor: theme.primary + '50' }}
         >
-          <UploadCloud color="#E91E76" size={40} className="mb-3" />
-          <Text className="text-white font-bold text-lg mb-1">
+          <UploadCloud color={theme.primary} size={40} className="mb-3" />
+          <Text className="font-bold text-lg mb-1" style={{ color: theme.text }}>
             Choose a Video or Image
           </Text>
-          <Text className="text-[#9CA3AF] text-sm text-center px-4">
+          <Text className="text-sm text-center px-4" style={{ color: theme.textSecondary }}>
             Select high-res photos or videos up to 3 mins
           </Text>
-          <Text className="text-[#E91E76] text-xs font-semibold mt-2">
+          <Text className="text-xs font-semibold mt-2" style={{ color: theme.primary }}>
             MP4, MOV, HEVC, JPG, PNG
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           onPress={pickMedia}
-          className="flex-row justify-between items-center bg-[#1A1D24] p-4 rounded-2xl mb-2.5 border border-white/5"
+          className="flex-row justify-between items-center p-4 rounded-2xl mb-2.5 border"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
         >
           <View className="flex-row items-center gap-3.5">
-            <View className="w-10 h-10 rounded-xl bg-white/10 items-center justify-center">
-              <ImageIcon color="#fff" size={20} />
+            <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: theme.surfaceBg }}>
+              <ImageIcon color={theme.text} size={20} />
             </View>
             <View>
-              <Text className="text-white font-medium text-[15px]">
+              <Text className="font-medium text-[15px]" style={{ color: theme.text }}>
                 From Gallery (All Media)
               </Text>
-              <Text className="text-[#9CA3AF] text-[11px]">
+              <Text className="text-[11px]" style={{ color: theme.textSecondary }}>
                 Photos and Videos from your camera roll
               </Text>
             </View>
           </View>
-          <ChevronRight color="#9CA3AF" size={18} />
+          <ChevronRight color={theme.textSecondary} size={18} />
         </TouchableOpacity>
 
         <TouchableOpacity
           onPress={pickVideo}
-          className="flex-row justify-between items-center bg-[#1A1D24] p-4 rounded-2xl mb-2.5 border border-white/5"
+          className="flex-row justify-between items-center p-4 rounded-2xl mb-2.5 border"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
         >
           <View className="flex-row items-center gap-3.5">
-            <View className="w-10 h-10 rounded-xl bg-[#E91E76]/20 items-center justify-center">
-              <FileVideo color="#E91E76" size={20} />
+            <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: theme.primary + '20' }}>
+              <FileVideo color={theme.primary} size={20} />
             </View>
             <View>
-              <Text className="text-white font-medium text-[15px]">
+              <Text className="font-medium text-[15px]" style={{ color: theme.text }}>
                 Videos Only
               </Text>
-              <Text className="text-[#9CA3AF] text-[11px]">
+              <Text className="text-[11px]" style={{ color: theme.textSecondary }}>
                 Select recorded performances or clips
               </Text>
             </View>
           </View>
-          <ChevronRight color="#9CA3AF" size={18} />
+          <ChevronRight color={theme.textSecondary} size={18} />
         </TouchableOpacity>
 
         <TouchableOpacity
           onPress={pickPhoto}
-          className="flex-row justify-between items-center bg-[#1A1D24] p-4 rounded-2xl mb-2.5 border border-white/5"
+          className="flex-row justify-between items-center p-4 rounded-2xl mb-2.5 border"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
         >
           <View className="flex-row items-center gap-3.5">
             <View className="w-10 h-10 rounded-xl bg-cyan-500/20 items-center justify-center">
               <ImagePlus color="#38BDF8" size={20} />
             </View>
             <View>
-              <Text className="text-white font-medium text-[15px]">
+              <Text className="font-medium text-[15px]" style={{ color: theme.text }}>
                 Photos & Artwork
               </Text>
-              <Text className="text-[#9CA3AF] text-[11px]">
+              <Text className="text-[11px]" style={{ color: theme.textSecondary }}>
                 Stage stills, portraits, and performance photography
               </Text>
             </View>
           </View>
-          <ChevronRight color="#9CA3AF" size={18} />
+          <ChevronRight color={theme.textSecondary} size={18} />
         </TouchableOpacity>
 
-        <Text className="text-center text-[#9CA3AF] text-xs mt-6">
+        <Text className="text-center text-xs mt-6" style={{ color: theme.textSecondary }}>
           Supported: MP4, MOV, HEVC{"\n"}Max size: 500 MB
         </Text>
       </View>
@@ -2819,7 +2834,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
   const renderChooseTalent = () => (
     <ScrollView
-      className="flex-1 bg-[#050608]"
+      className="flex-1"
+      style={{ backgroundColor: theme.bg }}
       contentContainerStyle={{
         flexGrow: 1,
         paddingTop: Math.max(insets.top, 20),
@@ -2828,10 +2844,10 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       showsVerticalScrollIndicator={false}
     >
       <TopNav onBack={() => setStep("PREVIEW")} />
-      <Text className="text-white text-[28px] font-bold px-5 mb-2">
+      <Text className="text-[28px] font-bold px-5 mb-2" style={{ color: theme.text }}>
         What are you showing?
       </Text>
-      <Text className="text-[#9CA3AF] px-5 mb-6">
+      <Text className="px-5 mb-6" style={{ color: theme.textSecondary }}>
         Choose the main talent category.
       </Text>
 
@@ -2849,21 +2865,33 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           <TouchableOpacity
             key={cat}
             onPress={() => setCategory(cat)}
-            className={`w-[22%] aspect-square m-[1.5%] rounded-2xl items-center justify-center border-2 ${category === cat ? "border-[#E91E76] bg-[#E91E76]/10" : "border-white/5 bg-[#1A1D24]"}`}
+            style={{
+              backgroundColor: category === cat ? theme.primary + "15" : theme.cardBg,
+              borderColor: category === cat ? theme.primary : theme.border,
+            }}
+            className="w-[22%] aspect-square m-[1.5%] rounded-2xl items-center justify-center border-2"
           >
             <View
-              className={`w-8 h-8 rounded-full mb-2 ${category === cat ? "bg-[#E91E76]/20" : "bg-white/5"}`}
+              style={{
+                backgroundColor: category === cat ? theme.primary + "25" : theme.surfaceBg,
+              }}
+              className="w-8 h-8 rounded-full mb-2"
             />
-            <Text className="text-white text-[11px] font-medium">{cat}</Text>
+            <Text
+              style={{ color: category === cat ? theme.primary : theme.text }}
+              className="text-[11px] font-medium"
+            >
+              {cat}
+            </Text>
           </TouchableOpacity>
         ))}
       </View>
 
       {category === "Dance" && (
         <View className="px-5 mb-4">
-          <Text className="text-white font-medium mb-3">
+          <Text className="font-medium mb-3" style={{ color: theme.text }}>
             Dance styles{" "}
-            <Text className="text-[#9CA3AF] text-sm">(optional)</Text>
+            <Text className="text-sm" style={{ color: theme.textSecondary }}>(optional)</Text>
           </Text>
           <View className="flex-row flex-wrap gap-2">
             {[
@@ -2878,14 +2906,17 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
               <TouchableOpacity
                 key={sub}
                 onPress={() => setSubCategory(sub)}
-                className={`px-4 py-2 rounded-full border ${subCategory === sub ? "border-[#E91E76] bg-[#E91E76]/10" : "border-white/10"}`}
+                style={{
+                  backgroundColor: subCategory === sub ? theme.primary + "15" : theme.surfaceBg,
+                  borderColor: subCategory === sub ? theme.primary : theme.border,
+                }}
+                className="px-4 py-2 rounded-full border"
               >
                 <Text
-                  className={
-                    subCategory === sub
-                      ? "text-[#E91E76] font-medium"
-                      : "text-[#9CA3AF]"
-                  }
+                  style={{
+                    color: subCategory === sub ? theme.primary : theme.textSecondary,
+                  }}
+                  className="font-medium"
                 >
                   {sub}
                 </Text>
@@ -2898,7 +2929,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       <View className="mt-auto px-5 pt-6 pb-2">
         <TouchableOpacity
           onPress={() => setStep("SET_PURPOSE")}
-          className="bg-[#E91E76] w-full py-4 rounded-full items-center shadow-lg"
+          style={{ backgroundColor: theme.primary }}
+          className="w-full py-4 rounded-full items-center shadow-lg"
           activeOpacity={0.85}
         >
           <Text className="text-white font-bold text-[16px]">Continue</Text>
@@ -2909,7 +2941,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
   const renderSetPurpose = () => (
     <ScrollView
-      className="flex-1 bg-[#050608]"
+      className="flex-1"
+      style={{ backgroundColor: theme.bg }}
       contentContainerStyle={{
         flexGrow: 1,
         paddingTop: Math.max(insets.top, 20),
@@ -2918,10 +2951,10 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       showsVerticalScrollIndicator={false}
     >
       <TopNav onBack={() => setStep("CHOOSE_TALENT")} />
-      <Text className="text-white text-[28px] font-bold px-5 mb-2">
+      <Text className="text-[28px] font-bold px-5 mb-2" style={{ color: theme.text }}>
         What do you want from this performance?
       </Text>
-      <Text className="text-[#9CA3AF] px-5 mb-6">Choose your main goal.</Text>
+      <Text className="px-5 mb-6" style={{ color: theme.textSecondary }}>Choose your main goal.</Text>
 
       <View className="px-5 gap-3.5">
         {[
@@ -2930,7 +2963,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             desc: "Show this to new people",
             icon: (
               <Sparkles
-                color={purpose === "Get Discovered" ? "#E91E76" : "#fff"}
+                color={purpose === "Get Discovered" ? theme.primary : theme.text}
               />
             ),
           },
@@ -2939,7 +2972,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             desc: "Let people judge and help you improve",
             icon: (
               <MessageSquare
-                color={purpose === "Get Feedback" ? "#E91E76" : "#fff"}
+                color={purpose === "Get Feedback" ? theme.primary : theme.text}
               />
             ),
           },
@@ -2948,7 +2981,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             desc: "Find artists, producers and creators",
             icon: (
               <Globe
-                color={purpose === "Find Collaborators" ? "#E91E76" : "#fff"}
+                color={purpose === "Find Collaborators" ? theme.primary : theme.text}
               />
             ),
           },
@@ -2957,7 +2990,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             desc: "Get considered for shows, auditions and projects",
             icon: (
               <CheckCircle2
-                color={purpose === "Find Opportunities" ? "#E91E76" : "#fff"}
+                color={purpose === "Find Opportunities" ? theme.primary : theme.text}
               />
             ),
           },
@@ -2965,19 +2998,23 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           <TouchableOpacity
             key={item.id}
             onPress={() => setPurpose(item.id)}
-            className={`w-full p-4.5 rounded-2xl border-2 flex-row items-center ${purpose === item.id ? "border-[#E91E76] bg-[#E91E76]/5" : "border-white/5 bg-[#1A1D24]"}`}
+            style={{
+              backgroundColor: purpose === item.id ? theme.primary + "10" : theme.cardBg,
+              borderColor: purpose === item.id ? theme.primary : theme.border,
+            }}
+            className="w-full p-4.5 rounded-2xl border-2 flex-row items-center"
           >
             <View className="w-12 items-center justify-center">
               {item.icon}
             </View>
             <View className="flex-1 ml-2">
-              <Text className="text-white font-bold text-lg mb-1">
+              <Text className="font-bold text-lg mb-1" style={{ color: theme.text }}>
                 {item.id}
               </Text>
-              <Text className="text-[#9CA3AF] text-sm">{item.desc}</Text>
+              <Text className="text-sm" style={{ color: theme.textSecondary }}>{item.desc}</Text>
             </View>
             <ChevronRight
-              color={purpose === item.id ? "#E91E76" : "#9CA3AF"}
+              color={purpose === item.id ? theme.primary : theme.textSecondary}
               size={20}
             />
           </TouchableOpacity>
@@ -2987,7 +3024,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       <View className="mt-auto px-5 pt-6 pb-2">
         <TouchableOpacity
           onPress={() => setStep("DETAILS")}
-          className="bg-[#E91E76] w-full py-4 rounded-full items-center shadow-lg"
+          style={{ backgroundColor: theme.primary }}
+          className="w-full py-4 rounded-full items-center shadow-lg"
           activeOpacity={0.85}
         >
           <Text className="text-white font-bold text-[16px]">Continue</Text>
@@ -2999,21 +3037,22 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   const renderDetails = () => (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      className="flex-1 bg-[#050608]"
+      className="flex-1"
+      style={{ backgroundColor: theme.bg }}
     >
       <ScrollView className="flex-1">
         <View className="pt-14">
           <TopNav onBack={() => setStep("SET_PURPOSE")} />
-          <Text className="text-white text-[28px] font-bold px-5 mb-2">
+          <Text className="text-[28px] font-bold px-5 mb-2" style={{ color: theme.text }}>
             Performance Details
           </Text>
-          <Text className="text-[#9CA3AF] px-5 mb-8">
+          <Text className="px-5 mb-8" style={{ color: theme.textSecondary }}>
             Add the finishing touches.
           </Text>
 
           <View className="px-5">
             <View className="flex-row mb-8">
-              <View className="w-24 h-36 bg-[#1A1D24] rounded-xl overflow-hidden mr-4">
+              <View className="w-24 h-36 rounded-xl overflow-hidden mr-4 border" style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}>
                 {recordedVideoUri && (
                   <VideoView
                     player={previewPlayer}
@@ -3029,81 +3068,94 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
               </View>
 
               <View className="flex-1">
-                <Text className="text-[#9CA3AF] mb-2 font-medium text-xs uppercase tracking-wider">
+                <Text className="mb-2 font-medium text-xs uppercase tracking-wider" style={{ color: theme.textSecondary }}>
                   Title
                 </Text>
                 <TextInput
                   value={title}
                   onChangeText={setTitle}
                   placeholder="Midnight Movement"
-                  placeholderTextColor="#6B7280"
-                  className="w-full bg-[#1A1D24] text-white px-4 py-3 rounded-xl border border-white/5 mb-4 font-medium"
+                  placeholderTextColor={theme.textMuted}
+                  style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border, color: theme.text }}
+                  className="w-full px-4 py-3 rounded-xl border mb-4 font-medium"
                 />
 
-                <Text className="text-[#9CA3AF] mb-2 font-medium text-xs uppercase tracking-wider">
+                <Text className="mb-2 font-medium text-xs uppercase tracking-wider" style={{ color: theme.textSecondary }}>
                   Location
                 </Text>
-                <View className="flex-row items-center bg-[#1A1D24] border border-white/5 rounded-xl px-4 py-3">
-                  <MapPin color="#E91E76" size={16} className="mr-2" />
+                <View 
+                  className="flex-row items-center border rounded-xl px-4 py-3"
+                  style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                >
+                  <MapPin color={theme.primary} size={16} className="mr-2" />
                   <TextInput
                     value={location}
                     onChangeText={setLocation}
                     placeholder="Bengaluru, India"
-                    placeholderTextColor="#6B7280"
-                    className="flex-1 text-white p-0 m-0 font-medium"
+                    placeholderTextColor={theme.textMuted}
+                    style={{ color: theme.text }}
+                    className="flex-1 p-0 m-0 font-medium"
                   />
                 </View>
 
-                <Text className="text-[#9CA3AF] mb-2 font-medium text-xs uppercase tracking-wider mt-4">
+                <Text className="mb-2 font-medium text-xs uppercase tracking-wider mt-4" style={{ color: theme.textSecondary }}>
                   Caption / Subtitle
                 </Text>
-                <View className="flex-row items-center bg-[#1A1D24] border border-white/5 rounded-xl px-4 py-3">
-                  <Subtitles color="#E91E76" size={16} className="mr-2" />
+                <View 
+                  className="flex-row items-center border rounded-xl px-4 py-3"
+                  style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                >
+                  <Subtitles color={theme.primary} size={16} className="mr-2" />
                   <TextInput
                     value={captionText}
                     onChangeText={setCaptionText}
                     placeholder="Add a performance subtitle..."
-                    placeholderTextColor="#6B7280"
-                    className="flex-1 text-white p-0 m-0 font-medium"
+                    placeholderTextColor={theme.textMuted}
+                    style={{ color: theme.text }}
+                    className="flex-1 p-0 m-0 font-medium"
                   />
                 </View>
               </View>
             </View>
 
-            <View className="h-[1px] bg-white/5 w-full mb-6" />
+            <View className="h-[1px] w-full mb-6" style={{ backgroundColor: theme.border }} />
 
             <View className="flex-row items-center justify-between mb-6">
               <View className="flex-1 pr-4">
-                <Text className="text-white font-bold text-[16px] mb-1">
+                <Text className="font-bold text-[16px] mb-1" style={{ color: theme.text }}>
                   Allow Judging
                 </Text>
-                <Text className="text-[#9CA3AF] text-sm">
+                <Text className="text-sm" style={{ color: theme.textSecondary }}>
                   Let viewers give this performance a Talent Score.
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setAllowJudging(!allowJudging)}>
                 {allowJudging ? (
-                  <ToggleRight color="#E91E76" size={44} />
+                  <ToggleRight color={theme.primary} size={44} />
                 ) : (
-                  <ToggleLeft color="#4B5563" size={44} />
+                  <ToggleLeft color={theme.textMuted} size={44} />
                 )}
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity className="flex-row justify-between items-center bg-[#1A1D24] p-4 rounded-xl border border-white/5">
-              <Text className="text-white font-medium">More settings</Text>
-              <ChevronRight color="#9CA3AF" size={20} />
+            <TouchableOpacity 
+              className="flex-row justify-between items-center p-4 rounded-xl border"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+            >
+              <Text className="font-medium" style={{ color: theme.text }}>More settings</Text>
+              <ChevronRight color={theme.textSecondary} size={20} />
             </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
 
       <View 
-        style={{ paddingBottom: Math.max(insets.bottom, 20) }}
-        className="px-5 pt-3 bg-[#050608]"
+        style={{ paddingBottom: Math.max(insets.bottom, 20), backgroundColor: theme.bg }}
+        className="px-5 pt-3"
       >
         <TouchableOpacity
-          className={`w-full py-4 rounded-full items-center justify-center ${title.trim() ? "bg-[#E91E76]" : "bg-[#E91E76]/50"}`}
+          style={{ backgroundColor: title.trim() ? theme.primary : theme.primary + "50" }}
+          className="w-full py-4 rounded-full items-center justify-center"
           activeOpacity={0.8}
           disabled={!title.trim()}
           onPress={() => setStep("SUMMARY")}
@@ -3116,7 +3168,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
   const renderSummary = () => (
     <ScrollView
-      className="flex-1 bg-[#050608]"
+      className="flex-1"
+      style={{ backgroundColor: theme.bg }}
       contentContainerStyle={{
         flexGrow: 1,
         paddingTop: Math.max(insets.top, 20),
@@ -3125,14 +3178,17 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       showsVerticalScrollIndicator={false}
     >
       <TopNav onBack={() => setStep("DETAILS")} />
-      <Text className="text-white text-[28px] font-bold px-5 mb-2">
+      <Text className="text-[28px] font-bold px-5 mb-2" style={{ color: theme.text }}>
         Ready to Publish?
       </Text>
-      <Text className="text-[#9CA3AF] px-5 mb-6">Here's a quick summary.</Text>
+      <Text className="px-5 mb-6" style={{ color: theme.textSecondary }}>Here's a quick summary.</Text>
 
       <View className="px-5">
-        <View className="bg-[#1A1D24] rounded-2xl p-4 flex-row mb-6 border border-white/5">
-          <View className="w-20 h-28 bg-[#2A2D34] rounded-lg overflow-hidden mr-4 relative">
+        <View 
+          className="rounded-2xl p-4 flex-row mb-6 border"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+        >
+          <View className="w-20 h-28 rounded-lg overflow-hidden mr-4 relative" style={{ backgroundColor: theme.surfaceBg }}>
             {recordedVideoUri && (
               <VideoView
                 player={previewPlayer}
@@ -3148,43 +3204,46 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           </View>
 
           <View className="flex-1 justify-center">
-            <Text className="text-white font-bold text-lg mb-1">{title}</Text>
-            <Text className="text-[#E91E76] font-medium text-sm mb-2">
+            <Text className="font-bold text-lg mb-1" style={{ color: theme.text }}>{title}</Text>
+            <Text className="font-medium text-sm mb-2" style={{ color: theme.primary }}>
               {category} • {subCategory}
             </Text>
 
             <View className="flex-row items-center mb-2">
-              <MapPin color="#9CA3AF" size={12} className="mr-1" />
-              <Text className="text-[#9CA3AF] text-xs">{location}</Text>
+              <MapPin color={theme.textSecondary} size={12} className="mr-1" />
+              <Text className="text-xs" style={{ color: theme.textSecondary }}>{location}</Text>
             </View>
 
-            <View className="self-start bg-white/5 px-3 py-1 rounded-full flex-row items-center">
-              <Sparkles color="#E91E76" size={12} className="mr-1" />
-              <Text className="text-[#9CA3AF] text-xs">Goal: {purpose}</Text>
+            <View 
+              className="self-start px-3 py-1 rounded-full flex-row items-center"
+              style={{ backgroundColor: theme.surfaceBg }}
+            >
+              <Sparkles color={theme.primary} size={12} className="mr-1" />
+              <Text className="text-xs" style={{ color: theme.textSecondary }}>Goal: {purpose}</Text>
             </View>
           </View>
         </View>
 
         <View className="space-y-4">
           <View className="flex-row justify-between items-center py-1">
-            <Text className="text-white font-medium">Allow Judging</Text>
+            <Text className="font-medium" style={{ color: theme.text }}>Allow Judging</Text>
             <View className="flex-row items-center">
               <CheckCircle2 color="#10B981" size={16} className="mr-1.5" />
               <Text className="text-[#10B981] font-medium">On</Text>
             </View>
           </View>
           <View className="flex-row justify-between items-center py-1">
-            <Text className="text-white font-medium">Comments (Talk)</Text>
+            <Text className="font-medium" style={{ color: theme.text }}>Comments (Talk)</Text>
             <View className="flex-row items-center">
               <CheckCircle2 color="#10B981" size={16} className="mr-1.5" />
               <Text className="text-[#10B981] font-medium">On</Text>
             </View>
           </View>
           <View className="flex-row justify-between items-center py-1">
-            <Text className="text-white font-medium">Soundtrack</Text>
+            <Text className="font-medium" style={{ color: theme.text }}>Soundtrack</Text>
             <View className="flex-row items-center">
-              <Music2 color="#E91E76" size={14} className="mr-1.5" />
-              <Text className="text-[#E91E76] font-medium text-xs">
+              <Music2 color={theme.primary} size={14} className="mr-1.5" />
+              <Text className="font-medium text-xs" style={{ color: theme.primary }}>
                 {selectedSoundTrack !== "none"
                   ? allSoundTracks.find((s) => s.id === selectedSoundTrack)?.name
                   : "Original Mic Audio"}
@@ -3192,38 +3251,43 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             </View>
           </View>
           <View className="flex-row justify-between items-center py-1">
-            <Text className="text-white font-medium">Captions</Text>
+            <Text className="font-medium" style={{ color: theme.text }}>Captions</Text>
             <View className="flex-row items-center">
               <Subtitles
-                color={showCaptions ? "#10B981" : "#9CA3AF"}
+                color={showCaptions ? "#10B981" : theme.textSecondary}
                 size={14}
                 className="mr-1.5"
               />
               <Text
-                className={`font-medium text-xs ${showCaptions ? "text-[#10B981]" : "text-[#9CA3AF]"}`}
+                className="font-medium text-xs"
+                style={{ color: showCaptions ? "#10B981" : theme.textSecondary }}
               >
                 {showCaptions ? "Enabled" : "Off"}
               </Text>
             </View>
           </View>
           <View className="flex-row justify-between items-center py-1">
-            <Text className="text-white font-medium">Visibility</Text>
+            <Text className="font-medium" style={{ color: theme.text }}>Visibility</Text>
             <View className="flex-row items-center">
-              <Globe color="#9CA3AF" size={16} className="mr-1.5" />
-              <Text className="text-[#9CA3AF] font-medium">Public</Text>
+              <Globe color={theme.textSecondary} size={16} className="mr-1.5" />
+              <Text className="font-medium" style={{ color: theme.textSecondary }}>Public</Text>
             </View>
           </View>
         </View>
 
-        <TouchableOpacity className="flex-row justify-between items-center bg-[#1A1D24] p-4 rounded-xl border border-white/5 mt-8">
-          <Text className="text-white font-medium">More settings</Text>
-          <ChevronRight color="#9CA3AF" size={20} />
+        <TouchableOpacity 
+          className="flex-row justify-between items-center p-4 rounded-xl border mt-8"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+        >
+          <Text className="font-medium" style={{ color: theme.text }}>More settings</Text>
+          <ChevronRight color={theme.textSecondary} size={20} />
         </TouchableOpacity>
       </View>
 
       <View className="mt-auto px-5 pt-6 pb-2">
         <TouchableOpacity
-          className="w-full py-4 rounded-full items-center justify-center bg-[#E91E76] shadow-lg"
+          className="w-full py-4 rounded-full items-center justify-center shadow-lg"
+          style={{ backgroundColor: theme.primary }}
           activeOpacity={0.85}
           onPress={handlePublish}
         >
@@ -3236,25 +3300,25 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   );
 
   const renderUploading = () => (
-    <View className="flex-1 bg-[#050608] items-center justify-center px-8">
-      <Cloud color="#E91E76" size={80} className="mb-8" opacity={0.8} />
+    <View className="flex-1 items-center justify-center px-8" style={{ backgroundColor: theme.bg }}>
+      <Cloud color={theme.primary} size={80} className="mb-8" opacity={0.8} />
 
-      <Text className="text-white text-2xl font-bold text-center mb-2">
+      <Text className="text-2xl font-bold text-center mb-2" style={{ color: theme.text }}>
         Publishing your{"\n"}performance...
       </Text>
-      <Text className="text-[#9CA3AF] text-center mb-12">
+      <Text className="text-center mb-12" style={{ color: theme.textSecondary }}>
         This may take a few moments.
       </Text>
 
       <View className="w-full mb-8">
         <View className="flex-row justify-between mb-2">
-          <Text className="text-white font-medium"></Text>
-          <Text className="text-[#E91E76] font-bold">{uploadProgress}%</Text>
+          <Text className="font-medium" style={{ color: theme.text }}></Text>
+          <Text className="font-bold" style={{ color: theme.primary }}>{uploadProgress}%</Text>
         </View>
-        <View className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+        <View className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: theme.surfaceBg }}>
           <View
-            className="h-full bg-[#E91E76] rounded-full"
-            style={{ width: `${uploadProgress}%` }}
+            className="h-full rounded-full"
+            style={{ backgroundColor: theme.primary, width: `${uploadProgress}%` }}
           />
         </View>
       </View>
@@ -3262,58 +3326,52 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       <View className="w-full space-y-4 px-4">
         <View className="flex-row items-center">
           <CheckCircle2
-            color={uploadProgress > 10 ? "#E91E76" : "#4B5563"}
+            color={uploadProgress > 10 ? theme.primary : theme.textMuted}
             size={20}
             className="mr-3"
           />
           <Text
-            className={
-              uploadProgress > 10 ? "text-white font-medium" : "text-[#4B5563]"
-            }
+            style={{ color: uploadProgress > 10 ? theme.text : theme.textMuted }}
+            className="font-medium"
           >
             Uploading video
           </Text>
         </View>
         <View className="flex-row items-center">
           <CheckCircle2
-            color={uploadProgress > 50 ? "#E91E76" : "#4B5563"}
+            color={uploadProgress > 50 ? theme.primary : theme.textMuted}
             size={20}
             className="mr-3"
           />
           <Text
-            className={
-              uploadProgress > 50 ? "text-white font-medium" : "text-[#4B5563]"
-            }
+            style={{ color: uploadProgress > 50 ? theme.text : theme.textMuted }}
+            className="font-medium"
           >
             Processing video
           </Text>
         </View>
         <View className="flex-row items-center">
           <CheckCircle2
-            color={uploadProgress > 80 ? "#E91E76" : "#4B5563"}
+            color={uploadProgress > 80 ? theme.primary : theme.textMuted}
             size={20}
             className="mr-3"
           />
           <Text
-            className={
-              uploadProgress > 80 ? "text-white font-medium" : "text-[#4B5563]"
-            }
+            style={{ color: uploadProgress > 80 ? theme.text : theme.textMuted }}
+            className="font-medium"
           >
             Saving details
           </Text>
         </View>
         <View className="flex-row items-center">
           <CheckCircle2
-            color={uploadProgress >= 100 ? "#E91E76" : "#4B5563"}
+            color={uploadProgress >= 100 ? theme.primary : theme.textMuted}
             size={20}
             className="mr-3"
           />
           <Text
-            className={
-              uploadProgress >= 100
-                ? "text-white font-medium"
-                : "text-[#4B5563]"
-            }
+            style={{ color: uploadProgress >= 100 ? theme.text : theme.textMuted }}
+            className="font-medium"
           >
             Finalizing...
           </Text>
@@ -3323,8 +3381,11 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   );
 
   const renderSuccess = () => (
-    <View className="flex-1 bg-[#050608] items-center justify-center px-6">
-      <View className="w-24 h-24 rounded-full bg-[#E91E76] items-center justify-center mb-8 relative">
+    <View className="flex-1 items-center justify-center px-6" style={{ backgroundColor: theme.bg }}>
+      <View 
+        className="w-24 h-24 rounded-full items-center justify-center mb-8 relative"
+        style={{ backgroundColor: theme.primary }}
+      >
         <Check color="#fff" size={48} strokeWidth={3} />
         {/* Decorative sparkles */}
         <View className="absolute -top-4 -left-4">
@@ -3334,21 +3395,31 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           <Sparkles color="#fff" size={20} opacity={0.8} />
         </View>
         <View className="absolute -bottom-2 -left-8">
-          <Sparkles color="#E91E76" size={14} />
+          <Sparkles color={theme.primary} size={14} />
         </View>
         <View className="absolute -bottom-6 right-0">
           <Sparkles color="#fff" size={18} opacity={0.5} />
         </View>
       </View>
 
-      <Text className="text-white text-3xl font-bold text-center mb-4">
+      <Text className="text-3xl font-bold text-center mb-4" style={{ color: theme.text }}>
         Your performance{"\n"}is live!
       </Text>
-      <Text className="text-[#9CA3AF] text-center mb-12 px-4 leading-relaxed">
+      <Text className="text-center mb-12 px-4 leading-relaxed" style={{ color: theme.textSecondary }}>
         People can now watch, keep,{"\n"}talk and judge your performance.
       </Text>
 
-      <TouchableOpacity className="w-full py-4 rounded-full items-center justify-center bg-[#E91E76] mb-4">
+      <TouchableOpacity
+        onPress={() => {
+          onClose?.();
+          setStep("HOME");
+          setRecordedVideoUri(null);
+          setTitle("");
+          router.replace("/(tabs)/you");
+        }}
+        className="w-full py-4 rounded-full items-center justify-center mb-4"
+        style={{ backgroundColor: theme.primary }}
+      >
         <Text className="text-white font-bold text-[16px]">
           View Performance
         </Text>

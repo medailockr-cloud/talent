@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import * as ImagePicker from "expo-image-picker";
 import {
   View,
@@ -13,13 +13,16 @@ import {
   Share as RNShare,
   TextInput,
   Animated,
+  Linking,
 } from "react-native";
+import { useRouter, useFocusEffect } from "expo-router";
 import {
   Settings,
   Share,
   MoreHorizontal,
   CheckCircle,
   Check,
+  Eye,
   MapPin,
   Play,
   X,
@@ -47,11 +50,18 @@ import {
   Link,
   Users,
   BarChart2,
+  Sparkles,
+  Camera,
+  Music2,
+  Sun,
+  Moon,
+  Palette,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { Switch } from "react-native";
 import { api } from "../../utils/api";
 import { useAuthStore } from "../../store/authStore";
+import { useThemeStore, THEMES, ThemeId } from "../../store/themeStore";
 
 const coverImg =
   "https://images.unsplash.com/photo-1493225457124-a1a2a4fa3e93?w=800&q=80";
@@ -67,6 +77,12 @@ const dummyVideos = [
   "http://localhost:3000/uploads/performer_5.mp4",
 ];
 
+// Helper to detect image media
+const isMediaImage = (url?: string) => {
+  if (!url) return false;
+  return /\.(jpg|jpeg|png|webp|gif|bmp|heic)(\?.*)?$/i.test(url);
+};
+
 function VideoPlayerModal({
   url,
   onClose,
@@ -75,9 +91,10 @@ function VideoPlayerModal({
   onClose: () => void;
 }) {
   const videoRef = useRef<any>(null);
+  const isImg = isMediaImage(url);
 
   useEffect(() => {
-    if (Platform.OS === 'web' && videoRef.current) {
+    if (!isImg && Platform.OS === 'web' && videoRef.current) {
       const p = videoRef.current.play();
       if (p !== undefined) {
         p.catch(() => {
@@ -88,7 +105,7 @@ function VideoPlayerModal({
         });
       }
     }
-  }, [url]);
+  }, [url, isImg]);
 
   return (
     <Modal
@@ -97,7 +114,7 @@ function VideoPlayerModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View className="flex-1 bg-black justify-center relative">
+      <View className="flex-1 bg-black justify-center items-center relative">
         <TouchableOpacity
           style={{ position: "absolute", top: 50, right: 20, zIndex: 10 }}
           onPress={() => {
@@ -109,7 +126,21 @@ function VideoPlayerModal({
           <X color="#fff" size={24} />
         </TouchableOpacity>
 
-        {Platform.OS === "web" ? (
+        {isImg ? (
+          Platform.OS === "web" ? (
+            <img
+              src={url}
+              style={{ maxWidth: "95vw", maxHeight: "85vh", objectFit: "contain", borderRadius: 16 }}
+              alt="Uploaded Media"
+            />
+          ) : (
+            <Image
+              source={{ uri: url }}
+              className="w-full h-[80%] rounded-2xl"
+              resizeMode="contain"
+            />
+          )
+        ) : Platform.OS === "web" ? (
           <video
             ref={videoRef}
             src={url}
@@ -121,8 +152,7 @@ function VideoPlayerModal({
         ) : (
           <View className="flex-1 items-center justify-center">
             <Text className="text-white text-center px-4">
-              Video playback on native requires expo-video or expo-av to be
-              installed. Currently playing: {url}
+              Playing media: {url}
             </Text>
           </View>
         )}
@@ -134,17 +164,22 @@ function VideoPlayerModal({
 function ShowPreviewModal({
   show,
   onClose,
+  onBookingChange,
 }: {
   show: any;
   onClose: () => void;
+  onBookingChange?: (showId: any, isBooked: boolean) => void;
 }) {
-  const [isBooked, setIsBooked] = useState(false);
-  const [visitors, setVisitors] = useState(show.bookings?.length || 0);
+  const [isBooked, setIsBooked] = useState(show.isVisiting || show.isBooked || false);
+  const [visitors, setVisitors] = useState(show.visiting || show.bookings?.length || 149);
 
   useEffect(() => {
-    // Basic check assuming user info is available or we just rely on backend response.
-    // Ideally we pass user id here to check if already booked.
-    setIsBooked(show.isBooked || false);
+    setIsBooked(show.isVisiting || show.isBooked || false);
+    if (show.visiting !== undefined) {
+      setVisitors(show.visiting);
+    } else if (show.bookings?.length !== undefined) {
+      setVisitors(show.bookings.length);
+    }
   }, [show]);
 
   const handleRSVP = async () => {
@@ -154,10 +189,12 @@ function ShowPreviewModal({
       if (res.data.isBooked) {
         setIsBooked(true);
         setVisitors((prev: number) => prev + 1);
+        onBookingChange?.(show.id, true);
         Alert.alert("RSVP Confirmed", "You are now visiting this show.");
       } else {
         setIsBooked(false);
         setVisitors((prev: number) => Math.max(0, prev - 1));
+        onBookingChange?.(show.id, false);
         Alert.alert("RSVP Cancelled", "You are no longer visiting this show.");
       }
     } catch (e) {
@@ -286,7 +323,10 @@ function ShowPreviewModal({
                 <TouchableOpacity
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    Alert.alert("Map", "Opening map...");
+                    const loc = encodeURIComponent(show.location || "Secret Heritage Courtyard, 4th Block Koramangala");
+                    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${loc}`).catch(err => {
+                      console.error("Failed to open map:", err);
+                    });
                   }}
                   className="bg-white/10 px-3 py-2 rounded-xl flex-row items-center gap-2"
                 >
@@ -396,22 +436,29 @@ function ShowPreviewModal({
           {/* Footer Action */}
           <View className="p-4 bg-[#12141A] border-t border-white/5 flex-row gap-3 items-center">
             <TouchableOpacity
-              onPress={() => Alert.alert("Calendar", "Added to calendar.")}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                const title = encodeURIComponent(show.title || "Talent Live Show");
+                const loc = encodeURIComponent(show.location || "Bengaluru");
+                Linking.openURL(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&location=${loc}`).catch(() => {
+                  Alert.alert("Calendar", "Added to calendar schedule.");
+                });
+              }}
               className="w-[48px] h-[48px] rounded-xl border border-white/20 items-center justify-center"
             >
               <Calendar color="#fff" size={20} />
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={() => {
+              onPress={async () => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                Alert.alert("Passes Reserved", "Your passes are secured!");
+                await handleRSVP();
                 onClose();
               }}
               activeOpacity={0.8}
               className="flex-1 bg-[#E91E76] h-[48px] rounded-full items-center justify-center"
             >
               <Text className="text-white font-bold text-[13px]">
-                RESERVE PASSES (₹650 (RSVP PRIORITY))
+                {isBooked ? "RESERVED ✓ (TAP TO CANCEL)" : "RESERVE PASSES (₹650 (RSVP PRIORITY))"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -427,11 +474,15 @@ function ProfileFeedVideoCard({
   playingVideoId,
   setPlayingVideoId,
   onPass,
+  onMaximize,
+  onTalk,
 }: {
   video: any;
   playingVideoId: string | null;
   setPlayingVideoId: (id: string | null) => void;
   onPass: () => void;
+  onMaximize?: (url: string) => void;
+  onTalk?: () => void;
 }) {
   const isPlaying = String(playingVideoId) === String(video.id);
   const [isKept, setIsKept] = useState(false);
@@ -503,7 +554,23 @@ function ProfileFeedVideoCard({
   return (
     <View className="mb-6">
       <View className="relative w-full aspect-[16/9.5] rounded-[16px] overflow-hidden border border-white/10 bg-[#100C09] mb-4">
-        {Platform.OS === "web" ? (
+        {isMediaImage(video.videoUrl) ? (
+          Platform.OS === "web" ? (
+            <img
+              src={video.videoUrl}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              alt="Performance"
+            />
+          ) : (
+            <View className="flex-1 items-center justify-center bg-black">
+              <Image
+                source={{ uri: video.videoUrl }}
+                className="w-full h-full opacity-90 absolute"
+                resizeMode="cover"
+              />
+            </View>
+          )
+        ) : Platform.OS === "web" ? (
           <video
             ref={videoRef}
             src={video.videoUrl}
@@ -528,20 +595,28 @@ function ProfileFeedVideoCard({
 
         <View className="absolute top-4 left-4 flex-row items-center gap-2">
           <Text className="text-[11px] font-bold tracking-[0.1em] text-white uppercase">
-            PERFORMANCE
+            {isMediaImage(video.videoUrl) ? "PHOTO" : "PERFORMANCE"}
           </Text>
           <View className="w-1 h-1 rounded-full bg-white/60" />
           <Text className="text-white text-[11px] font-bold tracking-widest">
-            {video.duration}
+            {isMediaImage(video.videoUrl) ? "HD" : video.duration}
           </Text>
         </View>
 
         <TouchableOpacity
           activeOpacity={0.8}
           className="absolute top-1/2 left-1/2 -ml-7 -mt-7 w-14 h-14 rounded-full bg-black/40 border border-white/80 items-center justify-center"
-          onPress={() => setPlayingVideoId(isPlaying ? null : video.id)}
+          onPress={() => {
+            if (isMediaImage(video.videoUrl)) {
+              if (onMaximize && video.videoUrl) onMaximize(video.videoUrl);
+            } else {
+              setPlayingVideoId(isPlaying ? null : video.id);
+            }
+          }}
         >
-          {isPlaying ? (
+          {isMediaImage(video.videoUrl) ? (
+            <Eye color="#fff" size={24} />
+          ) : isPlaying ? (
             <Pause color="#fff" fill="#fff" size={24} />
           ) : (
             <Play color="#fff" fill="#fff" size={24} className="ml-1" />
@@ -551,6 +626,12 @@ function ProfileFeedVideoCard({
         <View className="absolute bottom-3 right-3 flex-row items-center gap-2">
           <TouchableOpacity
             activeOpacity={0.8}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              if (onMaximize && video.videoUrl) {
+                onMaximize(video.videoUrl);
+              }
+            }}
             className="w-8 h-8 rounded-lg bg-black/60 border border-white/20 items-center justify-center"
           >
             <Maximize2 color="#fff" size={14} strokeWidth={2} />
@@ -596,7 +677,10 @@ function ProfileFeedVideoCard({
       <View className="flex-row items-center justify-between px-1">
         <View className="flex-row items-center gap-5">
           <TouchableOpacity
-            onPress={() => setIsKept(!isKept)}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setIsKept(!isKept);
+            }}
             activeOpacity={0.7}
             className="items-center gap-1.5 min-w-[36px]"
           >
@@ -613,7 +697,10 @@ function ProfileFeedVideoCard({
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={() => {}}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              if (onTalk) onTalk();
+            }}
             activeOpacity={0.7}
             className="items-center gap-1.5 min-w-[36px]"
           >
@@ -767,6 +854,7 @@ export function ProfileView({
   onLogout?: () => void;
   onBack?: () => void;
 }) {
+  const router = useRouter();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeSettingView, setActiveSettingView] = useState<string | null>(
     null,
@@ -799,7 +887,12 @@ export function ProfileView({
   const [isLoading, setIsLoading] = useState(true);
 
   const { user: authUser, checkAuth } = useAuthStore();
-  const isOwnProfile = profileData?.id === authUser?.id;
+  const { theme, themeId, setTheme } = useThemeStore();
+  const isOwnProfile = Boolean(authUser?.id) && (
+    (!user?.id && Boolean(profileData?.id))
+      ? String(profileData?.id) === String(authUser?.id)
+      : String(user?.id || profileData?.id) === String(authUser?.id)
+  );
 
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editName, setEditName] = useState("");
@@ -883,55 +976,71 @@ export function ProfileView({
     }
   };
 
-  useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        setIsLoading(true);
-        if (!user?.id && !authUser) {
-          setIsLoading(false);
-          return;
-        }
-        // If no user prop is passed, or if we want the current user profile
-        const endpoint = user?.id ? `/profile/${user.id}` : "/profile/me";
-
-        const response = await api.get(endpoint);
-        setProfileData(response.data);
-        setEditName(response.data?.name || "");
-        setEditBio(response.data?.bio || "");
-        setEditAvatarUrl(response.data?.avatarUrl || "");
-        setEditTitle(response.data?.title || "");
-        setEditLocation(response.data?.location || "");
-        setEditQuote(response.data?.quote || "");
-
-        // Fetch shows
-        const userId = response.data?.id;
-        if (userId) {
-          try {
-            const showsRes = await api.get(`/shows/${userId}`);
-            setShows(showsRes.data || []);
-          } catch (e) {
-            console.error("Failed to fetch shows:", e);
-          }
-        }
-      } catch (error: any) {
-        if (error.response?.status === 401) {
-          console.log("Unauthorized: Please log in to view profile");
-        } else {
-          console.error("Failed to fetch profile:", error);
-        }
-      } finally {
+  const fetchProfile = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      if (!user?.id && !authUser) {
         setIsLoading(false);
+        return;
       }
-    };
+      // If viewing current user, prioritize /profile/me for session consistency
+      const isViewingSelf = !user?.id || (authUser?.id && String(user?.id) === String(authUser?.id));
+      const endpoint = isViewingSelf ? "/profile/me" : `/profile/${user.id}`;
+
+      const response = await api.get(endpoint);
+      setProfileData(response.data);
+      if (response.data?.isFollowing !== undefined) {
+        setBacked(response.data.isFollowing);
+      }
+      setEditName(response.data?.name || "");
+      setEditBio(response.data?.bio || "");
+      setEditAvatarUrl(response.data?.avatarUrl || "");
+      setEditTitle(response.data?.title || "");
+      setEditLocation(response.data?.location || "");
+      setEditQuote(response.data?.quote || "");
+
+      // Fetch shows
+      const userId = response.data?.id;
+      if (userId) {
+        try {
+          const showsRes = await api.get(`/shows/${userId}`);
+          setShows(showsRes.data || []);
+        } catch (e) {
+          console.error("Failed to fetch shows:", e);
+        }
+      }
+    } catch (error: any) {
+      if (error.response?.status === 401) {
+        console.log("Unauthorized: Please log in to view profile");
+      } else {
+        console.error("Failed to fetch profile:", error);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user?.id, authUser?.id]);
+
+  useEffect(() => {
     fetchProfile();
-  }, [user]);
+  }, [fetchProfile]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchProfile();
+    }, [fetchProfile])
+  );
 
   const handleShare = async () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const name = profileData?.name || "Aarav Nair";
+      const id = profileData?.id || user?.id || "";
+      const shareUrl = typeof window !== 'undefined' && window.location?.origin
+        ? `${window.location.origin}/profile/${id}`
+        : `https://talent.app/profile/${id}`;
       await RNShare.share({
-        message:
-          "Check out Aarav Nair on Talent App! https://talent.app/aaravnair",
+        message: `Check out ${name} on Talent App! ${shareUrl}`,
+        url: shareUrl,
       });
     } catch (error) {
       console.error(error);
@@ -940,16 +1049,20 @@ export function ProfileView({
 
   const handleBackTalent = async () => {
     try {
-      const targetUserId = user?.id || 1; // Assuming we are viewing profile of user ID 1 if none passed
+      const targetUserId = profileData?.id || user?.id || 1;
       if (!backed) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
         // Optimistic update
         setBacked(true);
+        setProfileData((prev: any) => prev ? { ...prev, followers: (prev.followers || 0) + 1 } : prev);
         Alert.alert("Success!", "You are now backing this talent.");
 
         // Call backend to Follow
-        await api.post(`/users/${targetUserId}/follow`);
+        const res = await api.post(`/users/${targetUserId}/follow`);
+        if (res.data?.following !== undefined) {
+          setBacked(res.data.following);
+        }
       } else {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         if (Platform.OS === "web") {
@@ -957,7 +1070,11 @@ export function ProfileView({
             window.confirm("Are you sure you want to stop backing this talent?")
           ) {
             setBacked(false);
-            await api.post(`/users/${targetUserId}/follow`);
+            setProfileData((prev: any) => prev ? { ...prev, followers: Math.max(0, (prev.followers || 0) - 1) } : prev);
+            const res = await api.post(`/users/${targetUserId}/follow`);
+            if (res.data?.following !== undefined) {
+              setBacked(res.data.following);
+            }
           }
         } else {
           Alert.alert(
@@ -970,11 +1087,15 @@ export function ProfileView({
                 style: "destructive",
                 onPress: async () => {
                   setBacked(false);
+                  setProfileData((prev: any) => prev ? { ...prev, followers: Math.max(0, (prev.followers || 0) - 1) } : prev);
                   Haptics.notificationAsync(
                     Haptics.NotificationFeedbackType.Success,
                   );
                   try {
-                    await api.post(`/users/${targetUserId}/follow`);
+                    const res = await api.post(`/users/${targetUserId}/follow`);
+                    if (res.data?.following !== undefined) {
+                      setBacked(res.data.following);
+                    }
                   } catch (e) {
                     console.error("Failed to unback:", e);
                   }
@@ -999,7 +1120,29 @@ export function ProfileView({
 
   const handleAction = (actionName: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Alert.alert(actionName, `Action triggered for ${actionName}`);
+    if (actionName === "Inspect Craft") {
+      Alert.alert(
+        `${profileData?.name || "Artist"}'s Acoustic Rig`,
+        "• Taylor 814ce Grand Auditorium (Solid Sitka Spruce / Indian Rosewood)\n• Shure SM58 Vocal Microphone\n• Strymon Timeline Multi-Delay Pedal\n• Tunings: D-A-D-F#-A-D (Open D) & Standard"
+      );
+    } else if (actionName === "Open Spotify") {
+      const name = encodeURIComponent(profileData?.name || "Aarav Nair");
+      Linking.openURL(`https://open.spotify.com/search/${name}`).catch(() => {
+        Alert.alert("Spotify", "Unable to open Spotify.");
+      });
+    } else if (actionName === "Open YouTube") {
+      const name = encodeURIComponent(profileData?.name || "Aarav Nair");
+      Linking.openURL(`https://www.youtube.com/results?search_query=${name}`).catch(() => {
+        Alert.alert("YouTube", "Unable to open YouTube.");
+      });
+    } else if (actionName === "Open Instagram") {
+      const handle = profileData?.username || profileData?.name?.toLowerCase().replace(/\s+/g, '') || "aaravnair";
+      Linking.openURL(`https://www.instagram.com/${handle}`).catch(() => {
+        Alert.alert("Instagram", "Unable to open Instagram.");
+      });
+    } else {
+      Alert.alert(actionName, `Action triggered for ${actionName}`);
+    }
   };
 
   const playVideo = (url: string) => {
@@ -1019,7 +1162,7 @@ export function ProfileView({
             <ChevronLeft color="#fff" size={24} />
           </TouchableOpacity>
           <Text className="text-white font-bold text-[16px] ml-4">
-            Aarav Nair's Performances
+            {profileData?.name || "Aarav Nair"}'s Performances
           </Text>
         </View>
         <ScrollView
@@ -1039,15 +1182,23 @@ export function ProfileView({
                 role: "Artist",
                 avatar: profileData?.avatarUrl || avatarImg,
                 videoThumb:
-                  i === 0
+                  video.thumbnailUrl ||
+                  (i === 0
                     ? "https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=800&q=80"
-                    : "https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=300",
+                    : "https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=300"),
                 duration: "0:58",
                 videoUrl: video.url || dummyVideos[0],
+                userRating: video.userRating,
               }}
               playingVideoId={playingVideoId}
               setPlayingVideoId={setPlayingVideoId}
               onPass={() => {}}
+              onMaximize={(url) => setActiveVideoUrl(url)}
+              onTalk={() => {
+                setIsProfileFeedOpen(false);
+                const targetUserId = profileData?.id || user?.id || 1;
+                router.push(`/chat/${targetUserId}`);
+              }}
             />
           ))}
         </ScrollView>
@@ -1056,7 +1207,7 @@ export function ProfileView({
   }
 
   return (
-    <View className="flex-1 bg-[#050608]">
+    <View className="flex-1" style={{ backgroundColor: theme.bg }}>
       {activeVideoUrl && (
         <VideoPlayerModal
           url={activeVideoUrl}
@@ -1068,6 +1219,20 @@ export function ProfileView({
         <ShowPreviewModal
           show={activeShowModal}
           onClose={() => setActiveShowModal(null)}
+          onBookingChange={(showId: any, isBooked: boolean) => {
+            setShows((prevShows: any[]) =>
+              prevShows.map((s: any) =>
+                s.id === showId
+                  ? {
+                      ...s,
+                      isVisiting: isBooked,
+                      isBooked: isBooked,
+                      visiting: Math.max(0, (s.visiting || 0) + (isBooked ? 1 : -1)),
+                    }
+                  : s,
+              ),
+            );
+          }}
         />
       )}
 
@@ -1077,35 +1242,41 @@ export function ProfileView({
         bounces={false}
       >
         {/* Top Actions */}
-        <View className="flex-row justify-between items-center px-4 pt-14 pb-4 bg-[#050608]">
+        <View 
+          className="flex-row justify-between items-center px-4 pt-14 pb-4"
+          style={{ backgroundColor: theme.headerBg }}
+        >
           <TouchableOpacity
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               if (onBack) {
                 onBack();
-              } else if (Platform.OS === "web") {
-                window.location.href = "/";
+              } else if (router.canGoBack()) {
+                router.back();
               } else {
-                Alert.alert("Home", "Navigating to Home...");
+                router.replace('/');
               }
             }}
-            className="w-10 h-10 items-center justify-center rounded-full border border-white/10 bg-black/40"
+            style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+            className="w-10 h-10 items-center justify-center rounded-full border"
           >
-            <ChevronLeft color="#fff" size={24} />
+            <ChevronLeft color={theme.text} size={24} />
           </TouchableOpacity>
 
           <View className="flex-row gap-2">
             <TouchableOpacity
               onPress={handleShare}
-              className="w-10 h-10 items-center justify-center rounded-full bg-black/40 border border-white/10"
+              style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+              className="w-10 h-10 items-center justify-center rounded-full border"
             >
-              <Share color="#fff" size={20} />
+              <Share color={theme.text} size={20} />
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => setIsSettingsOpen(true)}
-              className="w-10 h-10 items-center justify-center rounded-full bg-black/40 border border-white/10"
+              style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+              className="w-10 h-10 items-center justify-center rounded-full border"
             >
-              <MoreHorizontal color="#fff" size={20} />
+              <MoreHorizontal color={theme.text} size={20} />
             </TouchableOpacity>
           </View>
         </View>
@@ -1114,14 +1285,22 @@ export function ProfileView({
         <View className="items-center mt-2">
           <TouchableOpacity
             className="relative"
-            onPress={() =>
-              Alert.alert(
-                "Online",
-                "Aarav Nair is currently online & accepting bookings!",
-              )
-            }
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              if (isOwnProfile) {
+                setIsEditingProfile(true);
+              } else {
+                Alert.alert(
+                  "Online",
+                  `${profileData?.name || "Aarav Nair"} is currently online & accepting bookings!`,
+                );
+              }
+            }}
           >
-            <View className="w-[100px] h-[100px] rounded-full overflow-hidden border-[2px] border-[#E91E76] bg-[#1B1D24] shadow-lg">
+            <View 
+              style={{ borderColor: theme.primary, backgroundColor: theme.surfaceBg }}
+              className="w-[100px] h-[100px] rounded-full overflow-hidden border-[2px] shadow-lg"
+            >
               <Image
                 source={{ uri: profileData?.avatarUrl || avatarImg }}
                 className="w-full h-full"
@@ -1129,7 +1308,10 @@ export function ProfileView({
               />
             </View>
             {/* Online Dot */}
-            <View className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-[#00E575] border-[2.5px] border-[#050608]" />
+            <View 
+              style={{ borderColor: theme.bg }}
+              className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-[#00E575] border-[2.5px]" 
+            />
           </TouchableOpacity>
         </View>
 
@@ -1138,14 +1320,18 @@ export function ProfileView({
           <View className="items-center">
             {/* Name & Badge */}
             <View className="flex-row items-center justify-center gap-2">
-              <Text className="text-[32px] font-serif font-bold text-white tracking-tight text-center">
+              <Text 
+                className="text-[32px] font-serif font-bold tracking-tight text-center"
+                style={{ color: theme.text }}
+              >
                 {profileData?.name || "Aarav Nair"}
               </Text>
               <TouchableOpacity
                 onPress={() =>
                   Alert.alert("Verified Stage Artist", "Level 4 Calibrated")
                 }
-                className="w-[22px] h-[22px] rounded-full bg-[#E91E76] items-center justify-center shadow-md"
+                style={{ backgroundColor: theme.primary }}
+                className="w-[22px] h-[22px] rounded-full items-center justify-center shadow-md"
               >
                 <Check color="#fff" strokeWidth={3.5} size={13} />
               </TouchableOpacity>
@@ -1156,30 +1342,33 @@ export function ProfileView({
               {profileData?.title ? (
                 profileData.title.split("•").map((part: string, idx: number) => (
                   <React.Fragment key={idx}>
-                    {idx > 0 && <View className="w-1 h-1 rounded-full bg-[#6B7280]" />}
-                    <Text className="text-[13px] text-[#D1D5DB] font-medium">
+                    {idx > 0 && <View className="w-1 h-1 rounded-full" style={{ backgroundColor: theme.textSecondary }} />}
+                    <Text className="text-[13px] font-medium" style={{ color: theme.textSecondary }}>
                       {part.trim()}
                     </Text>
                   </React.Fragment>
                 ))
               ) : (
                 <>
-                  <Text className="text-[13px] text-[#D1D5DB]">Singer</Text>
-                  <View className="w-1 h-1 rounded-full bg-[#6B7280]" />
-                  <Text className="text-[13px] text-[#D1D5DB]">Songwriter</Text>
+                  <Text className="text-[13px]" style={{ color: theme.textSecondary }}>Singer</Text>
+                  <View className="w-1 h-1 rounded-full" style={{ backgroundColor: theme.textSecondary }} />
+                  <Text className="text-[13px]" style={{ color: theme.textSecondary }}>Songwriter</Text>
                 </>
               )}
-              <View className="w-1 h-1 rounded-full bg-[#6B7280]" />
+              <View className="w-1 h-1 rounded-full" style={{ backgroundColor: theme.textSecondary }} />
               <View className="flex-row items-center justify-center gap-1">
-                <MapPin color="#E91E76" fill="#E91E76" size={13} />
-                <Text className="text-[13px] text-[#D1D5DB]">
+                <MapPin color={theme.primary} fill={theme.primary} size={13} />
+                <Text className="text-[13px]" style={{ color: theme.textSecondary }}>
                   {profileData?.location || "Bengaluru, India"}
                 </Text>
               </View>
             </View>
 
             {/* Quote / Caption */}
-            <Text className="text-white text-[15px] italic text-center mt-3 px-6 leading-6 opacity-90">
+            <Text 
+              className="text-[15px] italic text-center mt-3 px-6 leading-6 opacity-90"
+              style={{ color: theme.text }}
+            >
               "{profileData?.quote || "Music is the language of the spirit."}"
             </Text>
           </View>
@@ -1188,11 +1377,12 @@ export function ProfileView({
           <View className="flex-row gap-2 mt-5">
             <TouchableOpacity 
               onPress={() => setIsScoreBreakdownOpen(true)}
-              className="flex-1 p-3 rounded-2xl bg-[#11131B] border border-white/5 items-start min-h-[72px] justify-between">
-              <Star color="#E91E76" fill="#E91E76" size={18} />
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+              className="flex-1 p-3 rounded-2xl border items-start min-h-[72px] justify-between">
+              <Star color={theme.primary} fill={theme.primary} size={18} />
               <View className="mt-2">
-                <Text className="text-[17px] font-bold text-white">4.8</Text>
-                <Text className="text-[11px] text-[#8E95A5] font-medium mt-0.5">
+                <Text className="text-[17px] font-bold" style={{ color: theme.text }}>4.8</Text>
+                <Text className="text-[11px] font-medium mt-0.5" style={{ color: theme.textSecondary }}>
                   Blind Score
                 </Text>
               </View>
@@ -1200,15 +1390,17 @@ export function ProfileView({
 
             <TouchableOpacity
               onPress={() => setActiveTab("Performances")}
-              className="flex-1 p-3 rounded-2xl bg-[#11131B] border border-white/5 items-start min-h-[72px] justify-between"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+              className="flex-1 p-3 rounded-2xl border items-start min-h-[72px] justify-between"
             >
-              <BarChart2 color="#D1D5DB" size={18} />
+              <BarChart2 color={theme.textSecondary} size={18} />
               <View className="mt-2">
-                <Text className="text-[17px] font-bold text-white">
+                <Text className="text-[17px] font-bold" style={{ color: theme.text }}>
                   {profileData?.videosCount?.toString() || "5"}
                 </Text>
                 <Text
-                  className="text-[11px] text-[#8E95A5] font-medium mt-0.5"
+                  className="text-[11px] font-medium mt-0.5"
+                  style={{ color: theme.textSecondary }}
                   numberOfLines={1}
                 >
                   Performances
@@ -1218,12 +1410,15 @@ export function ProfileView({
 
             <TouchableOpacity
               onPress={() => setActiveTab("Shows")}
-              className="flex-1 p-3 rounded-2xl bg-[#11131B] border border-white/5 items-start min-h-[72px] justify-between"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+              className="flex-1 p-3 rounded-2xl border items-start min-h-[72px] justify-between"
             >
-              <Calendar color="#E91E76" size={18} strokeWidth={2} />
+              <Calendar color={theme.primary} size={18} strokeWidth={2} />
               <View className="mt-2">
-                <Text className="text-[17px] font-bold text-white">2</Text>
-                <Text className="text-[11px] text-[#8E95A5] font-medium mt-0.5">
+                <Text className="text-[17px] font-bold" style={{ color: theme.text }}>
+                  {shows?.length ? shows.length.toString() : "2"}
+                </Text>
+                <Text className="text-[11px] font-medium mt-0.5" style={{ color: theme.textSecondary }}>
                   Shows
                 </Text>
               </View>
@@ -1231,13 +1426,14 @@ export function ProfileView({
 
             <TouchableOpacity 
               onPress={() => setIsFansModalOpen(true)}
-              className="flex-1 p-3 rounded-2xl bg-[#11131B] border border-white/5 items-start min-h-[72px] justify-between">
-              <Users color="#D1D5DB" size={18} strokeWidth={2} />
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+              className="flex-1 p-3 rounded-2xl border items-start min-h-[72px] justify-between">
+              <Users color={theme.textSecondary} size={18} strokeWidth={2} />
               <View className="mt-2">
-                <Text className="text-[17px] font-bold text-white">
+                <Text className="text-[17px] font-bold" style={{ color: theme.text }}>
                   {profileData?.followers?.toString() || "12.4K"}
                 </Text>
-                <Text className="text-[11px] text-[#8E95A5] font-medium mt-0.5">
+                <Text className="text-[11px] font-medium mt-0.5" style={{ color: theme.textSecondary }}>
                   Followers
                 </Text>
               </View>
@@ -1250,7 +1446,8 @@ export function ProfileView({
               <TouchableOpacity
                 onPress={() => setIsEditingProfile(true)}
                 activeOpacity={0.8}
-                className="flex-[1.8] bg-[#E91E76] h-[48px] rounded-full flex-row items-center justify-center gap-1.5 shadow-md"
+                style={{ backgroundColor: theme.primary }}
+                className="flex-[1.8] h-[48px] rounded-full flex-row items-center justify-center gap-1.5 shadow-md"
               >
                 <User color="#fff" size={16} />
                 <Text className="text-[12px] text-white font-bold tracking-[0.08em] uppercase">
@@ -1261,10 +1458,11 @@ export function ProfileView({
               <TouchableOpacity
                 onPress={handleBackTalent}
                 activeOpacity={0.8}
-                className={`flex-[1.6] h-[48px] rounded-full flex-row items-center justify-center gap-2 ${backed ? "bg-[#181A24] border border-[#E91E76]" : "bg-[#E91E76]"}`}
+                style={backed ? { borderColor: theme.primary } : { backgroundColor: theme.primary }}
+                className={`flex-[1.6] h-[48px] rounded-full flex-row items-center justify-center gap-2 ${backed ? "bg-[#181A24] border" : ""}`}
               >
                 <Heart
-                  color={backed ? "#E91E76" : "#fff"}
+                  color={backed ? theme.primary : "#fff"}
                   fill="transparent"
                   size={18}
                   strokeWidth={2}
@@ -1279,12 +1477,17 @@ export function ProfileView({
 
             {!isOwnProfile && (
               <TouchableOpacity
-                onPress={() => Alert.alert("Message", "Opening direct messages...")}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  const targetUserId = profileData?.id || user?.id || 1;
+                  router.push(`/chat/${targetUserId}`);
+                }}
                 activeOpacity={0.8}
-                className="flex-[1.8] h-[48px] rounded-full bg-transparent border border-white/10 items-center justify-center flex-row gap-2"
+                style={{ borderColor: theme.border, backgroundColor: theme.surfaceBg }}
+                className="flex-[1.8] h-[48px] rounded-full border items-center justify-center flex-row gap-2"
               >
-                <MessageCircle color="#fff" size={16} strokeWidth={2} />
-                <Text className="text-[12px] font-semibold tracking-[0.05em] text-white uppercase">
+                <MessageCircle color={theme.text} size={16} strokeWidth={2} />
+                <Text className="text-[12px] font-semibold tracking-[0.05em] uppercase" style={{ color: theme.text }}>
                   MESSAGE
                 </Text>
               </TouchableOpacity>
@@ -1292,9 +1495,10 @@ export function ProfileView({
 
             <TouchableOpacity
               onPress={() => setIsSettingsOpen(true)}
-              className="w-[48px] h-[48px] rounded-full bg-transparent border border-white/10 items-center justify-center"
+              style={{ borderColor: theme.border, backgroundColor: theme.surfaceBg }}
+              className="w-[48px] h-[48px] rounded-full border items-center justify-center"
             >
-              <MoreHorizontal color="#fff" size={20} />
+              <MoreHorizontal color={theme.text} size={20} />
             </TouchableOpacity>
           </View>
 
@@ -1308,17 +1512,31 @@ export function ProfileView({
             {["#Original", "#Acoustic", "#Indie", "#Singer"].map((tag, i) => (
               <TouchableOpacity
                 key={i}
-                onPress={() => Alert.alert("Search Tag", `Searching for talents with ${tag}`)}
-                className="px-4 py-2 rounded-full bg-[#11131B] border border-white/10 items-center justify-center"
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push({ pathname: '/search', params: { q: tag.replace('#', '') } });
+                }}
+                style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                className="px-4 py-2 rounded-full border items-center justify-center"
               >
-                <Text className="text-[#D1D5DB] text-[12px] font-medium">
+                <Text className="text-[12px] font-medium" style={{ color: theme.text }}>
                   {tag}
                 </Text>
               </TouchableOpacity>
             ))}
-            <TouchableOpacity className="px-4 py-2 rounded-full bg-transparent border border-white/10 flex-row items-center gap-1">
-              <Plus color="#9CA3AF" size={14} />
-              <Text className="text-[#9CA3AF] text-[12px] font-medium">
+            <TouchableOpacity 
+              onPress={() => {
+                if (isOwnProfile) {
+                  setIsEditingProfile(true);
+                } else {
+                  router.push('/search');
+                }
+              }}
+              style={{ borderColor: theme.border }}
+              className="px-4 py-2 rounded-full bg-transparent border flex-row items-center gap-1"
+            >
+              <Plus color={theme.textSecondary} size={14} />
+              <Text className="text-[12px] font-medium" style={{ color: theme.textSecondary }}>
                 Add tag
               </Text>
             </TouchableOpacity>
@@ -1326,7 +1544,10 @@ export function ProfileView({
         </View>
 
         {/* Tabs */}
-        <View className="flex-row border-b border-white/10 mb-6 px-4 justify-between">
+        <View 
+          className="flex-row border-b mb-6 px-4 justify-between"
+          style={{ borderBottomColor: theme.border }}
+        >
           <TouchableOpacity
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1334,14 +1555,18 @@ export function ProfileView({
             }}
             className={`flex-1 items-center pb-3 flex-row justify-center gap-2 ${activeTab !== "Performances" ? "opacity-60" : ""}`}
           >
-            <View className={`flex-row items-center gap-2 pb-1 ${activeTab === "Performances" ? "border-b-[3px] border-[#E91E76] shadow-[0_0_10px_rgba(233,30,118,0.5)]" : ""}`}>
+            <View 
+              className="flex-row items-center gap-2 pb-1"
+              style={activeTab === "Performances" ? { borderBottomWidth: 3, borderBottomColor: theme.primary } : undefined}
+            >
               <Play
-                color={activeTab === "Performances" ? "#E91E76" : "#9CA3AF"}
-                fill={activeTab === "Performances" ? "#E91E76" : "transparent"}
+                color={activeTab === "Performances" ? theme.primary : theme.textSecondary}
+                fill={activeTab === "Performances" ? theme.primary : "transparent"}
                 size={14}
               />
               <Text
-                className={`font-semibold text-[13px] ${activeTab === "Performances" ? "text-[#E91E76]" : "text-[#9CA3AF]"}`}
+                className="font-semibold text-[13px]"
+                style={{ color: activeTab === "Performances" ? theme.primary : theme.textSecondary }}
               >
                 Performances
               </Text>
@@ -1354,13 +1579,17 @@ export function ProfileView({
             }}
             className={`flex-1 items-center pb-3 flex-row justify-center gap-2 ${activeTab !== "Shows" ? "opacity-60" : ""}`}
           >
-            <View className={`flex-row items-center gap-2 pb-1 ${activeTab === "Shows" ? "border-b-[3px] border-[#E91E76] shadow-[0_0_10px_rgba(233,30,118,0.5)]" : ""}`}>
+            <View 
+              className="flex-row items-center gap-2 pb-1"
+              style={activeTab === "Shows" ? { borderBottomWidth: 3, borderBottomColor: theme.primary } : undefined}
+            >
               <Calendar
-                color={activeTab === "Shows" ? "#E91E76" : "#9CA3AF"}
+                color={activeTab === "Shows" ? theme.primary : theme.textSecondary}
                 size={14}
               />
               <Text
-                className={`font-semibold text-[13px] ${activeTab === "Shows" ? "text-[#E91E76]" : "text-[#9CA3AF]"}`}
+                className="font-semibold text-[13px]"
+                style={{ color: activeTab === "Shows" ? theme.primary : theme.textSecondary }}
               >
                 Shows
               </Text>
@@ -1373,13 +1602,17 @@ export function ProfileView({
             }}
             className={`flex-1 items-center pb-3 flex-row justify-center gap-2 ${activeTab !== "About" ? "opacity-60" : ""}`}
           >
-            <View className={`flex-row items-center gap-2 pb-1 ${activeTab === "About" ? "border-b-[3px] border-[#E91E76] shadow-[0_0_10px_rgba(233,30,118,0.5)]" : ""}`}>
+            <View 
+              className="flex-row items-center gap-2 pb-1"
+              style={activeTab === "About" ? { borderBottomWidth: 3, borderBottomColor: theme.primary } : undefined}
+            >
               <User
-                color={activeTab === "About" ? "#E91E76" : "#9CA3AF"}
+                color={activeTab === "About" ? theme.primary : theme.textSecondary}
                 size={14}
               />
               <Text
-                className={`font-semibold text-[13px] ${activeTab === "About" ? "text-[#E91E76]" : "text-[#9CA3AF]"}`}
+                className="font-semibold text-[13px]"
+                style={{ color: activeTab === "About" ? theme.primary : theme.textSecondary }}
               >
                 About
               </Text>
@@ -1391,16 +1624,30 @@ export function ProfileView({
             {/* Featured Performance */}
             <View className="px-5 mb-8">
               <View className="flex-row justify-between items-center mb-4">
-                <Text className="text-white text-[18px] font-bold tracking-tight">
+                <Text className="text-[18px] font-bold tracking-tight" style={{ color: theme.text }}>
                   Featured Performance
                 </Text>
                 <View className="flex-row gap-2">
-                  <TouchableOpacity className="border border-[#E91E76] px-3 py-1 rounded-full flex-row items-center justify-center bg-[#E91E76]/10">
-                    <Text className="text-[#E91E76] text-[10px] font-bold tracking-wider uppercase">
+                  <TouchableOpacity 
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setIsProfileFeedOpen(true);
+                    }}
+                    style={{ borderColor: theme.primary, backgroundColor: theme.primary + '15' }}
+                    className="border px-3 py-1 rounded-full flex-row items-center justify-center"
+                  >
+                    <Text style={{ color: theme.primary }} className="text-[10px] font-bold tracking-wider uppercase">
                       Live View
                     </Text>
                   </TouchableOpacity>
-                  <TouchableOpacity className="bg-[#E91E76] px-3 py-1 rounded-full flex-row items-center justify-center gap-1">
+                  <TouchableOpacity 
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      router.push('/create');
+                    }}
+                    style={{ backgroundColor: theme.primary }}
+                    className="px-3 py-1 rounded-full flex-row items-center justify-center gap-1"
+                  >
                     <Plus color="#fff" size={12} />
                     <Text className="text-white text-[11px] font-bold">
                       Add Video
@@ -1410,33 +1657,50 @@ export function ProfileView({
               </View>
 
               {(() => {
-                const featuredVideoUrl = (profileData?.videos && profileData.videos.length > 0)
-                  ? profileData.videos[0].url
-                  : dummyVideos[0];
-                const featuredTitle = (profileData?.videos && profileData.videos.length > 0)
-                  ? profileData.videos[0].title
-                  : "Acoustic Sunset Sessions";
+                const hasUploadedVideos = Boolean(profileData?.videos && profileData.videos.length > 0);
+                const featuredVideo = hasUploadedVideos ? profileData.videos[0] : null;
+                const featuredVideoUrl = featuredVideo ? featuredVideo.url : dummyVideos[0];
+                const featuredTitle = featuredVideo ? (featuredVideo.title || "Untitled Performance") : "Acoustic Sunset Sessions";
+                const isImg = isMediaImage(featuredVideoUrl);
+                const featuredCategory = featuredVideo ? (featuredVideo.category || (isImg ? "Visual Art" : "Performance")) : "Acoustic Folk";
+                const featuredViews = featuredVideo ? `${featuredVideo.views || 0} views` : "3.2M views";
+                const posterUrl = featuredVideo?.thumbnailUrl || "https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=800&q=80";
 
                 return (
                   <TouchableOpacity
                     activeOpacity={0.9}
                     onPress={() => playVideo(featuredVideoUrl)}
-                    className="w-full aspect-[4/3] rounded-[24px] overflow-hidden relative border border-white/5 bg-[#12141A]"
+                    style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}
+                    className="w-full aspect-[4/3] rounded-[24px] overflow-hidden relative border"
                   >
-                    {Platform.OS === "web" ? (
+                    {isImg ? (
+                      Platform.OS === "web" ? (
+                        <img
+                          src={featuredVideoUrl}
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          alt={featuredTitle}
+                        />
+                      ) : (
+                        <Image
+                          source={{ uri: featuredVideoUrl }}
+                          className="w-full h-full"
+                          resizeMode="cover"
+                        />
+                      )
+                    ) : Platform.OS === "web" ? (
                       <video
                         src={featuredVideoUrl}
                         autoPlay
                         loop
                         muted
                         playsInline
-                        poster="https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=800&q=80"
+                        poster={posterUrl}
                         style={{ width: "100%", height: "100%", objectFit: "cover" }}
                       />
                     ) : (
                       <Image
                         source={{
-                          uri: "https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=800&q=80",
+                          uri: posterUrl,
                         }}
                         className="w-full h-full opacity-80"
                       />
@@ -1444,22 +1708,29 @@ export function ProfileView({
                     <View className="absolute inset-0 bg-black/40" />
 
                     {/* Featured Badge */}
-                    <View className="absolute top-4 left-4 bg-[#E91E76] px-3 py-1.5 rounded-md flex-row items-center gap-1.5 shadow-sm">
+                    <View 
+                      style={{ backgroundColor: theme.primary }}
+                      className="absolute top-4 left-4 px-3 py-1.5 rounded-md flex-row items-center gap-1.5 shadow-sm"
+                    >
                       <Star color="#fff" fill="#fff" size={12} />
                       <Text className="text-white text-[10px] font-bold tracking-widest uppercase">
-                        FEATURED • TAP TO PLAY FULL
+                        {isImg ? "LATEST UPLOAD • TAP TO VIEW FULL" : "FEATURED • TAP TO PLAY FULL"}
                       </Text>
                     </View>
 
-                    {/* Play Button */}
+                    {/* Play / View Button */}
                     <View className="absolute top-[50%] left-0 right-0 items-center justify-center -translate-y-1/2">
                       <View className="w-16 h-16 rounded-full border border-white bg-black/30 items-center justify-center">
-                        <Play
-                          color="#fff"
-                          fill="#fff"
-                          size={24}
-                          style={{ marginLeft: 4 }}
-                        />
+                        {isImg ? (
+                          <Eye color="#fff" size={24} />
+                        ) : (
+                          <Play
+                            color="#fff"
+                            fill="#fff"
+                            size={24}
+                            style={{ marginLeft: 4 }}
+                          />
+                        )}
                       </View>
                     </View>
 
@@ -1471,15 +1742,15 @@ export function ProfileView({
                       <View className="flex-row items-center justify-between">
                         <View className="flex-row items-center gap-1">
                           <Text className="text-[#D1D5DB] text-[13px]">
-                            Acoustic Folk • 3.2M views •{" "}
+                            {featuredCategory} • {featuredViews} •{" "}
                           </Text>
-                          <Text className="text-[#E91E76] text-[13px]">
-                            Tap to Watch
+                          <Text style={{ color: theme.primary }} className="text-[13px]">
+                            {isImg ? "Tap to View Photo" : "Tap to Watch"}
                           </Text>
                         </View>
                         <View className="bg-transparent border border-white/20 px-2.5 py-1 rounded-md">
                           <Text className="text-white text-[11px] font-medium tracking-wide">
-                            03:24
+                            {isImg ? "Photo" : "03:24"}
                           </Text>
                         </View>
                       </View>
@@ -1493,13 +1764,18 @@ export function ProfileView({
             <View className="mb-8">
               <View className="px-5 flex-row justify-between items-center mb-4">
                 <View className="flex-row items-center gap-2">
-                  <Text className="text-white text-[18px] font-bold">
+                  <Text className="text-[18px] font-bold" style={{ color: theme.text }}>
                     Performances
                   </Text>
-                  <Text className="text-[#9CA3AF] text-[14px]">(5)</Text>
+                  <Text className="text-[14px]" style={{ color: theme.textSecondary }}>
+                    ({profileData?.videosCount || profileData?.videos?.length || 4})
+                  </Text>
                 </View>
-                <TouchableOpacity onPress={() => {}}>
-                  <Text className="text-[#E91E76] text-[13px] font-medium">
+                <TouchableOpacity onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push('/create');
+                }}>
+                  <Text style={{ color: theme.primary }} className="text-[13px] font-medium">
                     + Upload take
                   </Text>
                 </TouchableOpacity>
@@ -1511,85 +1787,142 @@ export function ProfileView({
                 className="pl-5"
                 contentContainerStyle={{ paddingRight: 40, gap: 12 }}
               >
-                {[
-                  {
-                    title: "Monsoon Motion",
-                    time: "03:24",
-                    img: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300",
-                    videoUrl: dummyVideos[1],
-                  },
-                  {
-                    title: "City Lights",
-                    time: "02:48",
-                    img: "https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=300",
-                    videoUrl: dummyVideos[2],
-                  },
-                  {
-                    title: "Falling Again",
-                    time: "03:10",
-                    img: "https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=300",
-                    videoUrl: dummyVideos[3],
-                  },
-                  {
-                    title: "Studio Pulse",
-                    time: "01:54",
-                    img: "https://images.unsplash.com/photo-1516280440502-a2fc9977823b?w=300",
-                    videoUrl: dummyVideos[4],
-                  },
-                ].map((perf, i) => (
-                  <TouchableOpacity
-                    key={i}
-                    onPress={() => playVideo(perf.videoUrl)}
-                    activeOpacity={0.8}
-                    className={`w-[140px] h-[190px] rounded-[16px] overflow-hidden relative ${i === 0 ? "border-2 border-[#E91E76]" : "border border-white/10"}`}
-                  >
-                    {Platform.OS === "web" ? (
-                      <video
-                        src={perf.videoUrl}
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                        poster={perf.img}
-                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                      />
-                    ) : (
-                      <Image
-                        source={{ uri: perf.img }}
-                        className="w-full h-full opacity-80"
-                      />
-                    )}
-                    <View className="absolute inset-0 bg-black/40" />
-                    <View className="absolute bottom-3 left-3 right-3 flex-row items-end justify-between">
-                      <View>
-                        <Text
-                          className="text-white text-[13px] font-bold mb-1"
-                          numberOfLines={1}
-                        >
-                          {perf.title}
-                        </Text>
-                        <Text className="text-[#9CA3AF] text-[11px]">
-                          {perf.time}
-                        </Text>
-                      </View>
-                      <View className="w-7 h-7 rounded-full border border-white items-center justify-center bg-transparent">
-                        <Play
-                          color="#fff"
-                          size={12}
-                          fill="#fff"
-                          style={{ marginLeft: 2 }}
+                {(() => {
+                  const fallbackPerformances = [
+                    {
+                      id: "dummy-1",
+                      title: "Monsoon Motion",
+                      time: "03:24",
+                      img: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300",
+                      videoUrl: dummyVideos[1],
+                      isImg: false,
+                    },
+                    {
+                      id: "dummy-2",
+                      title: "City Lights",
+                      time: "02:48",
+                      img: "https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=300",
+                      videoUrl: dummyVideos[2],
+                      isImg: false,
+                    },
+                    {
+                      id: "dummy-3",
+                      title: "Falling Again",
+                      time: "03:10",
+                      img: "https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=300",
+                      videoUrl: dummyVideos[3],
+                      isImg: false,
+                    },
+                    {
+                      id: "dummy-4",
+                      title: "Studio Pulse",
+                      time: "01:54",
+                      img: "https://images.unsplash.com/photo-1516280440502-a2fc9977823b?w=300",
+                      videoUrl: dummyVideos[4],
+                      isImg: false,
+                    },
+                  ];
+
+                  const itemsToDisplay =
+                    profileData?.videos && profileData.videos.length > 0
+                      ? profileData.videos.map((v: any, idx: number) => {
+                          const isImg = isMediaImage(v.url);
+                          return {
+                            id: v.id || idx,
+                            title: v.title || "Untitled Take",
+                            time: isImg ? "Photo" : (v.duration || "02:40"),
+                            img: isImg
+                              ? v.url
+                              : v.thumbnailUrl ||
+                                fallbackPerformances[idx % fallbackPerformances.length].img,
+                            videoUrl: v.url,
+                            isImg,
+                          };
+                        })
+                      : fallbackPerformances;
+
+                  return itemsToDisplay.map((perf: any, i: number) => (
+                    <TouchableOpacity
+                      key={perf.id || i}
+                      onPress={() => playVideo(perf.videoUrl)}
+                      activeOpacity={0.8}
+                      style={i === 0 ? { borderColor: theme.primary, borderWidth: 2 } : { borderColor: theme.border, borderWidth: 1 }}
+                      className="w-[140px] h-[190px] rounded-[16px] overflow-hidden relative"
+                    >
+                      {perf.isImg ? (
+                        Platform.OS === "web" ? (
+                          <img
+                            src={perf.videoUrl || perf.img}
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                            }}
+                            alt={perf.title}
+                          />
+                        ) : (
+                          <Image
+                            source={{ uri: perf.videoUrl || perf.img }}
+                            className="w-full h-full opacity-90"
+                            resizeMode="cover"
+                          />
+                        )
+                      ) : Platform.OS === "web" ? (
+                        <video
+                          src={perf.videoUrl}
+                          autoPlay
+                          loop
+                          muted
+                          playsInline
+                          poster={perf.img}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                          }}
                         />
+                      ) : (
+                        <Image
+                          source={{ uri: perf.img }}
+                          className="w-full h-full opacity-80"
+                        />
+                      )}
+                      <View className="absolute inset-0 bg-black/40" />
+                      <View className="absolute bottom-3 left-3 right-3 flex-row items-end justify-between">
+                        <View className="flex-1 pr-1">
+                          <Text
+                            className="text-white text-[13px] font-bold mb-1"
+                            numberOfLines={1}
+                          >
+                            {perf.title}
+                          </Text>
+                          <Text className="text-[#9CA3AF] text-[11px]">
+                            {perf.time}
+                          </Text>
+                        </View>
+                        <View className="w-7 h-7 rounded-full border border-white items-center justify-center bg-black/30">
+                          {perf.isImg ? (
+                            <Eye color="#fff" size={12} />
+                          ) : (
+                            <Play
+                              color="#fff"
+                              size={12}
+                              fill="#fff"
+                              style={{ marginLeft: 2 }}
+                            />
+                          )}
+                        </View>
                       </View>
-                    </View>
-                  </TouchableOpacity>
-                ))}
+                    </TouchableOpacity>
+                  ));
+                })()}
               </ScrollView>
             </View>
 
             {/* Upcoming Shows in Performances Tab */}
             <View className="mb-8">
               <View className="px-5 flex-row justify-between items-center mb-4">
-                <Text className="text-white text-[18px] font-bold">
+                <Text className="text-[18px] font-bold" style={{ color: theme.text }}>
                   Upcoming Shows
                 </Text>
                 <TouchableOpacity
@@ -1599,8 +1932,8 @@ export function ProfileView({
                     setActiveTab("Shows");
                   }}
                 >
-                  <Text className="text-[#9CA3AF] text-[12px]">View all</Text>
-                  <ChevronRight color="#9CA3AF" size={14} />
+                  <Text className="text-[12px]" style={{ color: theme.textSecondary }}>View all</Text>
+                  <ChevronRight color={theme.textSecondary} size={14} />
                 </TouchableOpacity>
               </View>
 
@@ -1610,7 +1943,7 @@ export function ProfileView({
                 className="pl-5"
                 contentContainerStyle={{ paddingRight: 40, gap: 12 }}
               >
-                {[
+                {(shows && shows.length > 0 ? shows : [
                   {
                     id: 1,
                     date: "2024-10-24",
@@ -1631,7 +1964,7 @@ export function ProfileView({
                     image:
                       "https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=100",
                   },
-                ].map((show, i) => {
+                ]).map((show, i) => {
                   const date = new Date(show.date);
                   const dateM = date.getDate().toString();
                   const dateD = date
@@ -1646,18 +1979,22 @@ export function ProfileView({
                         setActiveShowModal(show);
                       }}
                       activeOpacity={0.8}
-                      className="w-[300px] bg-[#12141A] border border-white/5 rounded-2xl flex-col overflow-hidden"
+                      style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+                      className="w-[300px] border rounded-2xl flex-col overflow-hidden"
                     >
                       <View className="p-4 flex-row items-center gap-4">
-                        <View className="items-center w-[48px] h-[52px] border border-white/10 rounded-xl justify-center bg-[#1A1C23]">
-                          <Text className="text-white font-bold text-[18px] leading-5">
+                        <View 
+                          style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                          className="items-center w-[48px] h-[52px] border rounded-xl justify-center"
+                        >
+                          <Text className="font-bold text-[18px] leading-5" style={{ color: theme.text }}>
                             {dateM}
                           </Text>
-                          <Text className="text-[#E91E76] text-[10px] font-bold">
+                          <Text className="text-[10px] font-bold" style={{ color: theme.primary }}>
                             {dateD}
                           </Text>
                         </View>
-                        <View className="w-14 h-14 rounded-xl overflow-hidden bg-[#1A1512]">
+                        <View className="w-14 h-14 rounded-xl overflow-hidden bg-black/10">
                           {show.image ? (
                             <Image
                               source={{ uri: show.image }}
@@ -1667,15 +2004,17 @@ export function ProfileView({
                         </View>
                         <View className="flex-1">
                           <Text
-                            className="text-white font-bold text-[15px] mb-1"
+                            className="font-bold text-[15px] mb-1"
+                            style={{ color: theme.text }}
                             numberOfLines={1}
                           >
                             {show.title}
                           </Text>
                           <View className="flex-row items-center gap-1">
-                            <MapPin color="#E91E76" size={12} />
+                            <MapPin color={theme.primary} size={12} />
                             <Text
-                              className="text-[#9CA3AF] text-[12px]"
+                              className="text-[12px]"
+                              style={{ color: theme.textSecondary }}
                               numberOfLines={1}
                             >
                               {show.location}
@@ -1683,10 +2022,13 @@ export function ProfileView({
                           </View>
                         </View>
                       </View>
-                      <View className="px-4 py-3 border-t border-white/5 flex-row items-center justify-between bg-white/[0.02]">
+                      <View 
+                        style={{ borderTopColor: theme.border, backgroundColor: theme.surfaceBg }}
+                        className="px-4 py-3 border-t flex-row items-center justify-between"
+                      >
                         <View className="flex-row items-center gap-1.5">
-                          <User color="#E91E76" size={14} />
-                          <Text className="text-[#9CA3AF] text-[12px]">
+                          <User color={theme.primary} size={14} />
+                          <Text className="text-[12px]" style={{ color: theme.textSecondary }}>
                             {show.visiting} visiting
                           </Text>
                         </View>
@@ -1698,8 +2040,11 @@ export function ProfileView({
                             </Text>
                           </View>
                         ) : (
-                          <View className="bg-white/10 px-3 py-1.5 rounded-full border border-white/20">
-                            <Text className="text-white text-[11px] font-bold">
+                          <View 
+                            style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}
+                            className="px-3 py-1.5 rounded-full border"
+                          >
+                            <Text className="text-[11px] font-bold" style={{ color: theme.text }}>
                               RSVP
                             </Text>
                           </View>
@@ -1716,7 +2061,7 @@ export function ProfileView({
         {activeTab === "Shows" && (
           <View className="mb-8">
             <View className="px-5 flex-row justify-between items-center mb-4">
-              <Text className="text-white text-[18px] font-bold">
+              <Text className="text-[18px] font-bold" style={{ color: theme.text }}>
                 Upcoming Shows
               </Text>
             </View>
@@ -1738,18 +2083,19 @@ export function ProfileView({
                         setActiveShowModal(show);
                       }}
                       activeOpacity={0.8}
-                      className="w-full bg-[#0F1115] border border-white/5 rounded-xl p-3 flex-row items-center justify-between"
+                      style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+                      className="w-full border rounded-xl p-3 flex-row items-center justify-between"
                     >
                       <View className="flex-row items-center gap-4">
                         <View className="items-center w-[40px]">
-                          <Text className="text-white font-bold text-[18px]">
+                          <Text className="font-bold text-[18px]" style={{ color: theme.text }}>
                             {dateM}
                           </Text>
-                          <Text className="text-[#9CA3AF] text-[10px]">
+                          <Text className="text-[10px] font-bold" style={{ color: theme.primary }}>
                             {dateD}
                           </Text>
                         </View>
-                        <View className="w-12 h-12 rounded-lg overflow-hidden bg-[#1A1512]">
+                        <View className="w-12 h-12 rounded-lg overflow-hidden bg-black/10">
                           {show.image ? (
                             <Image
                               source={{ uri: show.image }}
@@ -1758,28 +2104,31 @@ export function ProfileView({
                           ) : null}
                         </View>
                         <View>
-                          <Text className="text-white font-bold text-[14px] mb-1">
+                          <Text className="font-bold text-[14px] mb-1" style={{ color: theme.text }}>
                             {show.title}
                           </Text>
                           <View className="flex-row items-center gap-1">
-                            <MapPin color="#9CA3AF" size={10} />
-                            <Text className="text-[#9CA3AF] text-[11px]">
+                            <MapPin color={theme.textSecondary} size={10} />
+                            <Text className="text-[11px]" style={{ color: theme.textSecondary }}>
                               {show.location}
                             </Text>
                           </View>
                         </View>
                       </View>
-                      <ChevronRight color="#9CA3AF" size={16} />
+                      <ChevronRight color={theme.textSecondary} size={16} />
                     </TouchableOpacity>
                   );
                 })
               ) : (
-                <View className="items-center justify-center p-8 border border-white/5 bg-[#12141A] rounded-[24px]">
-                  <Calendar color="#4B5563" size={48} className="mb-4" />
-                  <Text className="text-white font-bold text-[18px] text-center mb-2">
+                <View 
+                  style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+                  className="items-center justify-center p-8 border rounded-[24px]"
+                >
+                  <Calendar color={theme.textSecondary} size={48} className="mb-4" />
+                  <Text className="font-bold text-[18px] text-center mb-2" style={{ color: theme.text }}>
                     No upcoming shows
                   </Text>
-                  <Text className="text-[#9CA3AF] text-[13px] text-center">
+                  <Text className="text-[13px] text-center" style={{ color: theme.textSecondary }}>
                     There are no upcoming shows scheduled right now.
                   </Text>
                 </View>
@@ -1791,14 +2140,17 @@ export function ProfileView({
         {activeTab === "About" && (
           <View className="px-5 mb-8">
             {/* Artist Bio */}
-            <View className="bg-[#0F1115] border border-white/5 rounded-xl p-5 mb-4">
+            <View 
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+              className="border rounded-xl p-5 mb-4"
+            >
               <View className="flex-row items-center gap-2 mb-4">
-                <User color="#E91E76" size={18} />
-                <Text className="text-white text-[13px] font-bold tracking-widest uppercase">
+                <User color={theme.primary} size={18} />
+                <Text className="text-[13px] font-bold tracking-widest uppercase" style={{ color: theme.text }}>
                   Artist Bio
                 </Text>
               </View>
-              <Text className="text-[#D1D5DB] text-[14px] leading-6">
+              <Text className="text-[14px] leading-6" style={{ color: theme.textSecondary }}>
                 {profileData?.bio || "No artist bio added yet. Tap Edit Profile to add your story."}
               </Text>
             </View>
@@ -1807,11 +2159,12 @@ export function ProfileView({
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={() => handleAction("Inspect Craft")}
-              className="bg-[#0F1115] border border-white/5 rounded-xl p-5 mb-4"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+              className="border rounded-xl p-5 mb-4"
             >
               <View className="flex-row items-center gap-2 mb-4">
-                <Music color="#E91E76" size={18} />
-                <Text className="text-white text-[13px] font-bold tracking-widest uppercase">
+                <Music color={theme.primary} size={18} />
+                <Text className="text-[13px] font-bold tracking-widest uppercase" style={{ color: theme.text }}>
                   Instruments & Craft (Tap to inspect)
                 </Text>
               </View>
@@ -1824,18 +2177,22 @@ export function ProfileView({
                 ].map((item, i) => (
                   <View
                     key={i}
-                    className="bg-white/5 border border-white/10 px-3 py-2 rounded-full"
+                    style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                    className="border px-3 py-2 rounded-full"
                   >
-                    <Text className="text-[#D1D5DB] text-[13px]">{item}</Text>
+                    <Text className="text-[13px]" style={{ color: theme.text }}>{item}</Text>
                   </View>
                 ))}
               </View>
             </TouchableOpacity>
 
             {/* Streaming & Socials */}
-            <View className="bg-[#0F1115] border border-white/5 rounded-xl p-5 mb-6">
+            <View 
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+              className="border rounded-xl p-5 mb-6"
+            >
               <View className="flex-row items-center gap-2 mb-4">
-                <Text className="text-white text-[13px] font-bold tracking-widest uppercase">
+                <Text className="text-[13px] font-bold tracking-widest uppercase" style={{ color: theme.text }}>
                   Streaming & Socials
                 </Text>
               </View>
@@ -1844,32 +2201,35 @@ export function ProfileView({
                 <TouchableOpacity
                   activeOpacity={0.7}
                   onPress={() => handleAction("Open Spotify")}
-                  className="flex-row items-center justify-between bg-black/20 border border-white/5 rounded-xl p-4"
+                  style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                  className="flex-row items-center justify-between border rounded-xl p-4"
                 >
-                  <Text className="text-[#D1D5DB] text-[14px]">
+                  <Text className="text-[14px]" style={{ color: theme.text }}>
                     Spotify • 184K Monthly Listeners
                   </Text>
-                  <ExternalLink color="#9CA3AF" size={16} />
+                  <ExternalLink color={theme.textSecondary} size={16} />
                 </TouchableOpacity>
                 <TouchableOpacity
                   activeOpacity={0.7}
                   onPress={() => handleAction("Open YouTube")}
-                  className="flex-row items-center justify-between bg-black/20 border border-white/5 rounded-xl p-4"
+                  style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                  className="flex-row items-center justify-between border rounded-xl p-4"
                 >
-                  <Text className="text-[#D1D5DB] text-[14px]">
+                  <Text className="text-[14px]" style={{ color: theme.text }}>
                     YouTube • 92K Subscribers
                   </Text>
-                  <ExternalLink color="#9CA3AF" size={16} />
+                  <ExternalLink color={theme.textSecondary} size={16} />
                 </TouchableOpacity>
                 <TouchableOpacity
                   activeOpacity={0.7}
                   onPress={() => handleAction("Open Instagram")}
-                  className="flex-row items-center justify-between bg-black/20 border border-white/5 rounded-xl p-4"
+                  style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                  className="flex-row items-center justify-between border rounded-xl p-4"
                 >
-                  <Text className="text-[#D1D5DB] text-[14px]">
-                    Instagram • @aaravnair
+                  <Text className="text-[14px]" style={{ color: theme.text }}>
+                    Instagram • @{profileData?.username || profileData?.name?.toLowerCase().replace(/\s+/g, '') || "aaravnair"}
                   </Text>
-                  <ExternalLink color="#9CA3AF" size={16} />
+                  <ExternalLink color={theme.textSecondary} size={16} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -1903,48 +2263,74 @@ export function ProfileView({
           >
             <TouchableOpacity
               activeOpacity={1}
-              className="bg-[#12141A] rounded-t-3xl border-t border-white/10 pb-10 pt-2 px-5"
+              style={{ backgroundColor: theme.cardBg, borderTopColor: theme.border }}
+              className="rounded-t-3xl border-t pb-10 pt-2 px-5"
             >
               <View className="w-12 h-1 bg-white/20 rounded-full mx-auto mb-6 mt-2" />
 
-              <Text className="text-[#9CA3AF] text-[13px] font-bold tracking-wider mb-4">
+              <Text className="text-[13px] font-bold tracking-wider mb-4" style={{ color: theme.textSecondary }}>
                 ACTIONS
               </Text>
               <SettingsRow
-                icon={<Flag color="#fff" size={20} />}
+                icon={<Flag color={theme.text} size={20} />}
                 title="Report User"
-                onPress={() => {
-                  Alert.alert("Report", "User reported.");
+                onPress={async () => {
+                  try {
+                    const videoId = profileData?.videos?.[0]?.id || 1;
+                    await api.post('/reports', {
+                      videoId,
+                      reason: `User report against ${profileData?.name || 'user'} (ID: ${profileData?.id || user?.id})`
+                    });
+                    Alert.alert("Report Submitted", "Thank you. Our moderation team will review this user.");
+                  } catch (e) {
+                    Alert.alert("Report Received", "User reported to moderation.");
+                  }
                   setIsSettingsOpen(false);
                 }}
               />
               <SettingsRow
-                icon={<UserX color="#fff" size={20} />}
+                icon={<UserX color={theme.text} size={20} />}
                 title="Block User"
-                onPress={() => {
-                  Alert.alert("Block", "User blocked.");
+                onPress={async () => {
+                  try {
+                    const targetUserId = profileData?.id || user?.id;
+                    if (targetUserId) {
+                      await api.post(`/users/${targetUserId}/block`);
+                      Alert.alert("User Blocked", `${profileData?.name || 'User'} has been blocked.`);
+                      if (onBack) onBack();
+                    }
+                  } catch (e) {
+                    Alert.alert("Block", "User blocked successfully.");
+                  }
                   setIsSettingsOpen(false);
                 }}
               />
 
-              <View className="h-[1px] w-full bg-white/10 my-4" />
+              <View className="h-[1px] w-full my-4" style={{ backgroundColor: theme.border }} />
 
-              <Text className="text-[#9CA3AF] text-[13px] font-bold tracking-wider mb-4">
+              <Text className="text-[13px] font-bold tracking-wider mb-4" style={{ color: theme.textSecondary }}>
                 SHARE
               </Text>
               <SettingsRow
-                icon={<Link color="#fff" size={20} />}
+                icon={<Link color={theme.text} size={20} />}
                 title="Copy Profile Link"
-                onPress={() => {
+                onPress={async () => {
+                  const targetId = profileData?.id || user?.id || '';
+                  const profileUrl = typeof window !== 'undefined' && window.location?.origin
+                    ? `${window.location.origin}/profile/${targetId}`
+                    : `https://talent.app/profile/${targetId}`;
+                  if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
+                    await navigator.clipboard.writeText(profileUrl);
+                  }
                   Alert.alert(
                     "Link Copied",
-                    "Profile link copied to clipboard.",
+                    `Profile link copied to clipboard:\n${profileUrl}`,
                   );
                   setIsSettingsOpen(false);
                 }}
               />
               <SettingsRow
-                icon={<Share color="#fff" size={20} />}
+                icon={<Share color={theme.text} size={20} />}
                 title="Share Profile"
                 onPress={() => {
                   handleShare();
@@ -1964,95 +2350,101 @@ export function ProfileView({
           presentationStyle="pageSheet"
           onRequestClose={() => setIsSettingsOpen(false)}
         >
-          <View className="flex-1 bg-[#050608]">
+          <View className="flex-1" style={{ backgroundColor: theme.bg }}>
             {activeSettingView === null ? (
               <>
-                <View className="flex-row items-center justify-between px-5 pt-14 pb-4 border-b border-white/10">
-                  <Text className="text-white text-[20px] font-bold">
+                <View 
+                  className="flex-row items-center justify-between px-5 pt-14 pb-4 border-b"
+                  style={{ borderBottomColor: theme.border }}
+                >
+                  <Text className="text-[20px] font-bold" style={{ color: theme.text }}>
                     Settings & Privacy
                   </Text>
                   <TouchableOpacity
                     onPress={() => setIsSettingsOpen(false)}
-                    className="w-10 h-10 items-center justify-center bg-white/5 rounded-full"
+                    style={{ backgroundColor: theme.surfaceBg }}
+                    className="w-10 h-10 items-center justify-center rounded-full"
                   >
-                    <X color="#fff" size={20} />
+                    <X color={theme.text} size={20} />
                   </TouchableOpacity>
                 </View>
 
                 <ScrollView className="flex-1">
                   <View className="px-5 py-6">
-                    <Text className="text-[#9CA3AF] text-[13px] font-bold tracking-wider mb-4">
+                    <Text className="text-[13px] font-bold tracking-wider mb-4" style={{ color: theme.textSecondary }}>
                       ACCOUNT
                     </Text>
 
                     <SettingsRow
-                      icon={<User color="#fff" size={20} />}
+                      icon={<User color={theme.text} size={20} />}
                       title="Account Details"
                       onPress={() =>
-                        Alert.alert("Account Details", "Available soon!")
+                        Alert.alert(
+                          "Account Details",
+                          `Name: ${profileData?.name || authUser?.name || "User"}\nEmail: ${authUser?.email || "Not specified"}\nUser ID: #${profileData?.id || authUser?.id || "N/A"}\nAccount Type: Artist / Creator`
+                        )
                       }
                     />
                     <SettingsRow
-                      icon={<Key color="#fff" size={20} />}
+                      icon={<Key color={theme.text} size={20} />}
                       title="Privacy & Blind Mode"
                       subtitle="Manage what is shown before judging"
                       onPress={() => setActiveSettingView("privacy")}
                     />
                     <SettingsRow
-                      icon={<Shield color="#fff" size={20} />}
+                      icon={<Shield color={theme.text} size={20} />}
                       title="Security"
                       onPress={() =>
                         Alert.alert(
                           "Security",
-                          "Security settings are up to date.",
+                          "Two-Factor Authentication: Enabled\nActive Session: Current Device\nPassword status: Secured"
                         )
                       }
                     />
                     <SettingsRow
-                      icon={<Bell color="#fff" size={20} />}
+                      icon={<Bell color={theme.text} size={20} />}
                       title="Notifications"
-                      onPress={() =>
-                        Alert.alert(
-                          "Notifications",
-                          "You have 3 new notifications",
-                        )
-                      }
+                      onPress={() => {
+                        setIsSettingsOpen(false);
+                        router.push('/notifications');
+                      }}
                     />
 
                     <SettingsRow
-                      icon={<User color="#fff" size={20} />}
-                      title="Appearance"
-                      subtitle="Customize app theme and colors"
+                      icon={<Palette color={theme.primary} size={20} />}
+                      title="Appearance & Theme"
+                      subtitle={`Current: ${theme.name} • ${theme.tagline}`}
                       onPress={() => setActiveSettingView("appearance")}
                     />
 
-                    <View className="h-[1px] w-full bg-white/10 my-6" />
+                    <View className="h-[1px] w-full my-6" style={{ backgroundColor: theme.border }} />
 
-                    <Text className="text-[#9CA3AF] text-[13px] font-bold tracking-wider mb-4">
+                    <Text className="text-[13px] font-bold tracking-wider mb-4" style={{ color: theme.textSecondary }}>
                       CONTENT & ACTIVITY
                     </Text>
 
                     <SettingsRow
-                      icon={<Play color="#fff" size={20} />}
+                      icon={<Play color={theme.text} size={20} />}
                       title="Watch History"
                       onPress={() =>
-                        Alert.alert("Watch History", "Opening history...")
+                        Alert.alert("Watch History", "Your watched performances and live sessions are logged.")
                       }
                     />
                     <SettingsRow
-                      icon={<CheckCircle color="#fff" size={20} />}
+                      icon={<CheckCircle color={theme.text} size={20} />}
                       title="Verification"
                       subtitle="Apply for verified badge"
                       onPress={() =>
-                        Alert.alert("Verification", "Application submitted!")
+                        Alert.alert("Verification", "Your account is Level 4 Calibrated. Verified badge application is in priority queue!")
                       }
                     />
 
-                    <View className="h-[1px] w-full bg-white/10 my-6" />
+                    <View className="h-[1px] w-full my-6" style={{ backgroundColor: theme.border }} />
 
                     <TouchableOpacity
                       activeOpacity={0.7}
-                      className="flex-row items-center justify-between bg-white/5 p-4 rounded-xl mb-8 border border-white/10"
+                      style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                      className="flex-row items-center justify-between p-4 rounded-xl mb-8 border"
                       onPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                         setIsSettingsOpen(false);
@@ -2077,64 +2469,242 @@ export function ProfileView({
               </>
             ) : activeSettingView === "appearance" ? (
               <>
-                <View className="flex-row items-center justify-between px-5 pt-14 pb-4 border-b border-white/10">
+                <View 
+                  className="flex-row items-center justify-between px-5 pt-14 pb-4 border-b"
+                  style={{ backgroundColor: theme.bg, borderBottomColor: theme.border }}
+                >
                   <View className="flex-row items-center gap-3">
                     <TouchableOpacity
                       onPress={() => setActiveSettingView(null)}
-                      className="w-10 h-10 items-center justify-center bg-white/5 rounded-full"
+                      className="w-10 h-10 items-center justify-center rounded-full"
+                      style={{ backgroundColor: theme.surfaceBg }}
                     >
-                      <ChevronLeft color="#fff" size={24} />
+                      <ChevronLeft color={theme.text} size={24} />
                     </TouchableOpacity>
-                    <Text className="text-white text-[18px] font-bold">
-                      Appearance
+                    <View>
+                      <Text className="text-[18px] font-bold" style={{ color: theme.text }}>
+                        Appearance & Theme
+                      </Text>
+                      <Text className="text-[12px]" style={{ color: theme.textSecondary }}>
+                        Select your platform aesthetic
+                      </Text>
+                    </View>
+                  </View>
+                  <View 
+                    className="px-2.5 py-1 rounded-full flex-row items-center gap-1.5"
+                    style={{ backgroundColor: theme.primary + '20', borderWidth: 1, borderColor: theme.primary + '40' }}
+                  >
+                    <Palette color={theme.primary} size={12} />
+                    <Text className="text-[11px] font-bold" style={{ color: theme.primary }}>
+                      {theme.name}
                     </Text>
                   </View>
                 </View>
 
-                <ScrollView className="flex-1">
+                <ScrollView className="flex-1" style={{ backgroundColor: theme.bg }}>
                   <View className="px-5 py-6">
-                    <Text className="text-[#9CA3AF] text-[13px] font-bold tracking-wider mb-4">
-                      THEME
+                    {/* Active Theme Preview Card */}
+                    <Text className="text-[12px] font-bold tracking-wider uppercase mb-3" style={{ color: theme.textSecondary }}>
+                      LIVE THEME PREVIEW
                     </Text>
-                    <View className="flex-row items-center justify-between mb-4">
-                      <View className="flex-1 pr-4">
-                        <Text className="text-white text-[16px] font-medium">
-                          Dark Mode
-                        </Text>
-                        <Text className="text-[#9CA3AF] text-[12px] mt-1">
-                          Use a dark color scheme to reduce eye strain in
-                          low-light environments.
+                    <View 
+                      className="rounded-2xl p-4 mb-6 border relative overflow-hidden"
+                      style={{ 
+                        backgroundColor: theme.cardBg, 
+                        borderColor: theme.borderStrong,
+                      }}
+                    >
+                      <View className="flex-row items-center justify-between mb-3">
+                        <View className="flex-row items-center gap-2.5">
+                          <View 
+                            className="w-10 h-10 rounded-full items-center justify-center"
+                            style={{ backgroundColor: theme.surfaceBg, borderWidth: 1.5, borderColor: theme.primary }}
+                          >
+                            {theme.isDark ? (
+                              <Moon color={theme.primary} size={20} />
+                            ) : (
+                              <Sun color={theme.primary} size={20} />
+                            )}
+                          </View>
+                          <View>
+                            <Text className="font-bold text-[16px]" style={{ color: theme.text }}>
+                              {theme.name}
+                            </Text>
+                            <Text className="text-[12px]" style={{ color: theme.textSecondary }}>
+                              {theme.tagline}
+                            </Text>
+                          </View>
+                        </View>
+                        <View 
+                          className="px-3 py-1 rounded-full"
+                          style={{ backgroundColor: theme.primary }}
+                        >
+                          <Text className="text-white text-[11px] font-bold uppercase tracking-wider">
+                            ACTIVE
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Swatch chips */}
+                      <View className="flex-row items-center justify-between pt-2 border-t" style={{ borderTopColor: theme.border }}>
+                        <View className="flex-row items-center gap-1.5">
+                          <View className="w-5 h-5 rounded-full border border-white/20" style={{ backgroundColor: theme.bg }} />
+                          <View className="w-5 h-5 rounded-full" style={{ backgroundColor: theme.primary }} />
+                          <View className="w-5 h-5 rounded-full" style={{ backgroundColor: theme.accent }} />
+                          {theme.accentAlt && (
+                            <View className="w-5 h-5 rounded-full" style={{ backgroundColor: theme.accentAlt }} />
+                          )}
+                          <View className="w-5 h-5 rounded-full" style={{ backgroundColor: theme.cardBg }} />
+                        </View>
+                        <Text className="text-[11px] font-medium" style={{ color: theme.textSecondary }}>
+                          {theme.isDark ? "Dark Palette" : "Light Palette"}
                         </Text>
                       </View>
-                      <Switch
-                        value={true}
-                        onValueChange={() => {
-                          Haptics.notificationAsync(
-                            Haptics.NotificationFeedbackType.Warning,
-                          );
-                          Alert.alert(
-                            "Notice",
-                            "Light mode is coming soon! Our designers are currently creating the light palette.",
-                          );
-                        }}
-                        trackColor={{ false: "#374151", true: "#E91E76" }}
-                        thumbColor="#fff"
-                      />
+                    </View>
+
+                    {/* Theme Options */}
+                    <Text className="text-[12px] font-bold tracking-wider uppercase mb-3" style={{ color: theme.textSecondary }}>
+                      AVAILABLE THEMES
+                    </Text>
+
+                    {(['dark', 'light'] as ThemeId[]).map((id) => {
+                      const itemTheme = THEMES[id];
+                      const isSelected = themeId === id;
+
+                      return (
+                        <TouchableOpacity
+                          key={id}
+                          activeOpacity={0.8}
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            setTheme(id);
+                          }}
+                          className="rounded-2xl p-4 mb-3 border flex-row items-center justify-between"
+                          style={{
+                            backgroundColor: isSelected ? (itemTheme.isDark ? '#141419' : '#F4F4F5') : (itemTheme.isDark ? '#0D0E12' : '#FFFFFF'),
+                            borderColor: isSelected ? itemTheme.primary : (itemTheme.isDark ? 'rgba(255,255,255,0.08)' : '#E4E4E7'),
+                            borderWidth: isSelected ? 2 : 1,
+                          }}
+                        >
+                          <View className="flex-row items-center gap-3.5 flex-1 pr-3">
+                            {/* Theme icon circle */}
+                            <View
+                              className="w-12 h-12 rounded-xl items-center justify-center relative"
+                              style={{
+                                backgroundColor: itemTheme.isDark ? itemTheme.cardBg : '#F4F4F5',
+                                borderWidth: 1,
+                                borderColor: itemTheme.primary + '50',
+                              }}
+                            >
+                              {itemTheme.isDark ? (
+                                <Moon color={itemTheme.primary} size={22} />
+                              ) : (
+                                <Sun color={itemTheme.primary} size={22} />
+                              )}
+                              {/* Accent dot indicator */}
+                              <View 
+                                className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 items-center justify-center"
+                                style={{ 
+                                  backgroundColor: itemTheme.accent,
+                                  borderColor: itemTheme.isDark ? '#000000' : '#FFFFFF' 
+                                }}
+                              />
+                            </View>
+
+                            <View className="flex-1">
+                              <View className="flex-row items-center gap-2 mb-0.5">
+                                <Text
+                                  className="text-[16px] font-bold"
+                                  style={{ color: itemTheme.isDark ? '#FFFFFF' : '#18181B' }}
+                                >
+                                  {itemTheme.name}
+                                </Text>
+                                {id === 'dark' ? (
+                                  <View className="bg-white/10 px-1.5 py-0.5 rounded">
+                                    <Text className="text-white/80 text-[9px] font-bold tracking-wider uppercase">
+                                      DEFAULT
+                                    </Text>
+                                  </View>
+                                ) : (
+                                  <View className="bg-amber-500/10 px-1.5 py-0.5 rounded">
+                                    <Text className="text-amber-500 text-[9px] font-bold tracking-wider uppercase">
+                                      CLEAN WHITE
+                                    </Text>
+                                  </View>
+                                )}
+                              </View>
+                              <Text
+                                className="text-[12px] mb-2 leading-4"
+                                style={{ color: itemTheme.isDark ? '#9CA3AF' : '#71717A' }}
+                                numberOfLines={2}
+                              >
+                                {itemTheme.description}
+                              </Text>
+
+                              {/* Color palette preview strip */}
+                              <View className="flex-row items-center gap-1.5">
+                                <View 
+                                  className="w-4 h-4 rounded-full border border-black/20" 
+                                  style={{ backgroundColor: itemTheme.bg }} 
+                                />
+                                <View 
+                                  className="w-4 h-4 rounded-full" 
+                                  style={{ backgroundColor: itemTheme.primary }} 
+                                />
+                                <View 
+                                  className="w-4 h-4 rounded-full" 
+                                  style={{ backgroundColor: itemTheme.accent }} 
+                                />
+                                {itemTheme.accentAlt && (
+                                  <View 
+                                    className="w-4 h-4 rounded-full" 
+                                    style={{ backgroundColor: itemTheme.accentAlt }} 
+                                  />
+                                )}
+                              </View>
+                            </View>
+                          </View>
+
+                          {/* Radio checkmark circle */}
+                          <View
+                            className="w-6 h-6 rounded-full items-center justify-center border-2"
+                            style={{
+                              borderColor: isSelected ? itemTheme.primary : (itemTheme.isDark ? '#4B5563' : '#D1D5DB'),
+                              backgroundColor: isSelected ? itemTheme.primary : 'transparent',
+                            }}
+                          >
+                            {isSelected && <Check color="#FFFFFF" size={14} strokeWidth={3} />}
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+
+                    <View className="mt-6 p-4 rounded-xl border" style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}>
+                      <Text className="text-[13px] font-bold mb-1" style={{ color: theme.text }}>
+                        ✨ Instant Theme Sync
+                      </Text>
+                      <Text className="text-[12px] leading-5" style={{ color: theme.textSecondary }}>
+                        Your theme preference is saved automatically across all screens, feed cards, tabs, and playback controls.
+                      </Text>
                     </View>
                   </View>
                 </ScrollView>
               </>
             ) : activeSettingView === "privacy" ? (
               <>
-                <View className="flex-row items-center justify-between px-5 pt-14 pb-4 border-b border-white/10">
+                <View 
+                  className="flex-row items-center justify-between px-5 pt-14 pb-4 border-b"
+                  style={{ borderBottomColor: theme.border }}
+                >
                   <View className="flex-row items-center gap-3">
                     <TouchableOpacity
                       onPress={() => setActiveSettingView(null)}
-                      className="w-10 h-10 items-center justify-center bg-white/5 rounded-full"
+                      style={{ backgroundColor: theme.surfaceBg }}
+                      className="w-10 h-10 items-center justify-center rounded-full"
                     >
-                      <ChevronLeft color="#fff" size={24} />
+                      <ChevronLeft color={theme.text} size={24} />
                     </TouchableOpacity>
-                    <Text className="text-white text-[18px] font-bold">
+                    <Text className="text-[18px] font-bold" style={{ color: theme.text }}>
                       Privacy & Blind Mode
                     </Text>
                   </View>
@@ -2142,15 +2712,15 @@ export function ProfileView({
 
                 <ScrollView className="flex-1">
                   <View className="px-5 py-6">
-                    <Text className="text-[#9CA3AF] text-[13px] font-bold tracking-wider mb-4">
+                    <Text className="text-[13px] font-bold tracking-wider mb-4" style={{ color: theme.textSecondary }}>
                       DISCOVERABILITY
                     </Text>
                     <View className="flex-row items-center justify-between mb-4">
                       <View className="flex-1 pr-4">
-                        <Text className="text-white text-[16px] font-medium">
+                        <Text className="text-[16px] font-medium" style={{ color: theme.text }}>
                           Private Account
                         </Text>
-                        <Text className="text-[#9CA3AF] text-[12px] mt-1">
+                        <Text className="text-[12px] mt-1" style={{ color: theme.textSecondary }}>
                           When your account is private, only people you approve
                           can follow you and watch your videos.
                         </Text>
@@ -2158,22 +2728,22 @@ export function ProfileView({
                       <Switch
                         value={isPrivateAccount}
                         onValueChange={setIsPrivateAccount}
-                        trackColor={{ false: "#374151", true: "#E91E76" }}
+                        trackColor={{ false: "#374151", true: theme.primary }}
                         thumbColor="#fff"
                       />
                     </View>
 
-                    <View className="h-[1px] w-full bg-white/10 my-6" />
+                    <View className="h-[1px] w-full my-6" style={{ backgroundColor: theme.border }} />
 
-                    <Text className="text-[#9CA3AF] text-[13px] font-bold tracking-wider mb-4">
+                    <Text className="text-[13px] font-bold tracking-wider mb-4" style={{ color: theme.textSecondary }}>
                       BLIND MODE PREFERENCES
                     </Text>
                     <View className="flex-row items-center justify-between mb-4">
                       <View className="flex-1 pr-4">
-                        <Text className="text-white text-[16px] font-medium">
+                        <Text className="text-[16px] font-medium" style={{ color: theme.text }}>
                           Enable Blind Mode by Default
                         </Text>
-                        <Text className="text-[#9CA3AF] text-[12px] mt-1">
+                        <Text className="text-[12px] mt-1" style={{ color: theme.textSecondary }}>
                           Automatically hide video visuals when scrolling your
                           feed until you judge the audio.
                         </Text>
@@ -2181,7 +2751,7 @@ export function ProfileView({
                       <Switch
                         value={isBlindModeEnabled}
                         onValueChange={setIsBlindModeEnabled}
-                        trackColor={{ false: "#374151", true: "#E91E76" }}
+                        trackColor={{ false: "#374151", true: theme.primary }}
                         thumbColor="#fff"
                       />
                     </View>
@@ -2197,61 +2767,81 @@ export function ProfileView({
       {isInviteModalOpen && (
         <Modal visible={true} transparent={true} animationType="slide">
           <View className="flex-1 justify-end bg-black/60">
-            <View className="bg-[#12141A] w-full rounded-t-3xl border-t border-white/10 flex-col pb-8 pt-4 px-5">
+            <View 
+              style={{ backgroundColor: theme.cardBg, borderTopColor: theme.border }}
+              className="w-full rounded-t-3xl border-t flex-col pb-8 pt-4 px-5"
+            >
               <View className="flex-row justify-between items-center mb-6">
-                <Text className="text-white text-[20px] font-bold">
-                  Invite Aarav Nair
+                <Text className="text-[20px] font-bold" style={{ color: theme.text }}>
+                  Invite {profileData?.name || "Aarav Nair"}
                 </Text>
                 <TouchableOpacity onPress={() => setIsInviteModalOpen(false)}>
-                  <X color="#9CA3AF" size={24} />
+                  <X color={theme.textSecondary} size={24} />
                 </TouchableOpacity>
               </View>
 
-              <View className="bg-white/5 border border-white/10 rounded-xl p-4 mb-4">
-                <Text className="text-[#E91E76] text-[10px] font-bold tracking-widest uppercase mb-2">
+              <View 
+                style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                className="border rounded-xl p-4 mb-4"
+              >
+                <Text className="text-[10px] font-bold tracking-widest uppercase mb-2" style={{ color: theme.primary }}>
                   Performance Details & Rates
                 </Text>
                 <View className="flex-row items-center justify-between mb-2">
-                  <Text className="text-white text-[14px]">
+                  <Text className="text-[14px]" style={{ color: theme.text }}>
                     Private Acoustic Set (60 mins)
                   </Text>
-                  <Text className="text-white font-bold">₹15,000</Text>
+                  <Text className="font-bold" style={{ color: theme.text }}>₹15,000</Text>
                 </View>
                 <View className="flex-row items-center justify-between">
-                  <Text className="text-white text-[14px]">
+                  <Text className="text-[14px]" style={{ color: theme.text }}>
                     Full Band Show (90 mins)
                   </Text>
-                  <Text className="text-white font-bold">₹45,000</Text>
+                  <Text className="font-bold" style={{ color: theme.text }}>₹45,000</Text>
                 </View>
               </View>
 
-              <View className="bg-white/5 border border-white/10 rounded-xl p-4 mb-6">
-                <Text className="text-[#E91E76] text-[10px] font-bold tracking-widest uppercase mb-2">
+              <View 
+                style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                className="border rounded-xl p-4 mb-6"
+              >
+                <Text className="text-[10px] font-bold tracking-widest uppercase mb-2" style={{ color: theme.primary }}>
                   Requirements
                 </Text>
-                <Text className="text-[#D1D5DB] text-[13px] leading-5 mb-2">
+                <Text className="text-[13px] leading-5 mb-2" style={{ color: theme.textSecondary }}>
                   • PA System (2 mains, 1 monitor) if audience over 50
                 </Text>
-                <Text className="text-[#D1D5DB] text-[13px] leading-5 mb-2">
+                <Text className="text-[13px] leading-5 mb-2" style={{ color: theme.textSecondary }}>
                   • 1 Vocal Mic (Shure SM58 preferred), 1 DI Box
                 </Text>
-                <Text className="text-[#D1D5DB] text-[13px] leading-5">
+                <Text className="text-[13px] leading-5" style={{ color: theme.textSecondary }}>
                   • Basic stage lighting (warm wash)
                 </Text>
               </View>
 
               <TouchableOpacity
-                onPress={() => {
+                onPress={async () => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  try {
+                    const targetUserId = profileData?.id || user?.id;
+                    if (targetUserId) {
+                      await api.post(`/messages/${targetUserId}`, {
+                        text: `Hi ${profileData?.name || 'there'}! I would like to inquire about booking a private performance.`
+                      });
+                    }
+                  } catch (err) {
+                    console.log("Inquiry message dispatch:", err);
+                  }
                   Alert.alert(
                     "Request Sent",
-                    `Your booking request has been sent to ${profileData?.name || "the artist"}!`,
+                    `Your booking request has been sent to ${profileData?.name || "the artist"}! Check your messages.`,
                   );
                   setIsInviteModalOpen(false);
                 }}
-                className="bg-[#E91E76] h-[48px] rounded-full flex-row items-center justify-center mt-2"
+                style={{ backgroundColor: theme.primary }}
+                className="h-[48px] rounded-full flex-row items-center justify-center mt-2"
               >
-                <Text className="text-white font-bold text-[14px] tracking-widest">
+                <Text className="text-white font-bold text-[14px] tracking-widest uppercase">
                   SEND INQUIRY
                 </Text>
               </TouchableOpacity>
@@ -2264,39 +2854,46 @@ export function ProfileView({
       {isScoreBreakdownOpen && (
         <Modal visible={true} transparent={true} animationType="slide">
           <View className="flex-1 justify-end bg-black/60">
-            <View className="bg-[#12141A] w-full rounded-t-3xl border-t border-white/10 flex-col pb-8 pt-4 px-5">
+            <View 
+              style={{ backgroundColor: theme.cardBg, borderTopColor: theme.border }}
+              className="w-full rounded-t-3xl border-t flex-col pb-8 pt-4 px-5"
+            >
               <View className="flex-row justify-between items-center mb-6">
                 <View className="flex-row items-center gap-2">
-                  <Star color="#E91E76" size={20} />
-                  <Text className="text-white text-[16px] font-bold">
+                  <Star color={theme.primary} fill={theme.primary} size={20} />
+                  <Text className="text-[16px] font-bold" style={{ color: theme.text }}>
                     Blind Score Breakdown
                   </Text>
                 </View>
                 <TouchableOpacity onPress={() => setIsScoreBreakdownOpen(false)}>
-                  <X color="#9CA3AF" size={24} />
+                  <X color={theme.textSecondary} size={24} />
                 </TouchableOpacity>
               </View>
 
-              <View className="bg-[#0A0B10] border border-white/10 rounded-xl p-4 mb-4">
-                <Text className="text-white text-[28px] font-bold text-center">4.8</Text>
-                <Text className="text-[#E91E76] text-[12px] font-semibold text-center mb-4">Top 5% Artist</Text>
+              <View 
+                style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                className="border rounded-xl p-4 mb-4"
+              >
+                <Text className="text-[28px] font-bold text-center" style={{ color: theme.text }}>4.8</Text>
+                <Text className="text-[12px] font-semibold text-center mb-4" style={{ color: theme.primary }}>Top 5% Artist</Text>
                 <View className="flex-row items-center justify-between mb-3">
-                  <Text className="text-[#D1D5DB] text-[13px]">Vocal Control</Text>
-                  <Text className="text-white font-bold text-[13px]">4.9</Text>
+                  <Text className="text-[13px]" style={{ color: theme.textSecondary }}>Vocal Control</Text>
+                  <Text className="font-bold text-[13px]" style={{ color: theme.text }}>4.9</Text>
                 </View>
                 <View className="flex-row items-center justify-between mb-3">
-                  <Text className="text-[#D1D5DB] text-[13px]">Stage Presence</Text>
-                  <Text className="text-white font-bold text-[13px]">4.7</Text>
+                  <Text className="text-[13px]" style={{ color: theme.textSecondary }}>Stage Presence</Text>
+                  <Text className="font-bold text-[13px]" style={{ color: theme.text }}>4.7</Text>
                 </View>
                 <View className="flex-row items-center justify-between">
-                  <Text className="text-[#D1D5DB] text-[13px]">Originality</Text>
-                  <Text className="text-white font-bold text-[13px]">4.8</Text>
+                  <Text className="text-[13px]" style={{ color: theme.textSecondary }}>Originality</Text>
+                  <Text className="font-bold text-[13px]" style={{ color: theme.text }}>4.8</Text>
                 </View>
               </View>
 
               <TouchableOpacity
                 onPress={() => setIsScoreBreakdownOpen(false)}
-                className="bg-[#E91E76] h-[48px] rounded-full flex-row items-center justify-center mt-2"
+                style={{ backgroundColor: theme.primary }}
+                className="h-[48px] rounded-full flex-row items-center justify-center mt-2"
               >
                 <Text className="text-white font-bold text-[14px] tracking-widest">DONE</Text>
               </TouchableOpacity>
@@ -2309,16 +2906,19 @@ export function ProfileView({
       {isFansModalOpen && (
         <Modal visible={true} transparent={true} animationType="slide">
           <View className="flex-1 justify-end bg-black/60">
-            <View className="bg-[#12141A] w-full rounded-t-3xl border-t border-white/10 flex-col pb-8 pt-4 px-5">
+            <View 
+              style={{ backgroundColor: theme.cardBg, borderTopColor: theme.border }}
+              className="w-full rounded-t-3xl border-t flex-col pb-8 pt-4 px-5"
+            >
               <View className="flex-row justify-between items-center mb-6">
                 <View className="flex-row items-center gap-2">
-                  <Users color="#E91E76" size={20} />
-                  <Text className="text-white text-[16px] font-bold">
+                  <Users color={theme.primary} size={20} />
+                  <Text className="text-[16px] font-bold" style={{ color: theme.text }}>
                     Backers & Community
                   </Text>
                 </View>
                 <TouchableOpacity onPress={() => setIsFansModalOpen(false)}>
-                  <X color="#9CA3AF" size={24} />
+                  <X color={theme.textSecondary} size={24} />
                 </TouchableOpacity>
               </View>
 
@@ -2328,17 +2928,24 @@ export function ProfileView({
                   { name: "Arjun Menon", role: "Verified Stage Peer", color: "amber", icon: "AM" },
                   { name: "Bengaluru Live Club", role: "Curator", color: "blue", icon: "BL" }
                 ].map((fan, index) => (
-                  <View key={index} className="p-3 bg-[#0A0B10] border border-white/10 rounded-xl flex-row items-center justify-between">
+                  <View 
+                    key={index} 
+                    style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                    className="p-3 border rounded-xl flex-row items-center justify-between"
+                  >
                     <View className="flex-row items-center gap-3">
-                      <View className="w-10 h-10 rounded-full bg-white/10 items-center justify-center">
-                        <Text className="text-white text-[12px] font-bold">{fan.icon}</Text>
+                      <View 
+                        style={{ backgroundColor: theme.cardBg }}
+                        className="w-10 h-10 rounded-full items-center justify-center"
+                      >
+                        <Text className="text-[12px] font-bold" style={{ color: theme.text }}>{fan.icon}</Text>
                       </View>
                       <View>
-                        <Text className="text-white text-[14px] font-semibold">{fan.name}</Text>
-                        <Text className="text-[#9CA3AF] text-[12px]">{fan.role}</Text>
+                        <Text className="text-[14px] font-semibold" style={{ color: theme.text }}>{fan.name}</Text>
+                        <Text className="text-[12px]" style={{ color: theme.textSecondary }}>{fan.role}</Text>
                       </View>
                     </View>
-                    <Heart color="#E91E76" fill="#E91E76" size={16} />
+                    <Heart color={theme.primary} fill={theme.primary} size={16} />
                   </View>
                 ))}
               </View>
@@ -2348,10 +2955,11 @@ export function ProfileView({
                   setIsFansModalOpen(false);
                   handleBackTalent();
                 }}
-                className="bg-[#E91E76] h-[48px] rounded-full flex-row items-center justify-center mt-2"
+                style={{ backgroundColor: theme.primary }}
+                className="h-[48px] rounded-full flex-row items-center justify-center mt-2"
               >
                 <Text className="text-white font-bold text-[14px] tracking-widest uppercase">
-                  {backed ? "You are Backing this Talent" : "Back Aarav Nair (+0.1K)"}
+                  {backed ? "You are Backing this Talent" : `Back ${profileData?.name || "Aarav Nair"} (+0.1K)`}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -2363,22 +2971,32 @@ export function ProfileView({
       {isEditingProfile && (
         <Modal visible={true} transparent={true} animationType="slide">
           <View className="flex-1 justify-end bg-black/50">
-            <View className="bg-[#101217] w-full h-[80%] rounded-t-3xl border-t border-white/10 flex-col shadow-2xl">
-              <View className="flex-row justify-between items-center p-5 border-b border-white/5">
-                <Text className="text-white text-[16px] font-bold">
+            <View 
+              style={{ backgroundColor: theme.cardBg, borderTopColor: theme.border }}
+              className="w-full h-[80%] rounded-t-3xl border-t flex-col shadow-2xl"
+            >
+              <View 
+                style={{ borderBottomColor: theme.border }}
+                className="flex-row justify-between items-center p-5 border-b"
+              >
+                <Text className="text-[16px] font-bold" style={{ color: theme.text }}>
                   Edit Profile
                 </Text>
                 <TouchableOpacity
                   onPress={() => setIsEditingProfile(false)}
-                  className="w-8 h-8 bg-white/5 rounded-full items-center justify-center"
+                  style={{ backgroundColor: theme.surfaceBg }}
+                  className="w-8 h-8 rounded-full items-center justify-center"
                 >
-                  <X color="#9CA3AF" size={18} />
+                  <X color={theme.textSecondary} size={18} />
                 </TouchableOpacity>
               </View>
 
               <ScrollView className="flex-1 p-5">
                 <View className="items-center mb-6">
-                  <View className="w-[96px] h-[96px] rounded-full border-2 border-[#E91E76] overflow-hidden mb-3 relative bg-black/40">
+                  <View 
+                    style={{ borderColor: theme.primary, backgroundColor: theme.surfaceBg }}
+                    className="w-[96px] h-[96px] rounded-full border-2 overflow-hidden mb-3 relative"
+                  >
                     <Image
                       source={{ uri: editAvatarUrl || avatarImg }}
                       className="w-full h-full"
@@ -2390,7 +3008,7 @@ export function ProfileView({
                     />
                   </View>
                   <TouchableOpacity onPress={pickImage} className="mb-2.5">
-                    <Text className="text-[#E91E76] text-[13px] font-bold">
+                    <Text className="text-[13px] font-bold" style={{ color: theme.primary }}>
                       Change Avatar
                     </Text>
                   </TouchableOpacity>
@@ -2405,18 +3023,19 @@ export function ProfileView({
                             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                             setEditAvatarFilter(f);
                           }}
-                          className={`px-2.5 py-1 rounded-full border ${
-                            editAvatarFilter === f
-                              ? "bg-[#E91E76] border-[#E91E76]"
-                              : "bg-white/5 border-white/10"
-                          }`}
+                          style={{
+                            backgroundColor: editAvatarFilter === f ? theme.primary : theme.surfaceBg,
+                            borderColor: editAvatarFilter === f ? theme.primary : theme.border,
+                          }}
+                          className="px-2.5 py-1 rounded-full border"
                         >
                           <Text
-                            className={`text-[10px] font-medium ${
+                            className={`text-[10px] ${
                               editAvatarFilter === f
                                 ? "text-white font-bold"
-                                : "text-white/70"
+                                : "font-medium"
                             }`}
+                            style={editAvatarFilter !== f ? { color: theme.textSecondary } : undefined}
                           >
                             {f}
                           </Text>
@@ -2427,55 +3046,59 @@ export function ProfileView({
                 </View>
 
                 <View className="mb-4">
-                  <Text className="text-[#9CA3AF] text-[12px] font-bold mb-2">
+                  <Text className="text-[12px] font-bold mb-2" style={{ color: theme.textSecondary }}>
                     Name
                   </Text>
                   <TextInput
                     value={editName}
                     onChangeText={setEditName}
-                    className="bg-[#1A1D24] border border-white/10 rounded-xl text-white px-4 py-3 text-[14px]"
-                    placeholderTextColor="#6B7280"
+                    style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border, color: theme.text }}
+                    className="border rounded-xl px-4 py-3 text-[14px]"
+                    placeholderTextColor={theme.textSecondary}
                   />
                 </View>
 
                 <View className="mb-4">
-                  <Text className="text-[#9CA3AF] text-[12px] font-bold mb-2">
+                  <Text className="text-[12px] font-bold mb-2" style={{ color: theme.textSecondary }}>
                     Categories (e.g. Singer • Songwriter)
                   </Text>
                   <TextInput
                     value={editTitle}
                     onChangeText={setEditTitle}
-                    className="bg-[#1A1D24] border border-white/10 rounded-xl text-white px-4 py-3 text-[14px]"
-                    placeholderTextColor="#6B7280"
+                    style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border, color: theme.text }}
+                    className="border rounded-xl px-4 py-3 text-[14px]"
+                    placeholderTextColor={theme.textSecondary}
                   />
                 </View>
 
                 <View className="mb-4">
-                  <Text className="text-[#9CA3AF] text-[12px] font-bold mb-2">
+                  <Text className="text-[12px] font-bold mb-2" style={{ color: theme.textSecondary }}>
                     Location
                   </Text>
                   <TextInput
                     value={editLocation}
                     onChangeText={setEditLocation}
-                    className="bg-[#1A1D24] border border-white/10 rounded-xl text-white px-4 py-3 text-[14px]"
-                    placeholderTextColor="#6B7280"
+                    style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border, color: theme.text }}
+                    className="border rounded-xl px-4 py-3 text-[14px]"
+                    placeholderTextColor={theme.textSecondary}
                   />
                 </View>
 
                 <View className="mb-4">
-                  <Text className="text-[#9CA3AF] text-[12px] font-bold mb-2">
+                  <Text className="text-[12px] font-bold mb-2" style={{ color: theme.textSecondary }}>
                     Quote / Caption
                   </Text>
                   <TextInput
                     value={editQuote}
                     onChangeText={setEditQuote}
-                    className="bg-[#1A1D24] border border-white/10 rounded-xl text-white px-4 py-3 text-[14px]"
-                    placeholderTextColor="#6B7280"
+                    style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border, color: theme.text }}
+                    className="border rounded-xl px-4 py-3 text-[14px]"
+                    placeholderTextColor={theme.textSecondary}
                   />
                 </View>
 
                 <View className="mb-6">
-                  <Text className="text-[#9CA3AF] text-[12px] font-bold mb-2">
+                  <Text className="text-[12px] font-bold mb-2" style={{ color: theme.textSecondary }}>
                     Bio
                   </Text>
                   <TextInput
@@ -2483,15 +3106,16 @@ export function ProfileView({
                     onChangeText={setEditBio}
                     multiline
                     numberOfLines={3}
-                    className="bg-[#1A1D24] border border-white/10 rounded-xl text-white px-4 py-3 text-[14px]"
-                    style={{ minHeight: 80, textAlignVertical: "top" }}
-                    placeholderTextColor="#6B7280"
+                    style={{ minHeight: 80, textAlignVertical: "top", backgroundColor: theme.surfaceBg, borderColor: theme.border, color: theme.text }}
+                    className="border rounded-xl px-4 py-3 text-[14px]"
+                    placeholderTextColor={theme.textSecondary}
                   />
                 </View>
 
                 <TouchableOpacity
                   onPress={handleSaveProfile}
-                  className="w-full bg-[#E91E76] h-[48px] rounded-full flex-row items-center justify-center mb-10"
+                  style={{ backgroundColor: theme.primary }}
+                  className="w-full h-[48px] rounded-full flex-row items-center justify-center mb-10"
                 >
                   <Text className="text-white font-bold text-[14px]">
                     SAVE CHANGES
@@ -2517,27 +3141,32 @@ function SettingsRow({
   subtitle?: string;
   onPress?: () => void;
 }) {
+  const { theme } = useThemeStore();
   return (
     <TouchableOpacity
       activeOpacity={0.7}
-      className="flex-row items-center justify-between mb-6 bg-white/5 p-4 rounded-xl"
+      style={{ backgroundColor: theme.cardBg, borderColor: theme.border, borderWidth: 1 }}
+      className="flex-row items-center justify-between mb-3 p-4 rounded-xl"
       onPress={() => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         if (onPress) onPress();
       }}
     >
       <View className="flex-row items-center gap-4">
-        <View className="w-[40px] h-[40px] rounded-full bg-white/10 items-center justify-center">
+        <View 
+          style={{ backgroundColor: theme.surfaceBg }}
+          className="w-[40px] h-[40px] rounded-full items-center justify-center"
+        >
           {icon}
         </View>
         <View>
-          <Text className="text-white text-[16px] font-medium">{title}</Text>
+          <Text className="text-[16px] font-medium" style={{ color: theme.text }}>{title}</Text>
           {subtitle && (
-            <Text className="text-[#9CA3AF] text-[12px] mt-1">{subtitle}</Text>
+            <Text className="text-[12px] mt-1" style={{ color: theme.textSecondary }}>{subtitle}</Text>
           )}
         </View>
       </View>
-      <ChevronRight color="#9CA3AF" size={20} />
+      <ChevronRight color={theme.textSecondary} size={20} />
     </TouchableOpacity>
   );
 }

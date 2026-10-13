@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, Image, TouchableOpacity, useWindowDimensions, FlatList, Platform } from 'react-native';
 import { Bookmark, Sparkles, Send, MoreHorizontal, CheckCircle2, ChevronUp, Volume2, VolumeX } from 'lucide-react-native';
+import { useThemeStore } from '../../store/themeStore';
 
 const BASE_FLIPS_DATA = [
   { 
@@ -78,6 +79,7 @@ function FlipSlideItem({
   height: number;
   width: number;
 }) {
+  const { theme } = useThemeStore();
   const [videoError, setVideoError] = useState(false);
   const videoRef = useRef<any>(null);
   const currentVideoSrc = videoError
@@ -186,7 +188,7 @@ function FlipSlideItem({
       <View className="absolute top-14 w-full flex-row justify-between items-center px-6 z-20">
         <View className="flex-row items-baseline opacity-80">
           <Text className="font-bold text-[22px] tracking-tight text-white leading-none font-serif">talent</Text>
-          <Text className="font-bold text-[22px] text-[#E91E76] leading-none ml-[1px] font-serif">.</Text>
+          <Text style={{ color: theme.primary }} className="font-bold text-[22px] leading-none ml-[1px] font-serif">.</Text>
         </View>
         <View className="flex-row items-center gap-2">
           <TouchableOpacity 
@@ -196,7 +198,7 @@ function FlipSlideItem({
             {isMuted ? (
               <VolumeX color="#fff" size={14} />
             ) : (
-              <Volume2 color="#E91E76" size={14} />
+              <Volume2 color={theme.primary} size={14} />
             )}
           </TouchableOpacity>
           <View className="bg-white/10 px-3 py-1.5 rounded-full border border-white/20 backdrop-blur-md">
@@ -208,8 +210,11 @@ function FlipSlideItem({
       {/* The New "Glass Pill" Interactive Sidebar */}
       <View className="absolute right-4 bottom-32 items-center z-20 gap-4 bg-white/5 py-4 px-2.5 rounded-[30px] border border-white/10 backdrop-blur-xl">
         <TouchableOpacity className="items-center gap-1 mb-2">
-          <View className="w-10 h-10 rounded-full bg-[#E91E76]/20 border border-[#E91E76]/50 items-center justify-center">
-            <Sparkles color="#E91E76" size={20} fill="#E91E76" />
+          <View 
+            style={{ backgroundColor: theme.primary + '25', borderColor: theme.primary }}
+            className="w-10 h-10 rounded-full border items-center justify-center"
+          >
+            <Sparkles color={theme.primary} size={20} fill={theme.primary} />
           </View>
           <Text className="text-white font-bold text-[10px]">{item.talentScore}</Text>
         </TouchableOpacity>
