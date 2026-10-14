@@ -37,7 +37,10 @@ export const API_URL = `${BACKEND_URL}/api`;
 export const resolveMediaUrl = (url?: string | null): string => {
   if (!url) return '';
   const base = getBackendBaseUrl();
-  return url.replace(/^http:\/\/(localhost|127\.0\.0\.1):3000/, base);
+  if (url.startsWith('/')) {
+    return `${base}${url}`;
+  }
+  return url.replace(/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, base);
 };
 
 export const api = axios.create({

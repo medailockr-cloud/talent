@@ -45,6 +45,7 @@ const io = new Server(server, {
 });
 const JWT_SECRET = 'super-secret-jwt-key-for-development-only';
 const PORT = process.env.PORT || 3000;
+const BASE_URL = (process.env.BASE_URL || '').replace(/\/$/, '') || `http://localhost:${PORT}`;
 
 const swaggerOptions = {
   swaggerDefinition: {
@@ -54,7 +55,7 @@ const swaggerOptions = {
       version: '1.0.0',
       description: 'API for short-video social platform'
     },
-    servers: [{ url: `http://localhost:${PORT}` }]
+    servers: [{ url: BASE_URL }]
   },
   apis: ['./src/index.ts']
 };
@@ -345,7 +346,7 @@ app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
     }
 
     // If cloudUpload is active, the URL is provided by Cloudinary via req.file.path
-    const url = cloudUpload ? uploadedFile.path : `http://localhost:${PORT}/uploads/${uploadedFile.filename}`;
+    const url = cloudUpload ? uploadedFile.path : `${BASE_URL}/uploads/${uploadedFile.filename}`;
 
     // Extract hashtags from title or description
     const textToParse = `${title || ''} ${description || ''}`;
@@ -668,7 +669,7 @@ app.put('/api/profile/me', requireAuth, upload.single('avatar'), async (req, res
     if (quote !== undefined) updateData.quote = quote;
     
     if (req.file) {
-      updateData.avatarUrl = `http://localhost:${PORT}/uploads/${req.file.filename}`;
+      updateData.avatarUrl = `${BASE_URL}/uploads/${req.file.filename}`;
     }
 
     const updatedUser = await prisma.user.update({

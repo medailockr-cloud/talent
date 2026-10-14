@@ -29,9 +29,12 @@ prisma/dev.db-journal
 *.db
 *.db-journal
 
-# File Uploads (for upcoming video storage)
-uploads/
-talent-backend/uploads/
+# File Uploads (ignore uploaded media but preserve sample performer videos for testing)
+talent-backend/uploads/*
+!talent-backend/uploads/performer_*.mp4
+!talent-backend/uploads/dance.mp4
+!talent-backend/uploads/flower.mp4
+!talent-backend/uploads/guitar.mp4
 
 # Environment variables
 .env
