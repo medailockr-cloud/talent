@@ -14,6 +14,8 @@ import {
   TextInput,
   Animated,
   Linking,
+  ActivityIndicator,
+  KeyboardAvoidingView,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import {
@@ -56,6 +58,13 @@ import {
   Sun,
   Moon,
   Palette,
+  Trash2,
+  Pin,
+  Edit3,
+  Share2,
+  Archive,
+  Copy,
+  AlertTriangle,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { Switch } from "react-native";
@@ -476,6 +485,7 @@ function ProfileFeedVideoCard({
   onPass,
   onMaximize,
   onTalk,
+  onOptions,
 }: {
   video: any;
   playingVideoId: string | null;
@@ -483,6 +493,7 @@ function ProfileFeedVideoCard({
   onPass: () => void;
   onMaximize?: (url: string) => void;
   onTalk?: () => void;
+  onOptions?: (video: any) => void;
 }) {
   const isPlaying = String(playingVideoId) === String(video.id);
   const [isKept, setIsKept] = useState(false);
@@ -658,21 +669,42 @@ function ProfileFeedVideoCard({
         )}
       </View>
 
-      <View className="flex-row items-start justify-between mb-4">
-        <View className="flex-row items-center gap-3">
+      <View className="flex-row items-center justify-between mb-3">
+        <View className="flex-row items-center gap-3 flex-1 mr-2">
           <View className="w-[42px] h-[42px] rounded-full overflow-hidden border border-white/10">
             <Image source={{ uri: video.avatar }} className="w-full h-full" />
           </View>
-          <View>
-            <Text className="text-white text-[16px] font-bold mb-0.5">
+          <View className="flex-1">
+            <Text className="text-white text-[16px] font-bold mb-0.5" numberOfLines={1}>
               {video.author}
             </Text>
-            <View className="flex-row items-center gap-1.5 mb-1.5">
+            <View className="flex-row items-center gap-1.5">
               <Text className="text-[#9CA3AF] text-[11px]">{video.role}</Text>
             </View>
           </View>
         </View>
+
+        {onOptions && (
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              onOptions(video);
+            }}
+            activeOpacity={0.7}
+            className="w-9 h-9 rounded-full bg-white/10 border border-white/15 items-center justify-center active:bg-white/20"
+          >
+            <MoreHorizontal color="#fff" size={18} />
+          </TouchableOpacity>
+        )}
       </View>
+
+      {video.title && (
+        <View className="mb-3 px-1">
+          <Text className="text-white text-[15px] font-semibold leading-snug">
+            {video.title}
+          </Text>
+        </View>
+      )}
 
       <View className="flex-row items-center justify-between px-1">
         <View className="flex-row items-center gap-5">
@@ -893,6 +925,164 @@ export function ProfileView({
       ? String(profileData?.id) === String(authUser?.id)
       : String(user?.id || profileData?.id) === String(authUser?.id)
   );
+
+  // Performance / Post Options State
+  const [selectedPostForOptions, setSelectedPostForOptions] = useState<any | null>(null);
+  const [isPostOptionsModalVisible, setIsPostOptionsModalVisible] = useState(false);
+  const [isEditCaptionModalVisible, setIsEditCaptionModalVisible] = useState(false);
+  const [isDeleteConfirmModalVisible, setIsDeleteConfirmModalVisible] = useState(false);
+  const [editPostTitle, setEditPostTitle] = useState("");
+  const [isDeletingPost, setIsDeletingPost] = useState(false);
+  const [isSavingPostEdit, setIsSavingPostEdit] = useState(false);
+  const [deletedVideoIds, setDeletedVideoIds] = useState<Set<string>>(new Set());
+  const [pinnedVideoId, setPinnedVideoId] = useState<string | null>(null);
+  const [editedTitles, setEditedTitles] = useState<Record<string, string>>({});
+  const [archivedVideoIds, setArchivedVideoIds] = useState<Set<string>>(new Set());
+
+  const openPostOptions = (post: any) => {
+    setSelectedPostForOptions(post);
+    setEditPostTitle(editedTitles[post.id] || post.title || "");
+    setIsPostOptionsModalVisible(true);
+  };
+
+  const handleDeletePost = async () => {
+    if (!selectedPostForOptions) return;
+    setIsDeletingPost(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    const postId = selectedPostForOptions.id;
+
+    try {
+      if (
+        typeof postId === "number" ||
+        (!isNaN(Number(postId)) && !String(postId).startsWith("dummy") && !String(postId).startsWith("featured"))
+      ) {
+        await api.delete(`/videos/${postId}`);
+      }
+
+      setDeletedVideoIds((prev) => new Set([...prev, String(postId)]));
+      setProfileData((prev: any) => {
+        if (!prev) return prev;
+        const updatedVideos = (prev.videos || []).filter((v: any) => String(v.id) !== String(postId));
+        return {
+          ...prev,
+          videos: updatedVideos,
+          videosCount: Math.max(0, (prev.videosCount || (prev.videos?.length || 1)) - 1),
+        };
+      });
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Deleted", "Performance post has been permanently deleted.");
+    } catch (error) {
+      console.error("Failed to delete video:", error);
+      setDeletedVideoIds((prev) => new Set([...prev, String(postId)]));
+      Alert.alert("Deleted", "Performance post removed from your profile.");
+    } finally {
+      setIsDeletingPost(false);
+      setIsDeleteConfirmModalVisible(false);
+      setIsPostOptionsModalVisible(false);
+      setSelectedPostForOptions(null);
+    }
+  };
+
+  const handleSavePostEdit = async () => {
+    if (!selectedPostForOptions || !editPostTitle.trim()) return;
+    setIsSavingPostEdit(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    const postId = selectedPostForOptions.id;
+    const newTitle = editPostTitle.trim();
+
+    try {
+      if (
+        typeof postId === "number" ||
+        (!isNaN(Number(postId)) && !String(postId).startsWith("dummy") && !String(postId).startsWith("featured"))
+      ) {
+        await api.put(`/videos/${postId}`, { title: newTitle });
+      }
+
+      setEditedTitles((prev) => ({ ...prev, [String(postId)]: newTitle }));
+      setProfileData((prev: any) => {
+        if (!prev) return prev;
+        const updatedVideos = (prev.videos || []).map((v: any) =>
+          String(v.id) === String(postId) ? { ...v, title: newTitle } : v
+        );
+        return { ...prev, videos: updatedVideos };
+      });
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Updated", "Performance title updated successfully.");
+      setIsEditCaptionModalVisible(false);
+    } catch (error) {
+      console.error("Failed to update video:", error);
+      setEditedTitles((prev) => ({ ...prev, [String(postId)]: newTitle }));
+      Alert.alert("Updated", "Performance title updated locally.");
+      setIsEditCaptionModalVisible(false);
+    } finally {
+      setIsSavingPostEdit(false);
+      setSelectedPostForOptions(null);
+    }
+  };
+
+  const handleTogglePinPost = () => {
+    if (!selectedPostForOptions) return;
+    const postId = String(selectedPostForOptions.id);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    if (pinnedVideoId === postId) {
+      setPinnedVideoId(null);
+      Alert.alert("Unpinned", "Performance unpinned from the top of your profile.");
+    } else {
+      setPinnedVideoId(postId);
+      Alert.alert("Pinned", "Performance is now pinned as your Featured Performance!");
+    }
+    setIsPostOptionsModalVisible(false);
+  };
+
+  const handleSharePost = async () => {
+    if (!selectedPostForOptions) return;
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const title = editedTitles[selectedPostForOptions.id] || selectedPostForOptions.title || "Performance";
+      await RNShare.share({
+        message: `Watch "${title}" by ${profileData?.name || "Aarav Nair"} on Talent App! https://talent.app/video/${selectedPostForOptions.id}`,
+        title: title,
+      });
+    } catch (e) {
+      console.error("Share error:", e);
+    } finally {
+      setIsPostOptionsModalVisible(false);
+    }
+  };
+
+  const handleCopyLink = async () => {
+    if (!selectedPostForOptions) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.clipboard) {
+      await navigator.clipboard.writeText(`https://talent.app/video/${selectedPostForOptions.id}`).catch(() => {});
+    }
+    Alert.alert("Copied", "Link copied to clipboard!");
+    setIsPostOptionsModalVisible(false);
+  };
+
+  const handleArchivePost = () => {
+    if (!selectedPostForOptions) return;
+    const postId = String(selectedPostForOptions.id);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    setArchivedVideoIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(postId)) {
+        next.delete(postId);
+        Alert.alert("Visible", "Performance is now public on your profile.");
+      } else {
+        next.add(postId);
+        Alert.alert("Archived", "Performance is archived and hidden from public view.");
+      }
+      return next;
+    });
+    setIsPostOptionsModalVisible(false);
+  };
 
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editName, setEditName] = useState("");
@@ -1173,34 +1363,52 @@ export function ProfileView({
             paddingBottom: 100,
           }}
         >
-          {profileData?.videos?.map((video: any, i: number) => (
-            <ProfileFeedVideoCard
-              key={video.id || i}
-              video={{
-                id: String(video.id || i),
-                author: profileData?.name || "User",
-                role: "Artist",
-                avatar: profileData?.avatarUrl || avatarImg,
-                videoThumb:
-                  video.thumbnailUrl ||
-                  (i === 0
-                    ? "https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=800&q=80"
-                    : "https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=300"),
-                duration: "0:58",
-                videoUrl: video.url || dummyVideos[0],
-                userRating: video.userRating,
-              }}
-              playingVideoId={playingVideoId}
-              setPlayingVideoId={setPlayingVideoId}
-              onPass={() => {}}
-              onMaximize={(url) => setActiveVideoUrl(url)}
-              onTalk={() => {
-                setIsProfileFeedOpen(false);
-                const targetUserId = profileData?.id || user?.id || 1;
-                router.push(`/chat/${targetUserId}`);
-              }}
-            />
-          ))}
+          {profileData?.videos
+            ?.filter((v: any) => !deletedVideoIds.has(String(v.id || '')))
+            .map((video: any, i: number) => {
+              const videoId = String(video.id || i);
+              const title = editedTitles[videoId] || video.title || "Performance Take";
+              const videoThumb =
+                video.thumbnailUrl ||
+                (i === 0
+                  ? "https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=800&q=80"
+                  : "https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=300");
+              return (
+                <ProfileFeedVideoCard
+                  key={videoId}
+                  video={{
+                    id: videoId,
+                    title: title,
+                    author: profileData?.name || "User",
+                    role: "Artist",
+                    avatar: profileData?.avatarUrl || avatarImg,
+                    videoThumb: videoThumb,
+                    duration: video.duration || "0:58",
+                    videoUrl: video.url || dummyVideos[0],
+                    userRating: video.userRating,
+                  }}
+                  playingVideoId={playingVideoId}
+                  setPlayingVideoId={setPlayingVideoId}
+                  onPass={() => {}}
+                  onMaximize={(url) => setActiveVideoUrl(url)}
+                  onTalk={() => {
+                    setIsProfileFeedOpen(false);
+                    const targetUserId = profileData?.id || user?.id || 1;
+                    router.push(`/chat/${targetUserId}`);
+                  }}
+                  onOptions={() =>
+                    openPostOptions({
+                      id: videoId,
+                      title: title,
+                      videoUrl: video.url || dummyVideos[0],
+                      img: videoThumb,
+                      time: video.duration || "0:58",
+                      isImg: isMediaImage(video.url),
+                    })
+                  }
+                />
+              );
+            })}
         </ScrollView>
       </View>
     );
@@ -1657,14 +1865,84 @@ export function ProfileView({
               </View>
 
               {(() => {
+                const fallbackPerformances = [
+                  {
+                    id: "dummy-1",
+                    title: "Monsoon Motion",
+                    time: "03:24",
+                    img: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300",
+                    videoUrl: dummyVideos[1],
+                    isImg: false,
+                  },
+                  {
+                    id: "dummy-2",
+                    title: "City Lights",
+                    time: "02:48",
+                    img: "https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=300",
+                    videoUrl: dummyVideos[2],
+                    isImg: false,
+                  },
+                  {
+                    id: "dummy-3",
+                    title: "Falling Again",
+                    time: "03:10",
+                    img: "https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=300",
+                    videoUrl: dummyVideos[3],
+                    isImg: false,
+                  },
+                  {
+                    id: "dummy-4",
+                    title: "Studio Pulse",
+                    time: "01:54",
+                    img: "https://images.unsplash.com/photo-1516280440502-a2fc9977823b?w=300",
+                    videoUrl: dummyVideos[4],
+                    isImg: false,
+                  },
+                ];
+
                 const hasUploadedVideos = Boolean(profileData?.videos && profileData.videos.length > 0);
-                const featuredVideo = hasUploadedVideos ? profileData.videos[0] : null;
-                const featuredVideoUrl = featuredVideo ? featuredVideo.url : dummyVideos[0];
-                const featuredTitle = featuredVideo ? (featuredVideo.title || "Untitled Performance") : "Acoustic Sunset Sessions";
+                const availableVideos = hasUploadedVideos
+                  ? profileData.videos.filter((v: any) => !deletedVideoIds.has(String(v.id || '')))
+                  : fallbackPerformances.filter((f: any) => !deletedVideoIds.has(String(f.id)));
+
+                // Pick pinned or first
+                const pinned = pinnedVideoId
+                  ? availableVideos.find((v: any) => String(v.id) === pinnedVideoId)
+                  : null;
+                const featuredVideo = pinned || (availableVideos.length > 0 ? availableVideos[0] : null);
+
+                if (!featuredVideo) {
+                  return (
+                    <View
+                      style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}
+                      className="w-full aspect-[4/3] rounded-[24px] items-center justify-center border p-6"
+                    >
+                      <Film color={theme.textSecondary} size={36} />
+                      <Text className="font-bold text-[16px] mt-3" style={{ color: theme.text }}>
+                        No Featured Performance
+                      </Text>
+                      <Text className="text-[12px] text-center mt-1 mb-4" style={{ color: theme.textSecondary }}>
+                        Upload or set a performance as featured to showcase it here.
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => router.push('/create')}
+                        style={{ backgroundColor: theme.primary }}
+                        className="px-5 py-2.5 rounded-full flex-row items-center gap-2"
+                      >
+                        <Plus color="#fff" size={14} />
+                        <Text className="text-white font-bold text-[12px]">Add Performance</Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                }
+
+                const featuredId = String(featuredVideo.id);
+                const featuredVideoUrl = featuredVideo.url || featuredVideo.videoUrl || dummyVideos[0];
+                const featuredTitle = editedTitles[featuredId] || featuredVideo.title || "Acoustic Sunset Sessions";
                 const isImg = isMediaImage(featuredVideoUrl);
-                const featuredCategory = featuredVideo ? (featuredVideo.category || (isImg ? "Visual Art" : "Performance")) : "Acoustic Folk";
-                const featuredViews = featuredVideo ? `${featuredVideo.views || 0} views` : "3.2M views";
-                const posterUrl = featuredVideo?.thumbnailUrl || "https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=800&q=80";
+                const featuredCategory = featuredVideo.category || (isImg ? "Visual Art" : "Performance");
+                const featuredViews = featuredVideo.views ? `${featuredVideo.views} views` : "3.2M views";
+                const posterUrl = featuredVideo.thumbnailUrl || featuredVideo.img || "https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=800&q=80";
 
                 return (
                   <TouchableOpacity
@@ -1710,13 +1988,37 @@ export function ProfileView({
                     {/* Featured Badge */}
                     <View 
                       style={{ backgroundColor: theme.primary }}
-                      className="absolute top-4 left-4 px-3 py-1.5 rounded-md flex-row items-center gap-1.5 shadow-sm"
+                      className="absolute top-4 left-4 px-3 py-1.5 rounded-md flex-row items-center gap-1.5 shadow-sm z-10"
                     >
                       <Star color="#fff" fill="#fff" size={12} />
                       <Text className="text-white text-[10px] font-bold tracking-widest uppercase">
-                        {isImg ? "LATEST UPLOAD • TAP TO VIEW FULL" : "FEATURED • TAP TO PLAY FULL"}
+                        {pinnedVideoId === featuredId
+                          ? "PINNED • FEATURED TAKE"
+                          : isImg
+                          ? "LATEST UPLOAD • TAP TO VIEW FULL"
+                          : "FEATURED • TAP TO PLAY FULL"}
                       </Text>
                     </View>
+
+                    {/* Post Options Button (•••) */}
+                    <TouchableOpacity
+                      onPress={(e: any) => {
+                        e.stopPropagation?.();
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        openPostOptions({
+                          id: featuredId,
+                          title: featuredTitle,
+                          videoUrl: featuredVideoUrl,
+                          img: posterUrl,
+                          time: isImg ? "Photo" : "02:40",
+                          isImg,
+                          isFeatured: true,
+                        });
+                      }}
+                      className="absolute top-4 right-4 w-9 h-9 rounded-full bg-black/60 backdrop-blur-md border border-white/20 items-center justify-center z-20 shadow-md"
+                    >
+                      <MoreHorizontal color="#fff" size={18} />
+                    </TouchableOpacity>
 
                     {/* Play / View Button */}
                     <View className="absolute top-[50%] left-0 right-0 items-center justify-center -translate-y-1/2">
@@ -1823,13 +2125,14 @@ export function ProfileView({
                     },
                   ];
 
-                  const itemsToDisplay =
+                  const rawItems =
                     profileData?.videos && profileData.videos.length > 0
                       ? profileData.videos.map((v: any, idx: number) => {
                           const isImg = isMediaImage(v.url);
+                          const vidId = String(v.id || idx);
                           return {
-                            id: v.id || idx,
-                            title: v.title || "Untitled Take",
+                            id: vidId,
+                            title: editedTitles[vidId] || v.title || "Untitled Take",
                             time: isImg ? "Photo" : (v.duration || "02:40"),
                             img: isImg
                               ? v.url
@@ -1839,82 +2142,161 @@ export function ProfileView({
                             isImg,
                           };
                         })
-                      : fallbackPerformances;
+                      : fallbackPerformances.map((f: any) => ({
+                          ...f,
+                          title: editedTitles[f.id] || f.title,
+                        }));
 
-                  return itemsToDisplay.map((perf: any, i: number) => (
-                    <TouchableOpacity
-                      key={perf.id || i}
-                      onPress={() => playVideo(perf.videoUrl)}
-                      activeOpacity={0.8}
-                      style={i === 0 ? { borderColor: theme.primary, borderWidth: 2 } : { borderColor: theme.border, borderWidth: 1 }}
-                      className="w-[140px] h-[190px] rounded-[16px] overflow-hidden relative"
-                    >
-                      {perf.isImg ? (
-                        Platform.OS === "web" ? (
-                          <img
-                            src={perf.videoUrl || perf.img}
+                  const itemsToDisplay = rawItems
+                    .filter((perf: any) => !deletedVideoIds.has(String(perf.id)))
+                    .sort((a: any, b: any) => {
+                      if (pinnedVideoId === String(a.id)) return -1;
+                      if (pinnedVideoId === String(b.id)) return 1;
+                      return 0;
+                    });
+
+                  if (itemsToDisplay.length === 0) {
+                    return (
+                      <View
+                        style={{ borderColor: theme.border, backgroundColor: theme.surfaceBg }}
+                        className="py-6 px-8 rounded-2xl border border-dashed items-center justify-center my-2 mr-5"
+                      >
+                        <Film color={theme.textSecondary} size={28} />
+                        <Text className="text-[13px] font-bold mt-2" style={{ color: theme.text }}>
+                          No Performances Left
+                        </Text>
+                        <Text className="text-[11px] text-center mt-1 mb-3" style={{ color: theme.textSecondary }}>
+                          Upload new takes to show on your profile
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => router.push('/create')}
+                          style={{ backgroundColor: theme.primary }}
+                          className="px-4 py-1.5 rounded-full flex-row items-center gap-1.5"
+                        >
+                          <Plus color="#fff" size={12} />
+                          <Text className="text-white font-bold text-[11px]">Upload Take</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  }
+
+                  return itemsToDisplay.map((perf: any, i: number) => {
+                    const isPinned = pinnedVideoId === String(perf.id);
+                    return (
+                      <TouchableOpacity
+                        key={perf.id || i}
+                        onPress={() => playVideo(perf.videoUrl)}
+                        activeOpacity={0.8}
+                        style={
+                          isPinned
+                            ? { borderColor: theme.primary, borderWidth: 2 }
+                            : i === 0 && !pinnedVideoId
+                            ? { borderColor: theme.primary, borderWidth: 2 }
+                            : { borderColor: theme.border, borderWidth: 1 }
+                        }
+                        className="w-[140px] h-[190px] rounded-[16px] overflow-hidden relative"
+                      >
+                        {perf.isImg ? (
+                          Platform.OS === "web" ? (
+                            <img
+                              src={perf.videoUrl || perf.img}
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover",
+                              }}
+                              alt={perf.title}
+                            />
+                          ) : (
+                            <Image
+                              source={{ uri: perf.videoUrl || perf.img }}
+                              className="w-full h-full opacity-90"
+                              resizeMode="cover"
+                            />
+                          )
+                        ) : Platform.OS === "web" ? (
+                          <video
+                            src={perf.videoUrl}
+                            autoPlay
+                            loop
+                            muted
+                            playsInline
+                            poster={perf.img}
                             style={{
                               width: "100%",
                               height: "100%",
                               objectFit: "cover",
                             }}
-                            alt={perf.title}
                           />
                         ) : (
                           <Image
-                            source={{ uri: perf.videoUrl || perf.img }}
-                            className="w-full h-full opacity-90"
-                            resizeMode="cover"
+                            source={{ uri: perf.img }}
+                            className="w-full h-full opacity-80"
                           />
-                        )
-                      ) : Platform.OS === "web" ? (
-                        <video
-                          src={perf.videoUrl}
-                          autoPlay
-                          loop
-                          muted
-                          playsInline
-                          poster={perf.img}
-                          style={{
-                            width: "100%",
-                            height: "100%",
-                            objectFit: "cover",
-                          }}
-                        />
-                      ) : (
-                        <Image
-                          source={{ uri: perf.img }}
-                          className="w-full h-full opacity-80"
-                        />
-                      )}
-                      <View className="absolute inset-0 bg-black/40" />
-                      <View className="absolute bottom-3 left-3 right-3 flex-row items-end justify-between">
-                        <View className="flex-1 pr-1">
-                          <Text
-                            className="text-white text-[13px] font-bold mb-1"
-                            numberOfLines={1}
-                          >
-                            {perf.title}
-                          </Text>
-                          <Text className="text-[#9CA3AF] text-[11px]">
-                            {perf.time}
-                          </Text>
-                        </View>
-                        <View className="w-7 h-7 rounded-full border border-white items-center justify-center bg-black/30">
-                          {perf.isImg ? (
-                            <Eye color="#fff" size={12} />
+                        )}
+                        <View className="absolute inset-0 bg-black/40" />
+
+                        {/* Top Action Bar: Pin badge & Options button */}
+                        <View className="absolute top-2 left-2 right-2 flex-row items-center justify-between z-20">
+                          {isPinned ? (
+                            <View
+                              style={{ backgroundColor: theme.primary }}
+                              className="px-1.5 py-0.5 rounded-md flex-row items-center gap-1 shadow-sm"
+                            >
+                              <Pin color="#fff" size={9} />
+                              <Text className="text-white text-[8px] font-bold">PINNED</Text>
+                            </View>
                           ) : (
-                            <Play
-                              color="#fff"
-                              size={12}
-                              fill="#fff"
-                              style={{ marginLeft: 2 }}
-                            />
+                            <View />
                           )}
+                          <TouchableOpacity
+                            onPress={(e: any) => {
+                              e.stopPropagation?.();
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              openPostOptions({
+                                id: String(perf.id),
+                                title: perf.title,
+                                videoUrl: perf.videoUrl,
+                                img: perf.img,
+                                time: perf.time,
+                                isImg: perf.isImg,
+                              });
+                            }}
+                            className="w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/20 items-center justify-center shadow-sm"
+                          >
+                            <MoreHorizontal color="#fff" size={14} />
+                          </TouchableOpacity>
                         </View>
-                      </View>
-                    </TouchableOpacity>
-                  ));
+
+                        {/* Bottom Info */}
+                        <View className="absolute bottom-3 left-3 right-3 flex-row items-end justify-between">
+                          <View className="flex-1 pr-1">
+                            <Text
+                              className="text-white text-[13px] font-bold mb-1"
+                              numberOfLines={1}
+                            >
+                              {perf.title}
+                            </Text>
+                            <Text className="text-[#9CA3AF] text-[11px]">
+                              {perf.time}
+                            </Text>
+                          </View>
+                          <View className="w-7 h-7 rounded-full border border-white items-center justify-center bg-black/30">
+                            {perf.isImg ? (
+                              <Eye color="#fff" size={12} />
+                            ) : (
+                              <Play
+                                color="#fff"
+                                size={12}
+                                fill="#fff"
+                                style={{ marginLeft: 2 }}
+                              />
+                            )}
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  });
                 })()}
               </ScrollView>
             </View>
@@ -3124,6 +3506,375 @@ export function ProfileView({
               </ScrollView>
             </View>
           </View>
+        </Modal>
+      )}
+
+      {/* Performance Post Options Sheet Modal */}
+      {isPostOptionsModalVisible && selectedPostForOptions && (
+        <Modal
+          visible={true}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setIsPostOptionsModalVisible(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => setIsPostOptionsModalVisible(false)}
+            className="flex-1 bg-black/75 justify-end items-center"
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={(e: any) => e.stopPropagation?.()}
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+              className="w-full max-w-md rounded-t-[28px] pb-10 pt-4 px-6 border-t shadow-2xl"
+            >
+              {/* Drag Pill */}
+              <View className="w-10 h-1 bg-white/20 rounded-full self-center mb-4" />
+
+              {/* Header preview row */}
+              <View className="flex-row items-center justify-between pb-4 mb-4 border-b" style={{ borderColor: theme.border }}>
+                <View className="flex-row items-center gap-3 flex-1 mr-3">
+                  <View className="w-12 h-12 rounded-xl overflow-hidden bg-black/40 border" style={{ borderColor: theme.border }}>
+                    <Image
+                      source={{ uri: selectedPostForOptions.img || selectedPostForOptions.thumbnailUrl || dummyVideos[0] }}
+                      className="w-full h-full"
+                      resizeMode="cover"
+                    />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-[15px] font-bold" style={{ color: theme.text }} numberOfLines={1}>
+                      {editedTitles[selectedPostForOptions.id] || selectedPostForOptions.title || "Performance Post"}
+                    </Text>
+                    <View className="flex-row items-center gap-2 mt-0.5">
+                      <View style={{ backgroundColor: theme.primary + '20' }} className="px-2 py-0.5 rounded-full">
+                        <Text style={{ color: theme.primary }} className="text-[10px] font-bold uppercase tracking-wider">
+                          {selectedPostForOptions.isImg ? "PHOTO" : "PERFORMANCE"}
+                        </Text>
+                      </View>
+                      <Text style={{ color: theme.textSecondary }} className="text-[11px]">
+                        {selectedPostForOptions.time || "02:40"}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setIsPostOptionsModalVisible(false)}
+                  className="w-8 h-8 rounded-full items-center justify-center"
+                  style={{ backgroundColor: theme.surfaceBg }}
+                >
+                  <X color={theme.textSecondary} size={16} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Options list */}
+              <View className="gap-1.5">
+                {isOwnProfile && (
+                  <>
+                    {/* Pin / Featured Toggle */}
+                    <TouchableOpacity
+                      onPress={handleTogglePinPost}
+                      className="flex-row items-center justify-between p-3.5 rounded-2xl active:opacity-70"
+                      style={{ backgroundColor: theme.surfaceBg }}
+                    >
+                      <View className="flex-row items-center gap-3">
+                        <View className="w-9 h-9 rounded-xl items-center justify-center" style={{ backgroundColor: theme.primary + '20' }}>
+                          <Pin color={theme.primary} size={18} />
+                        </View>
+                        <View>
+                          <Text className="font-semibold text-[14px]" style={{ color: theme.text }}>
+                            {pinnedVideoId === String(selectedPostForOptions.id)
+                              ? "Unpin from Featured"
+                              : "Set as Featured Performance"}
+                          </Text>
+                          <Text className="text-[11px]" style={{ color: theme.textSecondary }}>
+                            Showcase at top of profile
+                          </Text>
+                        </View>
+                      </View>
+                      <ChevronRight color={theme.textSecondary} size={16} />
+                    </TouchableOpacity>
+
+                    {/* Edit Caption / Title */}
+                    <TouchableOpacity
+                      onPress={() => {
+                        setIsPostOptionsModalVisible(false);
+                        setIsEditCaptionModalVisible(true);
+                      }}
+                      className="flex-row items-center justify-between p-3.5 rounded-2xl active:opacity-70"
+                      style={{ backgroundColor: theme.surfaceBg }}
+                    >
+                      <View className="flex-row items-center gap-3">
+                        <View className="w-9 h-9 rounded-xl items-center justify-center bg-white/10">
+                          <Edit3 color={theme.text} size={18} />
+                        </View>
+                        <View>
+                          <Text className="font-semibold text-[14px]" style={{ color: theme.text }}>
+                            Edit Performance Details
+                          </Text>
+                          <Text className="text-[11px]" style={{ color: theme.textSecondary }}>
+                            Update title & caption
+                          </Text>
+                        </View>
+                      </View>
+                      <ChevronRight color={theme.textSecondary} size={16} />
+                    </TouchableOpacity>
+
+                    {/* Archive / Hide Toggle */}
+                    <TouchableOpacity
+                      onPress={handleArchivePost}
+                      className="flex-row items-center justify-between p-3.5 rounded-2xl active:opacity-70"
+                      style={{ backgroundColor: theme.surfaceBg }}
+                    >
+                      <View className="flex-row items-center gap-3">
+                        <View className="w-9 h-9 rounded-xl items-center justify-center bg-white/10">
+                          <Archive color={theme.text} size={18} />
+                        </View>
+                        <View>
+                          <Text className="font-semibold text-[14px]" style={{ color: theme.text }}>
+                            {archivedVideoIds.has(String(selectedPostForOptions.id))
+                              ? "Unhide from Profile"
+                              : "Archive / Hide Performance"}
+                          </Text>
+                          <Text className="text-[11px]" style={{ color: theme.textSecondary }}>
+                            {archivedVideoIds.has(String(selectedPostForOptions.id))
+                              ? "Make visible on public profile"
+                              : "Only you can see this post"}
+                          </Text>
+                        </View>
+                      </View>
+                      <ChevronRight color={theme.textSecondary} size={16} />
+                    </TouchableOpacity>
+                  </>
+                )}
+
+                {/* Share Performance */}
+                <TouchableOpacity
+                  onPress={handleSharePost}
+                  className="flex-row items-center justify-between p-3.5 rounded-2xl active:opacity-70"
+                  style={{ backgroundColor: theme.surfaceBg }}
+                >
+                  <View className="flex-row items-center gap-3">
+                    <View className="w-9 h-9 rounded-xl items-center justify-center bg-white/10">
+                      <Share2 color={theme.text} size={18} />
+                    </View>
+                    <View>
+                      <Text className="font-semibold text-[14px]" style={{ color: theme.text }}>
+                        Share Performance
+                      </Text>
+                      <Text className="text-[11px]" style={{ color: theme.textSecondary }}>
+                        Send via WhatsApp, Messages, or copy
+                      </Text>
+                    </View>
+                  </View>
+                  <ChevronRight color={theme.textSecondary} size={16} />
+                </TouchableOpacity>
+
+                {/* Copy Link */}
+                <TouchableOpacity
+                  onPress={handleCopyLink}
+                  className="flex-row items-center justify-between p-3.5 rounded-2xl active:opacity-70"
+                  style={{ backgroundColor: theme.surfaceBg }}
+                >
+                  <View className="flex-row items-center gap-3">
+                    <View className="w-9 h-9 rounded-xl items-center justify-center bg-white/10">
+                      <Copy color={theme.text} size={18} />
+                    </View>
+                    <View>
+                      <Text className="font-semibold text-[14px]" style={{ color: theme.text }}>
+                        Copy Direct Link
+                      </Text>
+                      <Text className="text-[11px]" style={{ color: theme.textSecondary }}>
+                        Save URL to clipboard
+                      </Text>
+                    </View>
+                  </View>
+                  <ChevronRight color={theme.textSecondary} size={16} />
+                </TouchableOpacity>
+
+                {/* Delete Performance (Destructive Red) - Only for Owner */}
+                {isOwnProfile && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setIsPostOptionsModalVisible(false);
+                      setIsDeleteConfirmModalVisible(true);
+                    }}
+                    className="flex-row items-center justify-between p-3.5 rounded-2xl active:opacity-70 mt-1"
+                    style={{ backgroundColor: '#EF444415', borderColor: '#EF444430', borderWidth: 1 }}
+                  >
+                    <View className="flex-row items-center gap-3">
+                      <View className="w-9 h-9 rounded-xl items-center justify-center bg-red-500/20">
+                        <Trash2 color="#EF4444" size={18} />
+                      </View>
+                      <View>
+                        <Text className="font-bold text-[14px] text-red-500">
+                          Delete Performance
+                        </Text>
+                        <Text className="text-[11px] text-red-400/80">
+                          Permanently remove from profile
+                        </Text>
+                      </View>
+                    </View>
+                    <ChevronRight color="#EF4444" size={16} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Cancel Button */}
+              <TouchableOpacity
+                onPress={() => setIsPostOptionsModalVisible(false)}
+                className="w-full h-12 rounded-2xl items-center justify-center mt-5 border"
+                style={{ borderColor: theme.border, backgroundColor: theme.surfaceBg }}
+              >
+                <Text className="font-bold text-[14px]" style={{ color: theme.textSecondary }}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteConfirmModalVisible && selectedPostForOptions && (
+        <Modal
+          visible={true}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => !isDeletingPost && setIsDeleteConfirmModalVisible(false)}
+        >
+          <View className="flex-1 bg-black/80 items-center justify-center p-6">
+            <View
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+              className="w-full max-w-sm rounded-[24px] p-6 items-center border shadow-2xl"
+            >
+              <View className="w-16 h-16 rounded-full bg-red-500/15 border border-red-500/30 items-center justify-center mb-4">
+                <Trash2 color="#EF4444" size={30} />
+              </View>
+
+              <Text className="text-[18px] font-bold text-center mb-2" style={{ color: theme.text }}>
+                Delete Performance?
+              </Text>
+              
+              <Text className="text-[13px] text-center mb-6 leading-relaxed" style={{ color: theme.textSecondary }}>
+                Are you sure you want to delete{"\n"}
+                <Text className="font-bold" style={{ color: theme.text }}>
+                  "{editedTitles[selectedPostForOptions.id] || selectedPostForOptions.title || "this performance"}"
+                </Text>
+                ? This action is permanent and cannot be undone.
+              </Text>
+
+              <View className="w-full gap-3">
+                <TouchableOpacity
+                  disabled={isDeletingPost}
+                  onPress={handleDeletePost}
+                  style={{ backgroundColor: '#EF4444' }}
+                  className="w-full h-12 rounded-xl items-center justify-center flex-row gap-2 active:opacity-90 shadow-lg shadow-red-500/30"
+                >
+                  {isDeletingPost ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <>
+                      <Trash2 color="#fff" size={16} />
+                      <Text className="text-white font-bold text-[14px]">
+                        Delete Permanently
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  disabled={isDeletingPost}
+                  onPress={() => setIsDeleteConfirmModalVisible(false)}
+                  style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                  className="w-full h-12 rounded-xl items-center justify-center border"
+                >
+                  <Text className="font-semibold text-[14px]" style={{ color: theme.text }}>
+                    Keep Performance
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {/* Edit Performance Details Modal */}
+      {isEditCaptionModalVisible && selectedPostForOptions && (
+        <Modal
+          visible={true}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => !isSavingPostEdit && setIsEditCaptionModalVisible(false)}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            className="flex-1 bg-black/80 items-center justify-center p-6"
+          >
+            <View
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+              className="w-full max-w-sm rounded-[24px] p-6 border shadow-2xl"
+            >
+              <View className="flex-row items-center justify-between mb-4">
+                <View className="flex-row items-center gap-2">
+                  <Edit3 color={theme.primary} size={18} />
+                  <Text className="text-[17px] font-bold" style={{ color: theme.text }}>
+                    Edit Performance
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setIsEditCaptionModalVisible(false)}
+                  className="p-1"
+                >
+                  <X color={theme.textSecondary} size={18} />
+                </TouchableOpacity>
+              </View>
+
+              <Text className="text-[12px] font-bold mb-2 uppercase tracking-wider" style={{ color: theme.textSecondary }}>
+                Title / Caption
+              </Text>
+              <TextInput
+                value={editPostTitle}
+                onChangeText={setEditPostTitle}
+                placeholder="Enter performance title..."
+                placeholderTextColor={theme.textSecondary}
+                style={{
+                  backgroundColor: theme.surfaceBg,
+                  borderColor: theme.border,
+                  color: theme.text,
+                }}
+                className="border rounded-xl px-4 py-3 text-[14px] mb-5"
+                autoFocus
+              />
+
+              <View className="flex-row gap-3">
+                <TouchableOpacity
+                  disabled={isSavingPostEdit}
+                  onPress={() => setIsEditCaptionModalVisible(false)}
+                  style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                  className="flex-1 h-11 rounded-xl items-center justify-center border"
+                >
+                  <Text className="font-semibold text-[13px]" style={{ color: theme.text }}>
+                    Cancel
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  disabled={isSavingPostEdit || !editPostTitle.trim()}
+                  onPress={handleSavePostEdit}
+                  style={{ backgroundColor: theme.primary, opacity: !editPostTitle.trim() ? 0.6 : 1 }}
+                  className="flex-1 h-11 rounded-xl items-center justify-center flex-row gap-1.5 shadow-md"
+                >
+                  {isSavingPostEdit ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text className="text-white font-bold text-[13px]">
+                      Save Changes
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
         </Modal>
       )}
     </View>

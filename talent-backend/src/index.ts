@@ -899,6 +899,75 @@ app.put('/api/admin/users/:id/ban', requireAuth, requireAdmin, async (req, res) 
   }
 });
 
+// User API - Delete Own Video / Performance Post
+app.delete('/api/videos/:id', requireAuth, async (req, res) => {
+  try {
+    const videoId = parseInt(req.params.id as string);
+    if (isNaN(videoId)) {
+      return res.status(400).json({ error: 'Invalid video ID' });
+    }
+    const video = await prisma.video.findUnique({ where: { id: videoId } });
+    if (!video) {
+      return res.status(404).json({ error: 'Video not found' });
+    }
+    const currentUserId = req.userId;
+    const currentUser = await prisma.user.findUnique({ where: { id: currentUserId } });
+    if (video.authorId !== currentUserId && currentUser?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Unauthorized to delete this video' });
+    }
+
+    // Delete related records safely
+    await prisma.$transaction([
+      prisma.like.deleteMany({ where: { videoId } }),
+      prisma.comment.deleteMany({ where: { videoId } }),
+      prisma.rating.deleteMany({ where: { videoId } }),
+      prisma.notification.deleteMany({ where: { videoId } }),
+      prisma.report.deleteMany({ where: { videoId } }),
+      prisma.savedVideo.deleteMany({ where: { videoId } }),
+      prisma.watchHistory.deleteMany({ where: { videoId } }),
+      prisma.video.delete({ where: { id: videoId } }),
+    ]);
+
+    res.json({ message: 'Performance deleted successfully', deletedId: videoId });
+  } catch (error) {
+    console.error('Error deleting video:', error);
+    res.status(500).json({ error: 'Failed to delete video' });
+  }
+});
+
+// User API - Update Own Video / Performance Post
+app.put('/api/videos/:id', requireAuth, async (req, res) => {
+  try {
+    const videoId = parseInt(req.params.id as string);
+    if (isNaN(videoId)) {
+      return res.status(400).json({ error: 'Invalid video ID' });
+    }
+    const video = await prisma.video.findUnique({ where: { id: videoId } });
+    if (!video) {
+      return res.status(404).json({ error: 'Video not found' });
+    }
+    const currentUserId = req.userId;
+    const currentUser = await prisma.user.findUnique({ where: { id: currentUserId } });
+    if (video.authorId !== currentUserId && currentUser?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Unauthorized to update this video' });
+    }
+    const { title, description, privacy, allowJudging } = req.body;
+    const updated = await prisma.video.update({
+      where: { id: videoId },
+      data: {
+        ...(title !== undefined && { title }),
+        ...(description !== undefined && { description }),
+        ...(privacy !== undefined && { privacy }),
+        ...(allowJudging !== undefined && { allowJudging: Boolean(allowJudging) }),
+      },
+    });
+    res.json({ message: 'Performance updated successfully', video: updated });
+  } catch (error) {
+    console.error('Error updating video:', error);
+    res.status(500).json({ error: 'Failed to update video' });
+  }
+});
+
 // Admin API - Delete Video
 app.delete('/api/admin/videos/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
