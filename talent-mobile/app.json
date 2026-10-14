@@ -44,8 +44,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "02003547-e661-4320-80ee-22a7d6b13632"
+        "projectId": "408a05d6-c664-4d22-afc4-0c70361568bf"
       }
-    }
+    },
+    "owner": "gamerzone141"
   }
 }

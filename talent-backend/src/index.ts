@@ -43,7 +43,7 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*' }
 });
-const JWT_SECRET = 'super-secret-jwt-key-for-development-only';
+const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-jwt-key-for-development-only';
 const PORT = process.env.PORT || 3000;
 const BASE_URL = (process.env.BASE_URL || '').replace(/\/$/, '') || `http://localhost:${PORT}`;
 
