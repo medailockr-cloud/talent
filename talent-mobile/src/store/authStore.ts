@@ -67,17 +67,20 @@ export const useAuthStore = create<AuthState>((set) => ({
         set({ token: null, user: null, isLoading: false });
       }
     } catch (error: any) {
-      if (error?.response?.status === 401 || error?.response?.status === 404) {
+      const isAuthError = error?.response?.status === 401 || error?.response?.status === 404;
+      if (isAuthError) {
         console.log('Session expired or user not found. Stale token cleared.');
+        if (Platform.OS === 'web') {
+          localStorage.removeItem('token');
+        } else {
+          await SecureStore.deleteItemAsync('token');
+        }
+        set({ token: null, user: null, isLoading: false });
       } else {
-        console.error('Auth verification failed', error);
+        // Network timeout / Render cold start: keep token so user is not logged out
+        console.warn('Network or timeout error while verifying auth:', error.message);
+        set({ isLoading: false });
       }
-      if (Platform.OS === 'web') {
-        localStorage.removeItem('token');
-      } else {
-        await SecureStore.deleteItemAsync('token');
-      }
-      set({ token: null, user: null, isLoading: false });
     }
   },
 }));

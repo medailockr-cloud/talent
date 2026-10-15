@@ -116,11 +116,11 @@ export const TALENT_FILTERS: TalentFilter[] = [
     badge: "POPULAR",
     cssFilter: (int) =>
       `contrast(${1 + 0.3 * int}) saturate(${1 + 0.45 * int}) brightness(${1 + 0.05 * int}) hue-rotate(${-8 * int}deg)`,
-    overlayColor: "rgba(233, 30, 118, 0.16)",
+    overlayColor: "rgba(229, 9, 20, 0.16)",
     overlayOpacity: 0.8,
     secondaryOverlay: "rgba(251, 146, 60, 0.1)",
-    previewBg: "#E91E76",
-    accentColor: "#E91E76",
+    previewBg: "#E50914",
+    accentColor: "#E50914",
     description: "Concert stage glow & punchy mids",
   },
   {
@@ -217,10 +217,10 @@ export const TALENT_FILTERS: TalentFilter[] = [
     badge: "AI",
     cssFilter: (int) =>
       `contrast(${1 + 0.22 * int}) brightness(${1 + 0.1 * int}) saturate(${1 + 0.22 * int})`,
-    overlayColor: "rgba(233, 30, 118, 0.08)",
+    overlayColor: "rgba(229, 9, 20, 0.08)",
     overlayOpacity: 0.7,
-    previewBg: "#E91E76",
-    accentColor: "#F472B6",
+    previewBg: "#E50914",
+    accentColor: "#F87171",
     description: "Smart luminance & dynamic range balance",
   },
   {
@@ -310,7 +310,7 @@ export const SOUND_TRACKS: SoundTrack[] = [
     artist: "Talent Beat Lab",
     genre: "Lo-Fi / Soul",
     duration: "02:18",
-    accent: "#E91E76",
+    accent: "#E50914",
   },
   {
     id: "track-2",
@@ -1037,7 +1037,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           <Text className="text-white">Camera permission is required.</Text>
           <TouchableOpacity
             onPress={requestCamPermission}
-            className="mt-4 bg-[#E91E76] px-4 py-2 rounded"
+            className="mt-4 bg-[#E50914] px-4 py-2 rounded"
           >
             <Text className="text-white">Grant Permission</Text>
           </TouchableOpacity>
@@ -1109,7 +1109,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                 className="py-1"
               >
                 <Text
-                  className={`font-bold text-[14px] tracking-wider uppercase ${cameraMode === "video" ? "text-[#E91E76] border-b-2 border-[#E91E76] pb-0.5" : "text-white/60"}`}
+                  className={`font-bold text-[14px] tracking-wider uppercase ${cameraMode === "video" ? "text-[#E50914] border-b-2 border-[#E50914] pb-0.5" : "text-white/60"}`}
                 >
                   Video
                 </Text>
@@ -1122,7 +1122,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                 className="py-1"
               >
                 <Text
-                  className={`font-bold text-[14px] tracking-wider uppercase ${cameraMode === "photo" ? "text-[#E91E76] border-b-2 border-[#E91E76] pb-0.5" : "text-white/60"}`}
+                  className={`font-bold text-[14px] tracking-wider uppercase ${cameraMode === "photo" ? "text-[#E50914] border-b-2 border-[#E50914] pb-0.5" : "text-white/60"}`}
                 >
                   Photo
                 </Text>
@@ -1139,7 +1139,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     cameraMode === "photo"
                       ? "border-white/80 w-[80px] h-[80px]"
                       : isRecording
-                        ? "border-[#E91E76] w-[88px] h-[88px]"
+                        ? "border-[#E50914] w-[88px] h-[88px]"
                         : "border-white/50 w-[80px] h-[80px]"
                   }`}
                 >
@@ -1148,8 +1148,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                       cameraMode === "photo"
                         ? "bg-white w-[64px] h-[64px]"
                         : isRecording
-                          ? "bg-[#E91E76] w-[36px] h-[36px] rounded-md"
-                          : "bg-[#E91E76] w-[64px] h-[64px]"
+                          ? "bg-[#E50914] w-[36px] h-[36px] rounded-md"
+                          : "bg-[#E50914] w-[64px] h-[64px]"
                     }`}
                   />
                 </View>
@@ -1289,7 +1289,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         rightEl={
           <TouchableOpacity
             onPress={() => setStep("CHOOSE_TALENT")}
-            className="bg-[#E91E76] px-4 py-1.5 rounded-full flex-row items-center gap-1"
+            className="bg-[#E50914] px-4 py-1.5 rounded-full flex-row items-center gap-1"
           >
             <Text className="text-white font-bold text-sm">Next</Text>
             <ChevronRight color="#fff" size={16} />
@@ -1387,7 +1387,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
           {/* Floating Filter Badge Top Left */}
           <View className="absolute top-4 left-4 bg-black/60 px-3 py-1.5 rounded-full flex-row items-center gap-1.5 border border-white/15 backdrop-blur-md z-20">
-            <Aperture color="#E91E76" size={13} />
+            <Aperture color="#E50914" size={13} />
             <Text className="text-white text-[11px] font-semibold tracking-wide">
               {isComparing
                 ? "Original Raw"
@@ -1407,7 +1407,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             }}
             className={`absolute top-4 right-4 px-3 py-1.5 rounded-full flex-row items-center gap-1.5 border z-20 backdrop-blur-md transition-all ${
               isComparing
-                ? "bg-[#E91E76] border-[#E91E76]"
+                ? "bg-[#E50914] border-[#E50914]"
                 : "bg-black/60 border-white/20"
             }`}
           >
@@ -1428,7 +1428,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
               </>
             ) : (
               <>
-                <Play color="#E91E76" size={10} fill="#E91E76" />
+                <Play color="#E50914" size={10} fill="#E50914" />
                 <Text className="text-white/80 text-[10px] font-medium">
                   Video
                 </Text>
@@ -1453,9 +1453,9 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                   captionStyle === "neon"
                     ? {
                         backgroundColor: "rgba(10, 10, 18, 0.88)",
-                        borderColor: isDraggingCaption ? "#fff" : "#E91E76",
+                        borderColor: isDraggingCaption ? "#fff" : "#E50914",
                         borderWidth: 2,
-                        shadowColor: "#E91E76",
+                        shadowColor: "#E50914",
                         shadowOpacity: 0.9,
                         shadowRadius: 10,
                       }
@@ -1492,7 +1492,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     captionStyle === "neon"
                       ? {
                           color: "#FFFFFF",
-                          textShadowColor: "#E91E76",
+                          textShadowColor: "#E50914",
                           textShadowRadius: 8,
                         }
                       : captionStyle === "yellow"
@@ -1515,8 +1515,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
           {/* Selected Soundtrack Active Badge */}
           {selectedSoundTrack !== "none" && (
-            <View className="absolute top-4 right-32 bg-black/60 px-2 py-1 rounded-full flex-row items-center gap-1 border border-[#E91E76]/40 backdrop-blur-md z-20">
-              <Music2 color="#E91E76" size={11} />
+            <View className="absolute top-4 right-32 bg-black/60 px-2 py-1 rounded-full flex-row items-center gap-1 border border-[#E50914]/40 backdrop-blur-md z-20">
+              <Music2 color="#E50914" size={11} />
               <Text
                 className="text-white text-[9px] font-semibold max-w-[80px]"
                 numberOfLines={1}
@@ -1544,7 +1544,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                 <View className="w-full h-1 bg-white/25 rounded-full flex-row items-center pointer-events-none">
                   <View
                     style={{ width: `${(currentTime / duration) * 100}%` }}
-                    className="h-full bg-[#E91E76] rounded-l-full"
+                    className="h-full bg-[#E50914] rounded-l-full"
                   />
                   <View className="w-3 h-3 bg-white rounded-full -ml-1 shadow-md pointer-events-none" />
                 </View>
@@ -1572,19 +1572,19 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             }}
             className={`w-[18%] aspect-square rounded-2xl items-center justify-center border bg-[#1A1D24] ${
               editMode === "filters"
-                ? "border-[#E91E76] bg-[#E91E76]/15"
+                ? "border-[#E50914] bg-[#E50914]/15"
                 : "border-white/10"
             }`}
           >
             <Aperture
-              color={editMode === "filters" ? "#E91E76" : "#fff"}
+              color={editMode === "filters" ? "#E50914" : "#fff"}
               size={22}
               className="mb-1"
             />
             <Text
               className={
                 editMode === "filters"
-                  ? "text-[#E91E76] text-[10px] font-bold"
+                  ? "text-[#E50914] text-[10px] font-bold"
                   : "text-white text-[10px]"
               }
             >
@@ -1599,19 +1599,19 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             }}
             className={`w-[18%] aspect-square rounded-2xl items-center justify-center border bg-[#1A1D24] ${
               editMode === "cover"
-                ? "border-[#E91E76] bg-[#E91E76]/15"
+                ? "border-[#E50914] bg-[#E50914]/15"
                 : "border-white/10"
             }`}
           >
             <ImageIcon
-              color={editMode === "cover" ? "#E91E76" : "#fff"}
+              color={editMode === "cover" ? "#E50914" : "#fff"}
               size={22}
               className="mb-1"
             />
             <Text
               className={
                 editMode === "cover"
-                  ? "text-[#E91E76] text-[10px] font-bold"
+                  ? "text-[#E50914] text-[10px] font-bold"
                   : "text-white text-[10px]"
               }
             >
@@ -1626,19 +1626,19 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             }}
             className={`w-[18%] aspect-square rounded-2xl items-center justify-center border bg-[#1A1D24] ${
               editMode === "trim"
-                ? "border-[#E91E76] bg-[#E91E76]/15"
+                ? "border-[#E50914] bg-[#E50914]/15"
                 : "border-white/10"
             }`}
           >
             <Scissors
-              color={editMode === "trim" ? "#E91E76" : "#fff"}
+              color={editMode === "trim" ? "#E50914" : "#fff"}
               size={22}
               className="mb-1"
             />
             <Text
               className={
                 editMode === "trim"
-                  ? "text-[#E91E76] text-[10px] font-bold"
+                  ? "text-[#E50914] text-[10px] font-bold"
                   : "text-white text-[10px]"
               }
             >
@@ -1653,19 +1653,19 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             }}
             className={`w-[18%] aspect-square rounded-2xl items-center justify-center border bg-[#1A1D24] ${
               editMode === "sound"
-                ? "border-[#E91E76] bg-[#E91E76]/15"
+                ? "border-[#E50914] bg-[#E50914]/15"
                 : "border-white/10"
             }`}
           >
             <Music2
-              color={editMode === "sound" ? "#E91E76" : "#fff"}
+              color={editMode === "sound" ? "#E50914" : "#fff"}
               size={22}
               className="mb-1"
             />
             <Text
               className={
                 editMode === "sound"
-                  ? "text-[#E91E76] text-[10px] font-bold"
+                  ? "text-[#E50914] text-[10px] font-bold"
                   : "text-white text-[10px]"
               }
             >
@@ -1680,19 +1680,19 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             }}
             className={`w-[18%] aspect-square rounded-2xl items-center justify-center border bg-[#1A1D24] ${
               editMode === "caption"
-                ? "border-[#E91E76] bg-[#E91E76]/15"
+                ? "border-[#E50914] bg-[#E50914]/15"
                 : "border-white/10"
             }`}
           >
             <Subtitles
-              color={editMode === "caption" ? "#E91E76" : "#fff"}
+              color={editMode === "caption" ? "#E50914" : "#fff"}
               size={22}
               className="mb-1"
             />
             <Text
               className={
                 editMode === "caption"
-                  ? "text-[#E91E76] text-[10px] font-bold"
+                  ? "text-[#E50914] text-[10px] font-bold"
                   : "text-white text-[10px]"
               }
             >
@@ -1711,7 +1711,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                   onPress={() => setActiveFilterSubTab("presets")}
                   className={`px-3 py-1 rounded-full flex-row items-center gap-1.5 ${
                     activeFilterSubTab === "presets"
-                      ? "bg-[#E91E76]"
+                      ? "bg-[#E50914]"
                       : "bg-white/5"
                   }`}
                 >
@@ -1725,7 +1725,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                   onPress={() => setActiveFilterSubTab("adjust")}
                   className={`px-3 py-1 rounded-full flex-row items-center gap-1.5 ${
                     activeFilterSubTab === "adjust"
-                      ? "bg-[#E91E76]"
+                      ? "bg-[#E50914]"
                       : "bg-white/5"
                   }`}
                 >
@@ -1821,7 +1821,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                         <View
                           className={`w-16 h-16 rounded-2xl overflow-hidden mb-1.5 relative border-2 ${
                             isSelected
-                              ? "border-[#E91E76] shadow-lg shadow-[#E91E76]/50"
+                              ? "border-[#E50914] shadow-lg shadow-[#E50914]/50"
                               : "border-white/15"
                           }`}
                         >
@@ -1861,7 +1861,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
                           {/* Badge tag if any */}
                           {filter.badge && (
-                            <View className="absolute top-1 left-1 bg-[#E91E76] px-1 py-0.5 rounded-[4px]">
+                            <View className="absolute top-1 left-1 bg-[#E50914] px-1 py-0.5 rounded-[4px]">
                               <Text className="text-[7px] font-black text-white">
                                 {filter.badge}
                               </Text>
@@ -1870,7 +1870,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
                           {/* Selected Checkmark Indicator */}
                           {isSelected && (
-                            <View className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-[#E91E76] items-center justify-center border border-white">
+                            <View className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-[#E50914] items-center justify-center border border-white">
                               <Check color="#fff" size={9} strokeWidth={3} />
                             </View>
                           )}
@@ -1880,7 +1880,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                           numberOfLines={1}
                           className={`text-[11px] font-medium text-center ${
                             isSelected
-                              ? "text-[#E91E76] font-bold"
+                              ? "text-[#E50914] font-bold"
                               : "text-white/80"
                           }`}
                         >
@@ -1896,13 +1896,13 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                   <View className="bg-white/5 rounded-2xl p-3 border border-white/5">
                     <View className="flex-row items-center justify-between mb-2">
                       <View className="flex-row items-center gap-2">
-                        <Sun color="#E91E76" size={15} />
+                        <Sun color="#E50914" size={15} />
                         <Text className="text-white text-[12px] font-semibold">
                           Intensity Slider
                         </Text>
                       </View>
-                      <View className="bg-[#E91E76]/20 px-2.5 py-0.5 rounded-full border border-[#E91E76]/40">
-                        <Text className="text-[#E91E76] text-[11px] font-bold">
+                      <View className="bg-[#E50914]/20 px-2.5 py-0.5 rounded-full border border-[#E50914]/40">
+                        <Text className="text-[#E50914] text-[11px] font-bold">
                           {Math.round(filterIntensity * 100)}%
                         </Text>
                       </View>
@@ -1922,7 +1922,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                       <View className="w-full h-2 bg-white/10 rounded-full overflow-hidden relative">
                         <View
                           style={{ width: `${Math.max(0, Math.min(100, filterIntensity * 100))}%` }}
-                          className="h-full bg-[#E91E76] rounded-full"
+                          className="h-full bg-[#E50914] rounded-full"
                         />
                       </View>
 
@@ -1932,9 +1932,9 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                           left: `${Math.max(0, Math.min(100, filterIntensity * 100))}%`,
                           marginLeft: -10,
                         }}
-                        className="absolute top-1/2 -mt-2.5 w-5 h-5 rounded-full bg-white shadow-md border-2 border-[#E91E76] items-center justify-center pointer-events-none"
+                        className="absolute top-1/2 -mt-2.5 w-5 h-5 rounded-full bg-white shadow-md border-2 border-[#E50914] items-center justify-center pointer-events-none"
                       >
-                        <View className="w-1.5 h-1.5 rounded-full bg-[#E91E76]" />
+                        <View className="w-1.5 h-1.5 rounded-full bg-[#E50914]" />
                       </View>
                     </View>
 
@@ -1951,7 +1951,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                           <Text
                             className={`text-[9px] font-semibold ${
                               Math.round(filterIntensity * 100) === mark
-                                ? "text-[#E91E76] font-bold"
+                                ? "text-[#E50914] font-bold"
                                 : "text-[#9CA3AF]"
                             }`}
                           >
@@ -1993,7 +1993,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                         <View
                           className={`w-16 h-16 rounded-2xl overflow-hidden mb-1.5 relative border-2 items-center justify-center ${
                             isSelected
-                              ? "border-[#E91E76] shadow-lg shadow-[#E91E76]/50 bg-[#E91E76]/15"
+                              ? "border-[#E50914] shadow-lg shadow-[#E50914]/50 bg-[#E50914]/15"
                               : "border-white/15 bg-white/5"
                           }`}
                         >
@@ -2021,7 +2021,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                             }}
                           >
                             <IconComponent
-                              color={isSelected ? "#E91E76" : "#FFFFFF"}
+                              color={isSelected ? "#E50914" : "#FFFFFF"}
                               size={20}
                               strokeWidth={2}
                             />
@@ -2029,7 +2029,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
                           {/* Current Value Badge if not 0 */}
                           {hasAdjustment && (
-                            <View className="absolute top-1 left-1 bg-[#E91E76] px-1 py-0.5 rounded-[4px]">
+                            <View className="absolute top-1 left-1 bg-[#E50914] px-1 py-0.5 rounded-[4px]">
                               <Text className="text-[7px] font-black text-white">
                                 {currentVal > 0 ? `+${currentVal}` : `${currentVal}`}
                               </Text>
@@ -2038,7 +2038,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
                           {/* Selected Checkmark Indicator */}
                           {isSelected && (
-                            <View className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-[#E91E76] items-center justify-center border border-white">
+                            <View className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-[#E50914] items-center justify-center border border-white">
                               <Check color="#fff" size={9} strokeWidth={3} />
                             </View>
                           )}
@@ -2048,7 +2048,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                           numberOfLines={1}
                           className={`text-[11px] font-medium text-center ${
                             isSelected
-                              ? "text-[#E91E76] font-bold"
+                              ? "text-[#E50914] font-bold"
                               : "text-white/80"
                           }`}
                         >
@@ -2076,7 +2076,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     <View className="bg-white/5 rounded-2xl p-3 border border-white/5">
                       <View className="flex-row items-center justify-between mb-2">
                         <View className="flex-row items-center gap-2">
-                          <ActiveIcon color="#E91E76" size={15} />
+                          <ActiveIcon color="#E50914" size={15} />
                           <Text className="text-white text-[12px] font-semibold">
                             {activeOpt.label} Slider
                           </Text>
@@ -2100,8 +2100,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                               </Text>
                             </TouchableOpacity>
                           )}
-                          <View className="bg-[#E91E76]/20 px-2.5 py-0.5 rounded-full border border-[#E91E76]/40">
-                            <Text className="text-[#E91E76] text-[11px] font-bold">
+                          <View className="bg-[#E50914]/20 px-2.5 py-0.5 rounded-full border border-[#E50914]/40">
+                            <Text className="text-[#E50914] text-[11px] font-bold">
                               {currentVal > 0
                                 ? `+${currentVal}%`
                                 : `${currentVal}%`}
@@ -2132,7 +2132,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                                 left: "50%",
                                 width: `${(currentVal / 50) * 50}%`,
                               }}
-                              className="h-full bg-[#E91E76] rounded-r-full"
+                              className="h-full bg-[#E50914] rounded-r-full"
                             />
                           ) : (
                             <View
@@ -2140,7 +2140,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                                 left: `${50 - (Math.abs(currentVal) / 50) * 50}%`,
                                 width: `${(Math.abs(currentVal) / 50) * 50}%`,
                               }}
-                              className="h-full bg-[#E91E76] rounded-l-full"
+                              className="h-full bg-[#E50914] rounded-l-full"
                             />
                           )}
                         </View>
@@ -2151,9 +2151,9 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                             left: `${knobPct}%`,
                             marginLeft: -10,
                           }}
-                          className="absolute top-1/2 -mt-2.5 w-5 h-5 rounded-full bg-white shadow-md border-2 border-[#E91E76] items-center justify-center pointer-events-none"
+                          className="absolute top-1/2 -mt-2.5 w-5 h-5 rounded-full bg-white shadow-md border-2 border-[#E50914] items-center justify-center pointer-events-none"
                         >
-                          <View className="w-1.5 h-1.5 rounded-full bg-[#E91E76]" />
+                          <View className="w-1.5 h-1.5 rounded-full bg-[#E50914]" />
                         </View>
                       </View>
 
@@ -2175,7 +2175,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                             <Text
                               className={`text-[9px] font-semibold ${
                                 currentVal === mark
-                                  ? "text-[#E91E76] font-bold"
+                                  ? "text-[#E50914] font-bold"
                                   : "text-[#9CA3AF]"
                               }`}
                             >
@@ -2204,7 +2204,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
               </View>
               <TouchableOpacity
                 onPress={pickPhoto}
-                className="bg-[#E91E76] px-3 py-1.5 rounded-full flex-row items-center gap-1"
+                className="bg-[#E50914] px-3 py-1.5 rounded-full flex-row items-center gap-1"
               >
                 <ImagePlus color="#fff" size={13} />
                 <Text className="text-white font-bold text-[11px]">Upload</Text>
@@ -2212,7 +2212,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             </View>
 
             <View className="flex-row gap-3 items-center">
-              <View className="w-16 h-20 rounded-xl overflow-hidden border-2 border-[#E91E76] relative">
+              <View className="w-16 h-20 rounded-xl overflow-hidden border-2 border-[#E50914] relative">
                 {recordedVideoUri && (
                   <Image
                     source={{ uri: recordedVideoUri }}
@@ -2287,11 +2287,11 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                 ))}
               </View>
 
-              <View className="absolute left-[10%] right-[20%] h-full border-4 border-[#E91E76] rounded-lg bg-transparent pointer-events-none">
-                <View className="absolute -left-3 top-0 bottom-0 w-3 bg-[#E91E76] rounded-l-md justify-center items-center">
+              <View className="absolute left-[10%] right-[20%] h-full border-4 border-[#E50914] rounded-lg bg-transparent pointer-events-none">
+                <View className="absolute -left-3 top-0 bottom-0 w-3 bg-[#E50914] rounded-l-md justify-center items-center">
                   <View className="w-1 h-4 bg-white rounded-full" />
                 </View>
-                <View className="absolute -right-3 top-0 bottom-0 w-3 bg-[#E91E76] rounded-r-md justify-center items-center">
+                <View className="absolute -right-3 top-0 bottom-0 w-3 bg-[#E50914] rounded-r-md justify-center items-center">
                   <View className="w-1 h-4 bg-white rounded-full" />
                 </View>
               </View>
@@ -2315,9 +2315,9 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                   Balance original live recording & background music
                 </Text>
               </View>
-              <View className="bg-[#E91E76]/15 px-2.5 py-1 rounded-full border border-[#E91E76]/30 flex-row items-center gap-1">
-                <Music2 color="#E91E76" size={12} />
-                <Text className="text-[#E91E76] text-[10px] font-bold">
+              <View className="bg-[#E50914]/15 px-2.5 py-1 rounded-full border border-[#E50914]/30 flex-row items-center gap-1">
+                <Music2 color="#E50914" size={12} />
+                <Text className="text-[#E50914] text-[10px] font-bold">
                   {selectedSoundTrack === "none" ? "Raw Mic" : "Mixed Track"}
                 </Text>
               </View>
@@ -2331,10 +2331,10 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                 </Text>
                 <TouchableOpacity
                   onPress={pickCustomAudio}
-                  className="bg-[#E91E76]/15 border border-[#E91E76]/40 px-2.5 py-1 rounded-full flex-row items-center gap-1"
+                  className="bg-[#E50914]/15 border border-[#E50914]/40 px-2.5 py-1 rounded-full flex-row items-center gap-1"
                 >
-                  <Plus color="#E91E76" size={11} strokeWidth={2.5} />
-                  <Text className="text-[#E91E76] text-[10px] font-bold">
+                  <Plus color="#E50914" size={11} strokeWidth={2.5} />
+                  <Text className="text-[#E50914] text-[10px] font-bold">
                     Add Your Music
                   </Text>
                 </TouchableOpacity>
@@ -2348,16 +2348,16 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                 {/* Upload Your Own Song Card */}
                 <TouchableOpacity
                   onPress={pickCustomAudio}
-                  className="p-2.5 rounded-2xl border border-dashed border-[#E91E76]/50 bg-[#E91E76]/10 items-center justify-center"
+                  className="p-2.5 rounded-2xl border border-dashed border-[#E50914]/50 bg-[#E50914]/10 items-center justify-center"
                   style={{ width: 120, height: 76 }}
                 >
-                  <View className="w-6 h-6 rounded-full bg-[#E91E76] items-center justify-center mb-1 shadow-sm">
+                  <View className="w-6 h-6 rounded-full bg-[#E50914] items-center justify-center mb-1 shadow-sm">
                     <Plus color="#fff" size={14} strokeWidth={3} />
                   </View>
                   <Text className="text-white text-[11px] font-bold text-center">
                     Add Song
                   </Text>
-                  <Text className="text-[#E91E76] text-[9px] font-medium text-center">
+                  <Text className="text-[#E50914] text-[9px] font-medium text-center">
                     Audio / MP3
                   </Text>
                 </TouchableOpacity>
@@ -2373,7 +2373,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                       }}
                       className={`p-2.5 rounded-2xl border items-start justify-between relative ${
                         isSelected
-                          ? "border-[#E91E76] bg-[#E91E76]/15"
+                          ? "border-[#E50914] bg-[#E50914]/15"
                           : "border-white/10 bg-white/5"
                       }`}
                       style={{ width: 132, height: 76 }}
@@ -2383,7 +2383,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                           className="w-6 h-6 rounded-lg items-center justify-center"
                           style={{
                             backgroundColor: isSelected
-                              ? "#E91E76"
+                              ? "#E50914"
                               : "rgba(255, 255, 255, 0.1)",
                           }}
                         >
@@ -2405,7 +2405,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                             </TouchableOpacity>
                           )}
                           {isSelected && (
-                            <View className="w-4 h-4 rounded-full bg-[#E91E76] items-center justify-center">
+                            <View className="w-4 h-4 rounded-full bg-[#E50914] items-center justify-center">
                               <Check color="#fff" size={9} strokeWidth={3} />
                             </View>
                           )}
@@ -2417,14 +2417,14 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                           <Text
                             numberOfLines={1}
                             className={`text-xs font-bold flex-1 ${
-                              isSelected ? "text-[#E91E76]" : "text-white"
+                              isSelected ? "text-[#E50914]" : "text-white"
                             }`}
                           >
                             {track.name}
                           </Text>
                           {track.isCustom && (
-                            <View className="bg-[#E91E76]/30 px-1 rounded">
-                              <Text className="text-[7px] text-[#F472B6] font-bold">
+                            <View className="bg-[#E50914]/30 px-1 rounded">
+                              <Text className="text-[7px] text-[#F87171] font-bold">
                                 MINE
                               </Text>
                             </View>
@@ -2459,7 +2459,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     {isOriginalMuted ? (
                       <VolumeX color="#EF4444" size={13} />
                     ) : (
-                      <Volume2 color="#E91E76" size={13} />
+                      <Volume2 color="#E50914" size={13} />
                     )}
                   </TouchableOpacity>
                   <Text className="text-white text-[12px] font-semibold">
@@ -2479,8 +2479,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                       {isOriginalMuted ? "Unmute" : "Mute"}
                     </Text>
                   </TouchableOpacity>
-                  <View className="bg-[#E91E76]/20 px-2.5 py-0.5 rounded-full border border-[#E91E76]/40">
-                    <Text className="text-[#E91E76] text-[11px] font-bold">
+                  <View className="bg-[#E50914]/20 px-2.5 py-0.5 rounded-full border border-[#E50914]/40">
+                    <Text className="text-[#E50914] text-[11px] font-bold">
                       {isOriginalMuted ? "0%" : `${originalAudioVolume}%`}
                     </Text>
                   </View>
@@ -2502,7 +2502,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     style={{
                       width: `${isOriginalMuted ? 0 : Math.max(0, Math.min(100, (originalAudioVolume / 150) * 100))}%`,
                     }}
-                    className="h-full bg-[#E91E76] rounded-full"
+                    className="h-full bg-[#E50914] rounded-full"
                   />
                 </View>
                 <View
@@ -2510,9 +2510,9 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     left: `${isOriginalMuted ? 0 : Math.max(0, Math.min(100, (originalAudioVolume / 150) * 100))}%`,
                     marginLeft: -10,
                   }}
-                  className="absolute top-1/2 -mt-2.5 w-5 h-5 rounded-full bg-white shadow-md border-2 border-[#E91E76] items-center justify-center pointer-events-none"
+                  className="absolute top-1/2 -mt-2.5 w-5 h-5 rounded-full bg-white shadow-md border-2 border-[#E50914] items-center justify-center pointer-events-none"
                 >
-                  <View className="w-1.5 h-1.5 rounded-full bg-[#E91E76]" />
+                  <View className="w-1.5 h-1.5 rounded-full bg-[#E50914]" />
                 </View>
               </View>
 
@@ -2530,7 +2530,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     <Text
                       className={`text-[9px] font-semibold ${
                         !isOriginalMuted && originalAudioVolume === mark
-                          ? "text-[#E91E76] font-bold"
+                          ? "text-[#E50914] font-bold"
                           : "text-[#9CA3AF]"
                       }`}
                     >
@@ -2638,19 +2638,19 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                       }}
                       className={`px-3 py-1.5 rounded-full border flex-row items-center gap-1.5 ${
                         isActive
-                          ? "bg-[#E91E76]/15 border-[#E91E76]"
+                          ? "bg-[#E50914]/15 border-[#E50914]"
                           : "bg-white/5 border-white/10"
                       }`}
                     >
                       <Text
                         className={`text-[11px] font-semibold ${
-                          isActive ? "text-[#E91E76]" : "text-[#D1D5DB]"
+                          isActive ? "text-[#E50914]" : "text-[#D1D5DB]"
                         }`}
                       >
                         {fx.label}
                       </Text>
                       {isActive && (
-                        <Check color="#E91E76" size={10} strokeWidth={3} />
+                        <Check color="#E50914" size={10} strokeWidth={3} />
                       )}
                     </TouchableOpacity>
                   );
@@ -2677,7 +2677,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                   setShowCaptions(!showCaptions);
                 }}
                 className={`px-3 py-1.5 rounded-full flex-row items-center gap-1.5 ${
-                  showCaptions ? "bg-[#E91E76]" : "bg-white/10"
+                  showCaptions ? "bg-[#E50914]" : "bg-white/10"
                 }`}
               >
                 <Subtitles color="#fff" size={12} />
@@ -2736,14 +2736,14 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     }}
                     className={`px-3 py-1.5 rounded-full border ${
                       captionText === phrase
-                        ? "bg-[#E91E76]/15 border-[#E91E76]"
+                        ? "bg-[#E50914]/15 border-[#E50914]"
                         : "bg-white/5 border-white/10"
                     }`}
                   >
                     <Text
                       className={`text-[11px] font-medium ${
                         captionText === phrase
-                          ? "text-[#E91E76] font-bold"
+                          ? "text-[#E50914] font-bold"
                           : "text-white/80"
                       }`}
                     >
@@ -2785,7 +2785,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                       }}
                       className={`flex-1 py-2 rounded-lg items-center ${
                         captionStyle === st.id
-                          ? "bg-[#E91E76]"
+                          ? "bg-[#E50914]"
                           : "bg-transparent"
                       }`}
                     >
@@ -2807,7 +2807,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
         {/* AI Best Moment Enhancement Banner */}
         <View className="bg-[#1A1D24] p-3.5 rounded-2xl flex-row items-center border border-white/5">
-          <Sparkles color="#E91E76" size={22} className="mr-3" />
+          <Sparkles color="#E50914" size={22} className="mr-3" />
           <View className="flex-1 mr-2">
             <Text className="text-white font-bold text-sm mb-0.5">
               Auto Color & Filter Match
@@ -2822,7 +2822,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
               setActiveFilter("Stage");
               setFilterIntensity(0.9);
             }}
-            className="bg-[#E91E76] px-4 py-1.5 rounded-full"
+            className="bg-[#E50914] px-4 py-1.5 rounded-full"
           >
             <Text className="text-white font-bold text-xs">Auto Apply</Text>
           </TouchableOpacity>

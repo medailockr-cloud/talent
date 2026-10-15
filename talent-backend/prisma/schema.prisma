@@ -156,17 +156,23 @@ model Report {
 }
 
 model Message {
-  id          Int      @id @default(autoincrement())
-  text        String
+  id            Int      @id @default(autoincrement())
+  text          String
   
-  senderId    Int
-  sender      User     @relation("sentMessages", fields: [senderId], references: [id])
+  senderId      Int
+  sender        User     @relation("sentMessages", fields: [senderId], references: [id])
   
-  receiverId  Int
-  receiver    User     @relation("receivedMessages", fields: [receiverId], references: [id])
+  receiverId    Int
+  receiver      User     @relation("receivedMessages", fields: [receiverId], references: [id])
   
-  isRead      Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  replyToId     Int?
+  replyToText   String?
+  replyToSender String?
+  reactions     String?  // JSON string e.g. '{"❤️": [1, 2], "🔥": [1]}'
+  isEdited      Boolean  @default(false)
+  
+  isRead        Boolean  @default(false)
+  createdAt     DateTime @default(now())
 }
 
 model LiveStream {

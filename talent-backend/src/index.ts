@@ -783,6 +783,173 @@ app.get('/api/notifications', requireAuth, async (req, res) => {
   }
 });
 
+// Mark Notifications as Read
+app.put('/api/notifications/read', requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId!;
+    const { notificationId } = req.body;
+    if (notificationId) {
+      await prisma.notification.updateMany({
+        where: { id: parseInt(notificationId), userId },
+        data: { isRead: true }
+      });
+    } else {
+      await prisma.notification.updateMany({
+        where: { userId, isRead: false },
+        data: { isRead: true }
+      });
+    }
+    res.json({ success: true, message: 'Notifications marked as read' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to mark notifications as read' });
+  }
+});
+
+// Get User Followers List
+app.get('/api/users/:id/followers', async (req: any, res: any) => {
+  try {
+    const userId = parseInt(req.params.id);
+    let currentUserId: number | null = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET) as { userId: number };
+        currentUserId = decoded.userId;
+      } catch (e) {}
+    }
+
+    const followers = await prisma.follows.findMany({
+      where: { followingId: userId },
+      include: {
+        follower: {
+          select: { id: true, username: true, name: true, avatarUrl: true, title: true, location: true }
+        }
+      }
+    });
+
+    const mapped = await Promise.all(followers.map(async (f: any) => {
+      let isFollowing = false;
+      if (currentUserId && currentUserId !== f.follower.id) {
+        const check = await prisma.follows.findUnique({
+          where: {
+            followerId_followingId: { followerId: currentUserId, followingId: f.follower.id }
+          }
+        });
+        isFollowing = !!check;
+      }
+      return {
+        ...f.follower,
+        isFollowing
+      };
+    }));
+
+    res.json(mapped);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch followers' });
+  }
+});
+
+// Get User Following List
+app.get('/api/users/:id/following', async (req: any, res: any) => {
+  try {
+    const userId = parseInt(req.params.id);
+    let currentUserId: number | null = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET) as { userId: number };
+        currentUserId = decoded.userId;
+      } catch (e) {}
+    }
+
+    const following = await prisma.follows.findMany({
+      where: { followerId: userId },
+      include: {
+        following: {
+          select: { id: true, username: true, name: true, avatarUrl: true, title: true, location: true }
+        }
+      }
+    });
+
+    const mapped = await Promise.all(following.map(async (f: any) => {
+      let isFollowing = false;
+      if (currentUserId && currentUserId !== f.following.id) {
+        const check = await prisma.follows.findUnique({
+          where: {
+            followerId_followingId: { followerId: currentUserId, followingId: f.following.id }
+          }
+        });
+        isFollowing = !!check;
+      }
+      return {
+        ...f.following,
+        isFollowing
+      };
+    }));
+
+    res.json(mapped);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch following' });
+  }
+});
+
+// Talent Leaderboard Endpoint
+app.get('/api/leaderboard', async (req: any, res: any) => {
+  try {
+    const category = (req.query.category as string) || 'All';
+    const where: any = {};
+    if (category && category !== 'All') {
+      where.OR = [
+        { category: { contains: category } },
+        { subCategory: { contains: category } }
+      ];
+    }
+
+    const videos = await prisma.video.findMany({
+      where,
+      include: {
+        author: {
+          select: { id: true, username: true, name: true, avatarUrl: true, title: true, location: true }
+        },
+        likes: true,
+        comments: true,
+        ratings: true
+      },
+      take: 50
+    });
+
+    const ranked = videos.map((v: any) => {
+      const likesCount = v.likes.length;
+      const commentsCount = v.comments.length;
+      const ratingsCount = v.ratings.length;
+      const avgRating = ratingsCount ? v.ratings.reduce((acc: number, r: any) => acc + r.score, 0) / ratingsCount : 0;
+      const score = v.views + (likesCount * 5) + (commentsCount * 10) + Math.round(avgRating * 20);
+
+      return {
+        id: v.id,
+        title: v.title,
+        url: v.url,
+        category: v.category || 'General',
+        views: v.views,
+        likesCount,
+        commentsCount,
+        averageRating: parseFloat(avgRating.toFixed(1)),
+        rankScore: score,
+        performer: v.author
+      };
+    });
+
+    ranked.sort((a, b) => b.rankScore - a.rankScore);
+    res.json(ranked);
+  } catch (error) {
+    console.error('Error fetching leaderboard:', error);
+    res.status(500).json({ error: 'Failed to fetch leaderboard' });
+  }
+});
+
 // Search and Discovery API
 app.get('/api/discover', async (req, res) => {
   try {
@@ -994,31 +1161,340 @@ app.put('/api/admin/reports/:id/resolve', requireAuth, requireAdmin, async (req,
   }
 });
 
-// Direct Messaging (DMs)
+// Direct Messaging (DMs) - Send Message
 app.post('/api/messages', requireAuth, async (req, res) => {
   try {
     const senderId = req.userId!;
-    const { receiverId, text } = req.body;
+    const { receiverId, text, replyToId, replyToText, replyToSender } = req.body;
     
-    if (!receiverId || !text) return res.status(400).json({ error: 'Missing receiverId or text' });
+    if (!receiverId || !text || !text.trim()) {
+      return res.status(400).json({ error: 'Missing receiverId or text' });
+    }
 
-    const message = await prisma.message.create({
+    const recId = parseInt(receiverId);
+    if (isNaN(recId)) {
+      return res.status(400).json({ error: 'Invalid receiver ID' });
+    }
+
+    // Verify recipient exists
+    const recipient = await prisma.user.findUnique({ where: { id: recId } });
+    if (!recipient) {
+      return res.status(404).json({ error: 'Recipient not found' });
+    }
+
+    const message = await (prisma.message as any).create({
       data: {
-        text,
+        text: text.trim(),
         senderId,
-        receiverId: parseInt(receiverId)
+        receiverId: recId,
+        ...(replyToId ? { replyToId: Number(replyToId) } : {}),
+        ...(replyToText ? { replyToText: String(replyToText).slice(0, 300) } : {}),
+        ...(replyToSender ? { replyToSender: String(replyToSender) } : {}),
       }
     });
+
+    // Real-time broadcast to chat room and recipient's notification channel
+    const chatId = [senderId, recId].sort().join('_');
+    io.to(`chat_${chatId}`).emit('receive_message', message);
+    io.to(`user_${recId}`).emit('new_message_notification', { message, senderId });
+
     res.json(message);
   } catch (error) {
+    console.error('Failed to send message:', error);
     res.status(500).json({ error: 'Failed to send message' });
   }
 });
 
+// Search users for starting new chats / direct messages
+app.get('/api/users/search', requireAuth, async (req: any, res: any) => {
+  try {
+    const currentUserId = req.userId!;
+    const query = (req.query.q as string || '').trim();
+
+    const users = await prisma.user.findMany({
+      where: {
+        id: { not: currentUserId },
+        ...(query ? {
+          OR: [
+            { username: { contains: query } },
+            { name: { contains: query } }
+          ]
+        } : {})
+      },
+      take: 25,
+      select: {
+        id: true,
+        username: true,
+        name: true,
+        avatarUrl: true,
+        title: true,
+        location: true
+      },
+      orderBy: { id: 'desc' }
+    });
+
+    res.json(users);
+  } catch (error) {
+    console.error('Error searching users:', error);
+    res.status(500).json({ error: 'Failed to search users' });
+  }
+});
+
+// Delete or Clear Conversation with another user
+const handleClearConversation = async (req: any, res: any) => {
+  try {
+    const userId = req.userId!;
+    const param = req.params?.otherUserId || req.params?.id || req.query?.otherUserId || req.body?.otherUserId;
+    
+    let otherUserId: number | null = null;
+    if (param && param !== 'undefined' && param !== 'null' && param !== 'NaN') {
+      const num = parseInt(param);
+      if (!isNaN(num)) {
+        otherUserId = num;
+      } else {
+        const found = await prisma.user.findFirst({ where: { username: String(param) } });
+        if (found) otherUserId = found.id;
+      }
+    }
+
+    if (otherUserId) {
+      await prisma.message.deleteMany({
+        where: {
+          OR: [
+            { senderId: userId, receiverId: otherUserId },
+            { senderId: otherUserId, receiverId: userId }
+          ]
+        }
+      });
+    }
+
+    res.json({ success: true, message: 'Conversation deleted successfully' });
+  } catch (error) {
+    console.error('Failed to delete conversation:', error);
+    res.status(500).json({ error: 'Failed to delete conversation' });
+  }
+};
+
+// Delete an Individual Message by ID
+app.delete('/api/messages/single/:id', requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId!;
+    const messageId = parseInt(req.params.id);
+    if (isNaN(messageId)) {
+      return res.status(400).json({ error: 'Invalid message ID' });
+    }
+
+    const message = await prisma.message.findUnique({
+      where: { id: messageId }
+    });
+
+    if (!message) {
+      // Idempotent: message is already deleted or not in database
+      return res.json({ success: true, messageId, alreadyDeleted: true });
+    }
+
+    // Only sender or receiver can delete the message
+    if (message.senderId !== userId && message.receiverId !== userId) {
+      return res.status(403).json({ error: 'Unauthorized to delete this message' });
+    }
+
+    try {
+      await prisma.message.delete({
+        where: { id: messageId }
+      });
+    } catch (delErr) {
+      // If already deleted concurrently
+    }
+
+    const chatId = [message.senderId, message.receiverId].sort().join('_');
+    // Real-time broadcast to chat room
+    io.to(`chat_${chatId}`).emit('message_deleted', { messageId });
+
+    res.json({ success: true, messageId });
+  } catch (error) {
+    console.error('Failed to delete individual message:', error);
+    res.status(500).json({ error: 'Failed to delete message' });
+  }
+});
+
+// Edit an Individual Message by ID (Only original author can edit)
+app.patch('/api/messages/single/:id', requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId!;
+    const messageId = parseInt(req.params.id);
+    const { text } = req.body;
+
+    if (isNaN(messageId)) {
+      return res.status(400).json({ error: 'Invalid message ID' });
+    }
+    if (!text || !text.trim()) {
+      return res.status(400).json({ error: 'Message text cannot be empty' });
+    }
+
+    const message = await prisma.message.findUnique({
+      where: { id: messageId }
+    });
+
+    if (!message) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    if (message.senderId !== userId) {
+      return res.status(403).json({ error: 'Only the sender can edit this message' });
+    }
+
+    const updated = await (prisma.message as any).update({
+      where: { id: messageId },
+      data: {
+        text: text.trim(),
+        isEdited: true
+      }
+    });
+
+    const chatId = [message.senderId, message.receiverId].sort().join('_');
+    io.to(`chat_${chatId}`).emit('message_updated', updated);
+
+    res.json({ success: true, message: updated });
+  } catch (error) {
+    console.error('Failed to edit message:', error);
+    res.status(500).json({ error: 'Failed to edit message' });
+  }
+});
+
+// Add or Toggle Emoji Reaction on a Message
+app.post('/api/messages/single/:id/react', requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId!;
+    const messageId = parseInt(req.params.id);
+    const { emoji } = req.body;
+
+    if (isNaN(messageId) || !emoji) {
+      return res.status(400).json({ error: 'Invalid message ID or emoji' });
+    }
+
+    const message = await (prisma.message as any).findUnique({
+      where: { id: messageId }
+    });
+
+    if (!message) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    // Only chat participants can react
+    if (message.senderId !== userId && message.receiverId !== userId) {
+      return res.status(403).json({ error: 'Unauthorized to react to this message' });
+    }
+
+    let reactionsMap: Record<string, number[]> = {};
+    if (message.reactions) {
+      try {
+        reactionsMap = JSON.parse(message.reactions);
+      } catch (e) {
+        reactionsMap = {};
+      }
+    }
+
+    const currentUsers: number[] = Array.isArray(reactionsMap[emoji]) ? reactionsMap[emoji] : [];
+    if (currentUsers.includes(userId)) {
+      // Toggle off
+      reactionsMap[emoji] = currentUsers.filter((id) => id !== userId);
+      if (reactionsMap[emoji].length === 0) {
+        delete reactionsMap[emoji];
+      }
+    } else {
+      // Toggle on
+      reactionsMap[emoji] = [...currentUsers, userId];
+    }
+
+    const updatedReactionsStr = JSON.stringify(reactionsMap);
+    await (prisma.message as any).update({
+      where: { id: messageId },
+      data: { reactions: updatedReactionsStr }
+    });
+
+    const chatId = [message.senderId, message.receiverId].sort().join('_');
+    io.to(`chat_${chatId}`).emit('message_reaction', {
+      messageId,
+      reactions: updatedReactionsStr,
+    });
+
+    res.json({ success: true, messageId, reactions: updatedReactionsStr });
+  } catch (error) {
+    console.error('Failed to react to message:', error);
+    res.status(500).json({ error: 'Failed to react to message' });
+  }
+});
+
+app.delete('/api/messages/conversation/:otherUserId', requireAuth, handleClearConversation);
+app.delete('/api/messages/conversation', requireAuth, handleClearConversation);
+app.delete('/api/messages/:otherUserId', requireAuth, handleClearConversation);
+
+// Get list of recent conversations for the logged in user (STATIC ROUTE MUST COME BEFORE PARAMETERIZED ROUTE)
+app.get('/api/messages/conversations', requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId!;
+    // Find all users the current user has sent messages to or received messages from
+    const users = await prisma.user.findMany({
+      where: {
+        OR: [
+          { sentMessages: { some: { receiverId: userId } } },
+          { receivedMessages: { some: { senderId: userId } } }
+        ]
+      },
+      select: {
+        id: true,
+        username: true,
+        name: true,
+        avatarUrl: true
+      }
+    });
+    
+    // For each user, get the last message and unread count between them
+    const conversations = await Promise.all(users.map(async (u) => {
+      const [lastMessage, unreadCount] = await Promise.all([
+        prisma.message.findFirst({
+          where: {
+            OR: [
+              { senderId: userId, receiverId: u.id },
+              { senderId: u.id, receiverId: userId }
+            ]
+          },
+          orderBy: { createdAt: 'desc' }
+        }),
+        prisma.message.count({
+          where: {
+            senderId: u.id,
+            receiverId: userId,
+            isRead: false
+          }
+        })
+      ]);
+
+      return { user: u, lastMessage, unreadCount };
+    }));
+    
+    // Sort conversations by latest message first
+    conversations.sort((a, b) => {
+      const dateA = a.lastMessage ? new Date(a.lastMessage.createdAt).getTime() : 0;
+      const dateB = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : 0;
+      return dateB - dateA;
+    });
+
+    res.json(conversations);
+  } catch (error) {
+    console.error('Error fetching conversations:', error);
+    res.status(500).json({ error: 'Failed to fetch conversations' });
+  }
+});
+
+// Get chat history with a specific user (PARAMETERIZED ROUTE)
 app.get('/api/messages/:id', requireAuth, async (req, res) => {
   try {
     const userId1 = req.userId!;
     const userId2 = parseInt(req.params.id as string);
+    if (isNaN(userId2)) {
+      return res.status(400).json({ error: 'Invalid user ID' });
+    }
     
     const messages = await prisma.message.findMany({
       where: {
@@ -1029,31 +1505,25 @@ app.get('/api/messages/:id', requireAuth, async (req, res) => {
       },
       orderBy: { createdAt: 'asc' }
     });
+
+    // Mark unread messages as read
+    await prisma.message.updateMany({
+      where: {
+        senderId: userId2,
+        receiverId: userId1,
+        isRead: false
+      },
+      data: { isRead: true }
+    });
+
     res.json(messages);
   } catch (error) {
+    console.error('Error fetching messages:', error);
     res.status(500).json({ error: 'Failed to fetch messages' });
   }
 });
 
-// Live Streaming (Placeholder)
-app.post('/api/livestream/start', requireAuth, async (req, res) => {
-  try {
-    const hostId = req.userId!;
-    const { title } = req.body;
-    
-    const streamKey = `live_${hostId}_${Date.now()}`;
-    
-    const stream = await prisma.liveStream.upsert({
-      where: { hostId },
-      update: { title, streamKey, isActive: true, startedAt: new Date(), endedAt: null },
-      create: { title: title || 'My Stream', streamKey, hostId, isActive: true, startedAt: new Date() }
-    });
-    
-    res.json({ streamUrl: `rtmp://localhost/live/${streamKey}`, stream });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to start livestream' });
-  }
-});
+// Live Streaming (Removed - will build later)
 
 // Creator Analytics
 app.get('/api/analytics/me', requireAuth, async (req, res) => {
@@ -1237,28 +1707,7 @@ app.get('/api/videos/:id/comments', async (req, res) => {
   }
 });
 
-// Fetch Direct Message History
-app.get('/api/messages/:userId', requireAuth, async (req, res) => {
-  try {
-    const otherUserId = parseInt(req.params.userId as string);
-    const myId = req.userId!;
-    
-    const messages = await prisma.message.findMany({
-      where: {
-        OR: [
-          { senderId: myId, receiverId: otherUserId },
-          { senderId: otherUserId, receiverId: myId }
-        ]
-      },
-      orderBy: { createdAt: 'asc' },
-      take: 50 // In a real app, this should also be paginated
-    });
-    
-    res.json({ messages });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch messages' });
-  }
-});
+
 
 // Report Watch Time (Analytics)
 app.post('/api/videos/:id/watch-time', requireAuth, async (req, res) => {
@@ -1278,117 +1727,66 @@ app.post('/api/videos/:id/watch-time', requireAuth, async (req, res) => {
   }
 });
 
-// --- Messages Routes ---
 
-// Get list of recent conversations for the logged in user
-app.get('/api/messages/conversations', requireAuth, async (req: any, res: any) => {
-  try {
-    const userId = req.userId!;
-    // Find all users the current user has sent messages to or received messages from
-    const users = await prisma.user.findMany({
-      where: {
-        OR: [
-          { sentMessages: { some: { receiverId: userId } } },
-          { receivedMessages: { some: { senderId: userId } } }
-        ]
-      },
-      select: {
-        id: true,
-        username: true,
-        name: true,
-        avatarUrl: true
-      }
-    });
-    
-    // For each user, get the last message between them
-    const conversations = await Promise.all(users.map(async (u) => {
-      const lastMessage = await prisma.message.findFirst({
-        where: {
-          OR: [
-            { senderId: userId, receiverId: u.id },
-            { senderId: u.id, receiverId: userId }
-          ]
-        },
-        orderBy: { createdAt: 'desc' }
-      });
-      return { user: u, lastMessage };
-    }));
-    
-    // Sort conversations by latest message first
-    conversations.sort((a, b) => {
-      const dateA = a.lastMessage ? new Date(a.lastMessage.createdAt).getTime() : 0;
-      const dateB = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : 0;
-      return dateB - dateA;
-    });
-
-    res.json(conversations);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to fetch conversations' });
-  }
-});
-
-// Get chat history with a specific user
-app.get('/api/messages/:otherUserId', requireAuth, async (req: any, res: any) => {
-  try {
-    const userId = req.userId!;
-    const otherUserId = parseInt(req.params.otherUserId);
-    
-    const messages = await prisma.message.findMany({
-      where: {
-        OR: [
-          { senderId: userId, receiverId: otherUserId },
-          { senderId: otherUserId, receiverId: userId }
-        ]
-      },
-      orderBy: { createdAt: 'asc' }
-    });
-    
-    // Mark messages as read
-    await prisma.message.updateMany({
-      where: {
-        senderId: otherUserId,
-        receiverId: userId,
-        isRead: false
-      },
-      data: { isRead: true }
-    });
-    
-    res.json(messages);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch messages' });
-  }
-});
 
 
 // WebSockets for Real-Time Chat
 io.on('connection', (socket) => {
   console.log('A user connected via WebSocket:', socket.id);
 
+  // Join private user room for cross-screen message notifications
+  socket.on('join_user', (data) => {
+    if (data?.userId) {
+      socket.join(`user_${data.userId}`);
+    }
+  });
+
   socket.on('join_chat', (data) => {
-    socket.join(`chat_${data.chatId}`); // chatId could be "1_2" (user1 + user2)
+    if (data?.chatId) {
+      socket.join(`chat_${data.chatId}`); // chatId could be "1_2" (user1 + user2)
+    }
+  });
+
+  socket.on('typing', (data) => {
+    if (data?.chatId) {
+      socket.to(`chat_${data.chatId}`).emit('user_typing', { userId: data.userId });
+    }
+  });
+
+  socket.on('stop_typing', (data) => {
+    if (data?.chatId) {
+      socket.to(`chat_${data.chatId}`).emit('user_stop_typing', { userId: data.userId });
+    }
   });
 
   socket.on('send_message', async (data) => {
     try {
+      if (!data?.text || !data?.senderId || !data?.receiverId) return;
+
       // Save to database
       const message = await prisma.message.create({
         data: {
-          text: data.text,
+          text: data.text.trim(),
           senderId: data.senderId,
           receiverId: data.receiverId
         }
       });
       
+      const chatId = data.chatId || [data.senderId, data.receiverId].sort().join('_');
+
       // Broadcast the message to the chat room
-      io.to(`chat_${data.chatId}`).emit('receive_message', message);
+      io.to(`chat_${chatId}`).emit('receive_message', message);
+      // Also emit to the receiver's personal user room
+      io.to(`user_${data.receiverId}`).emit('new_message_notification', { message, senderId: data.senderId });
     } catch (error) {
-      console.error('Failed to save message', error);
+      console.error('Failed to save message via socket', error);
     }
   });
 
+  // WebRTC Audio / Video Call Signaling Events (Removed - will build later)
+
   socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
+    // disconnected
   });
 });
 
@@ -1398,6 +1796,131 @@ server.listen(PORT, () => {
 });
 
 // --- Shows Routes ---
+
+// Get all shows across the platform (with city & status filtering, auto-seeded if empty)
+app.get('/api/shows', async (req: any, res: any) => {
+  try {
+    const { city, status } = req.query;
+    let requesterId: number | null = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET) as { userId: number };
+        requesterId = decoded.userId;
+      } catch (e) {}
+    }
+
+    // Auto-seed sample shows if table is empty
+    const count = await prisma.show.count();
+    if (count === 0) {
+      const firstUser = await prisma.user.findFirst();
+      if (firstUser) {
+        await prisma.show.createMany({
+          data: [
+            {
+              title: 'Aarav Nair: Live at The Next Stage',
+              location: 'The Next Stage, Indiranagar, Bengaluru',
+              date: new Date('2026-10-24T20:00:00Z'),
+              image: 'https://images.unsplash.com/photo-1516280440503-6c8c4a93883a?w=800&q=80',
+              hostId: firstUser.id
+            },
+            {
+              title: 'Prithvi Theatre Candlelight Sessions',
+              location: 'Prithvi Theatre, Juhu, Mumbai',
+              date: new Date('2026-11-12T19:30:00Z'),
+              image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&q=80',
+              hostId: firstUser.id
+            },
+            {
+              title: 'Kochi Waterfront Acoustic Jam',
+              location: 'Fort Kochi Beach Promenade, Kochi',
+              date: new Date('2026-11-28T18:00:00Z'),
+              image: 'https://images.unsplash.com/photo-1540039155733-d7696d4eb98e?w=800&q=80',
+              hostId: firstUser.id
+            },
+            {
+              title: 'Hauz Khas Live Stage Spotlight',
+              location: 'Social Village, Hauz Khas, Delhi NCR',
+              date: new Date('2026-12-05T20:30:00Z'),
+              image: 'https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=800&q=80',
+              hostId: firstUser.id
+            }
+          ]
+        });
+      }
+    }
+
+    const where: any = {};
+    if (city && city !== 'All Cities') {
+      where.location = { contains: city as string };
+    }
+    const now = new Date();
+    if (status === 'upcoming') {
+      where.date = { gte: now };
+    } else if (status === 'archive') {
+      where.date = { lt: now };
+    }
+
+    const shows = await prisma.show.findMany({
+      where,
+      include: {
+        host: {
+          select: { id: true, username: true, name: true, avatarUrl: true, title: true }
+        },
+        bookings: {
+          include: {
+            user: { select: { id: true, username: true, name: true, avatarUrl: true } }
+          }
+        }
+      },
+      orderBy: { date: status === 'archive' ? 'desc' : 'asc' }
+    });
+
+    const mapped = shows.map((s: any) => ({
+      ...s,
+      visiting: s.bookings?.length || 0,
+      isVisiting: requesterId ? s.bookings?.some((b: any) => b.userId === requesterId) : false,
+      isBooked: requesterId ? s.bookings?.some((b: any) => b.userId === requesterId) : false,
+      ticketCode: requesterId ? `PASS-${s.id}-${requesterId}` : null,
+      attendees: s.bookings?.map((b: any) => b.user) || []
+    }));
+
+    res.json(mapped);
+  } catch (error) {
+    console.error('Error fetching global shows:', error);
+    res.status(500).json({ error: 'Failed to fetch shows' });
+  }
+});
+
+// Create a new show
+app.post('/api/shows', requireAuth, async (req: any, res: any) => {
+  try {
+    const hostId = req.userId!;
+    const { title, location, date, image } = req.body;
+    if (!title || !location || !date) {
+      return res.status(400).json({ error: 'Title, location, and date are required' });
+    }
+
+    const show = await prisma.show.create({
+      data: {
+        title,
+        location,
+        date: new Date(date),
+        image: image || null,
+        hostId
+      },
+      include: {
+        host: { select: { id: true, username: true, name: true, avatarUrl: true } },
+        bookings: true
+      }
+    });
+
+    res.json(show);
+  } catch (error) {
+    console.error('Error creating show:', error);
+    res.status(500).json({ error: 'Failed to create show' });
+  }
+});
 
 // Get all shows for a specific user (host)
 app.get('/api/shows/:userId', async (req: any, res: any) => {
@@ -1427,6 +1950,7 @@ app.get('/api/shows/:userId', async (req: any, res: any) => {
       visiting: s.bookings?.length || 0,
       isVisiting: requesterId ? s.bookings?.some((b: any) => b.userId === requesterId) : false,
       isBooked: requesterId ? s.bookings?.some((b: any) => b.userId === requesterId) : false,
+      ticketCode: requesterId ? `PASS-${s.id}-${requesterId}` : null,
     }));
 
     res.json(mappedShows);
@@ -1457,7 +1981,7 @@ app.post('/api/shows/:showId/book', requireAuth, async (req: any, res: any) => {
       await prisma.booking.create({
         data: { userId, showId }
       });
-      res.json({ message: 'Booked successfully', isBooked: true });
+      res.json({ message: 'Booked successfully', isBooked: true, ticketCode: `PASS-${showId}-${userId}` });
     }
   } catch (error) {
     res.status(500).json({ error: 'Booking failed' });

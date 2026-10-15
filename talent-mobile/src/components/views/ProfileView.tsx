@@ -71,6 +71,7 @@ import { Switch } from "react-native";
 import { api, resolveMediaUrl } from "../../utils/api";
 import { useAuthStore } from "../../store/authStore";
 import { useThemeStore, THEMES, ThemeId } from "../../store/themeStore";
+import { FollowersModal } from "../ui/FollowersModal";
 
 const coverImg =
   "https://images.unsplash.com/photo-1493225457124-a1a2a4fa3e93?w=800&q=80";
@@ -228,7 +229,7 @@ function ShowPreviewModal({
             {/* Header */}
             <View className="flex-row items-center justify-between mb-6">
               <View className="flex-row items-center gap-2">
-                <View className="bg-[#E91E76] px-2 py-1 rounded-md">
+                <View className="bg-[#E50914] px-2 py-1 rounded-md">
                   <Text className="text-white text-[10px] font-bold uppercase tracking-wider">
                     Show Preview
                   </Text>
@@ -252,7 +253,7 @@ function ShowPreviewModal({
             </View>
 
             {/* Subtitle / Info */}
-            <Text className="text-[#E91E76] text-[10px] font-bold tracking-widest uppercase mb-1">
+            <Text className="text-[#E50914] text-[10px] font-bold tracking-widest uppercase mb-1">
               Secret Living Room Acoustic Session
             </Text>
             <Text className="text-white font-bold text-[22px] mb-3">
@@ -264,7 +265,7 @@ function ShowPreviewModal({
                 <Text className="text-[#9CA3AF] text-[13px]">Nov 16, 2026</Text>
               </View>
               <View className="flex-row items-center gap-1.5">
-                <View className="w-1.5 h-1.5 rounded-full bg-[#E91E76]" />
+                <View className="w-1.5 h-1.5 rounded-full bg-[#E50914]" />
                 <Text className="text-[#9CA3AF] text-[13px]">7:30 PM IST</Text>
               </View>
             </View>
@@ -273,7 +274,7 @@ function ShowPreviewModal({
             <View className="bg-white/5 border border-white/5 rounded-2xl p-4 mb-4">
               <View className="flex-row items-center justify-between mb-4">
                 <View className="flex-row items-center gap-2">
-                  <User color="#E91E76" size={16} />
+                  <User color="#E50914" size={16} />
                   <Text className="text-white text-[13px] font-bold">
                     Who's Visiting ({visitors})
                   </Text>
@@ -300,7 +301,7 @@ function ShowPreviewModal({
               <TouchableOpacity
                 onPress={handleRSVP}
                 activeOpacity={0.8}
-                className={`w-full h-[44px] rounded-xl flex-row items-center justify-center gap-2 ${isBooked ? "bg-[#E91E76]" : "bg-white/10"}`}
+                className={`w-full h-[44px] rounded-xl flex-row items-center justify-center gap-2 ${isBooked ? "bg-[#E50914]" : "bg-white/10"}`}
               >
                 {isBooked ? (
                   <CheckCircle color="#fff" size={16} />
@@ -385,7 +386,7 @@ function ShowPreviewModal({
               </Text>
               <View className="gap-3">
                 <View className="flex-row gap-4">
-                  <Text className="text-[#E91E76] text-[12px] font-bold w-[60px]">
+                  <Text className="text-[#E50914] text-[12px] font-bold w-[60px]">
                     7:00 PM
                   </Text>
                   <Text className="text-[#D1D5DB] text-[12px] flex-1">
@@ -393,7 +394,7 @@ function ShowPreviewModal({
                   </Text>
                 </View>
                 <View className="flex-row gap-4">
-                  <Text className="text-[#E91E76] text-[12px] font-bold w-[60px]">
+                  <Text className="text-[#E50914] text-[12px] font-bold w-[60px]">
                     7:30 PM
                   </Text>
                   <Text className="text-[#D1D5DB] text-[12px] flex-1">
@@ -401,7 +402,7 @@ function ShowPreviewModal({
                   </Text>
                 </View>
                 <View className="flex-row gap-4">
-                  <Text className="text-[#E91E76] text-[12px] font-bold w-[60px]">
+                  <Text className="text-[#E50914] text-[12px] font-bold w-[60px]">
                     8:00 PM
                   </Text>
                   <Text className="text-[#D1D5DB] text-[12px] flex-1">
@@ -424,7 +425,7 @@ function ShowPreviewModal({
                   "Audience Request Track",
                 ].map((song, i) => (
                   <View key={i} className="flex-row items-center gap-3">
-                    <Music color="#E91E76" size={12} />
+                    <Music color="#E50914" size={12} />
                     <Text className="text-[#D1D5DB] text-[13px]">{song}</Text>
                   </View>
                 ))}
@@ -464,7 +465,7 @@ function ShowPreviewModal({
                 onClose();
               }}
               activeOpacity={0.8}
-              className="flex-1 bg-[#E91E76] h-[48px] rounded-full items-center justify-center"
+              className="flex-1 bg-[#E50914] h-[48px] rounded-full items-center justify-center"
             >
               <Text className="text-white font-bold text-[13px]">
                 {isBooked ? "RESERVED ✓ (TAP TO CANCEL)" : "RESERVE PASSES (₹650 (RSVP PRIORITY))"}
@@ -717,13 +718,13 @@ function ProfileFeedVideoCard({
             className="items-center gap-1.5 min-w-[36px]"
           >
             <Bookmark
-              color={isKept ? "#E91E76" : "#fff"}
-              fill={isKept ? "#E91E76" : "transparent"}
+              color={isKept ? "#E50914" : "#fff"}
+              fill={isKept ? "#E50914" : "transparent"}
               size={22}
               strokeWidth={1.5}
             />
             <Text
-              className={`text-[9px] font-bold tracking-widest uppercase ${isKept ? "text-[#E91E76]" : "text-[#9CA3AF]"}`}
+              className={`text-[9px] font-bold tracking-widest uppercase ${isKept ? "text-[#E50914]" : "text-[#9CA3AF]"}`}
             >
               {isKept ? "KEPT ✓" : "KEEP"}
             </Text>
@@ -746,11 +747,11 @@ function ProfileFeedVideoCard({
         <View className="flex-col items-end pt-1">
           <View {...panResponder.panHandlers}>
             <View
-              className={`rounded-full h-[32px] px-3.5 flex-row items-center gap-1.5 mb-2 cursor-pointer ${judgeScore !== null ? "bg-[#E91E76]/15 border border-[#E91E76]" : "bg-[#E91E76]"}`}
+              className={`rounded-full h-[32px] px-3.5 flex-row items-center gap-1.5 mb-2 cursor-pointer ${judgeScore !== null ? "bg-[#E50914]/15 border border-[#E50914]" : "bg-[#E50914]"}`}
             >
-              <Gauge color={judgeScore !== null ? "#E91E76" : "#fff"} size={13} />
+              <Gauge color={judgeScore !== null ? "#E50914" : "#fff"} size={13} />
               <Text
-                className={`text-[10px] font-bold tracking-wider uppercase mt-0.5 ${judgeScore !== null ? "text-[#E91E76]" : "text-white"}`}
+                className={`text-[10px] font-bold tracking-wider uppercase mt-0.5 ${judgeScore !== null ? "text-[#E50914]" : "text-white"}`}
               >
                 {judgeScore !== null ? `${judgeScore.toFixed(1)} ★` : "JUDGE"}
               </Text>
@@ -769,7 +770,7 @@ function ProfileFeedVideoCard({
               
               <View className="flex-row items-center justify-between mb-3">
                 <View className="flex-row items-center gap-2">
-                  <Gauge color="#E91E76" size={20} />
+                  <Gauge color="#E50914" size={20} />
                   <Text className="text-white text-lg font-bold">Judge Performance</Text>
                 </View>
                 <TouchableOpacity onPress={() => setShowJudgeModal(false)} className="p-1">
@@ -781,11 +782,11 @@ function ProfileFeedVideoCard({
 
               {/* Big Score Display */}
               <View className="items-center justify-center my-2">
-                <View className="w-28 h-28 rounded-full bg-[#E91E76]/10 border-2 border-[#E91E76] items-center justify-center shadow-lg shadow-[#E91E76]/30">
+                <View className="w-28 h-28 rounded-full bg-[#E50914]/10 border-2 border-[#E50914] items-center justify-center shadow-lg shadow-[#E50914]/30">
                   <Text className="text-white text-4xl font-extrabold tracking-tight">
                     {tempScore.toFixed(1)}
                   </Text>
-                  <Text className="text-[#E91E76] text-[10px] font-bold tracking-widest uppercase mt-0.5">SCORE</Text>
+                  <Text className="text-[#E50914] text-[10px] font-bold tracking-widest uppercase mt-0.5">SCORE</Text>
                 </View>
               </View>
 
@@ -850,7 +851,7 @@ function ProfileFeedVideoCard({
                       tempScoreRef.current = val;
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
-                    className={`px-3 py-1.5 rounded-lg border ${tempScore === val ? 'bg-[#E91E76] border-[#E91E76]' : 'bg-white/5 border-white/10'}`}
+                    className={`px-3 py-1.5 rounded-lg border ${tempScore === val ? 'bg-[#E50914] border-[#E50914]' : 'bg-white/5 border-white/10'}`}
                   >
                     <Text className={`text-xs font-semibold ${tempScore === val ? 'text-white' : 'text-[#9CA3AF]'}`}>{val.toFixed(1)}</Text>
                   </TouchableOpacity>
@@ -863,7 +864,7 @@ function ProfileFeedVideoCard({
                   saveScore(tempScore);
                   setShowJudgeModal(false);
                 }}
-                className="w-full bg-[#E91E76] h-12 rounded-xl items-center justify-center shadow-lg shadow-[#E91E76]/40"
+                className="w-full bg-[#E50914] h-12 rounded-xl items-center justify-center shadow-lg shadow-[#E50914]/40"
               >
                 <Text className="text-white font-bold text-base tracking-wide">
                   Confirm Rating • {tempScore.toFixed(1)} ★
@@ -901,6 +902,7 @@ export function ProfileView({
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isScoreBreakdownOpen, setIsScoreBreakdownOpen] = useState(false);
   const [isFansModalOpen, setIsFansModalOpen] = useState(false);
+  const [followersModalTab, setFollowersModalTab] = useState<'followers' | 'following'>('followers');
   const [showTicketsModal, setShowTicketsModal] = useState<string | null>(null);
   const [ticketTier, setTicketTier] = useState<string>("General");
   const [ticketQty, setTicketQty] = useState<number>(1);
@@ -1633,7 +1635,10 @@ export function ProfileView({
             </TouchableOpacity>
 
             <TouchableOpacity 
-              onPress={() => setIsFansModalOpen(true)}
+              onPress={() => {
+                setFollowersModalTab('followers');
+                setIsFansModalOpen(true);
+              }}
               style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
               className="flex-1 p-3 rounded-2xl border items-start min-h-[72px] justify-between">
               <Users color={theme.textSecondary} size={18} strokeWidth={2} />
@@ -2620,7 +2625,7 @@ export function ProfileView({
             <TouchableOpacity
               onPress={handleInvite}
               activeOpacity={0.8}
-              className="w-full bg-[#E91E76] h-[52px] rounded-full flex-row items-center justify-center"
+              className="w-full bg-[#E50914] h-[52px] rounded-full flex-row items-center justify-center"
             >
               <Text className="text-white font-bold text-[14px] tracking-widest uppercase">
                 Inquire for Private Booking
@@ -2836,8 +2841,8 @@ export function ProfileView({
                       }}
                     >
                       <View className="flex-row items-center gap-3">
-                        <LogOut color="#E91E76" size={20} />
-                        <Text className="text-[#E91E76] text-[16px] font-bold">
+                        <LogOut color="#E50914" size={20} />
+                        <Text className="text-[#E50914] text-[16px] font-bold">
                           Log out
                         </Text>
                       </View>
@@ -3284,70 +3289,13 @@ export function ProfileView({
         </Modal>
       )}
 
-      {/* Fans Modal */}
-      {isFansModalOpen && (
-        <Modal visible={true} transparent={true} animationType="slide">
-          <View className="flex-1 justify-end bg-black/60">
-            <View 
-              style={{ backgroundColor: theme.cardBg, borderTopColor: theme.border }}
-              className="w-full rounded-t-3xl border-t flex-col pb-8 pt-4 px-5"
-            >
-              <View className="flex-row justify-between items-center mb-6">
-                <View className="flex-row items-center gap-2">
-                  <Users color={theme.primary} size={20} />
-                  <Text className="text-[16px] font-bold" style={{ color: theme.text }}>
-                    Backers & Community
-                  </Text>
-                </View>
-                <TouchableOpacity onPress={() => setIsFansModalOpen(false)}>
-                  <X color={theme.textSecondary} size={24} />
-                </TouchableOpacity>
-              </View>
-
-              <View className="flex-col gap-2 mb-4">
-                {[
-                  { name: "Maya Krishnan", role: "Lead Patron • 14 Shows", color: "pink", icon: "MK" },
-                  { name: "Arjun Menon", role: "Verified Stage Peer", color: "amber", icon: "AM" },
-                  { name: "Bengaluru Live Club", role: "Curator", color: "blue", icon: "BL" }
-                ].map((fan, index) => (
-                  <View 
-                    key={index} 
-                    style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
-                    className="p-3 border rounded-xl flex-row items-center justify-between"
-                  >
-                    <View className="flex-row items-center gap-3">
-                      <View 
-                        style={{ backgroundColor: theme.cardBg }}
-                        className="w-10 h-10 rounded-full items-center justify-center"
-                      >
-                        <Text className="text-[12px] font-bold" style={{ color: theme.text }}>{fan.icon}</Text>
-                      </View>
-                      <View>
-                        <Text className="text-[14px] font-semibold" style={{ color: theme.text }}>{fan.name}</Text>
-                        <Text className="text-[12px]" style={{ color: theme.textSecondary }}>{fan.role}</Text>
-                      </View>
-                    </View>
-                    <Heart color={theme.primary} fill={theme.primary} size={16} />
-                  </View>
-                ))}
-              </View>
-
-              <TouchableOpacity
-                onPress={() => {
-                  setIsFansModalOpen(false);
-                  handleBackTalent();
-                }}
-                style={{ backgroundColor: theme.primary }}
-                className="h-[48px] rounded-full flex-row items-center justify-center mt-2"
-              >
-                <Text className="text-white font-bold text-[14px] tracking-widest uppercase">
-                  {backed ? "You are Backing this Talent" : `Back ${profileData?.name || "Aarav Nair"} (+0.1K)`}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-      )}
+      {/* Followers & Following Modal */}
+      <FollowersModal
+        visible={isFansModalOpen}
+        onClose={() => setIsFansModalOpen(false)}
+        userId={profileData?.id || user?.id || authUser?.id}
+        initialTab={followersModalTab}
+      />
 
       {/* Edit Profile Modal */}
       {isEditingProfile && (

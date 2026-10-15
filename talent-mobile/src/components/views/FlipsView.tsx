@@ -3,6 +3,7 @@ import { View, Text, Image, TouchableOpacity, useWindowDimensions, FlatList, Pla
 import { Bookmark, Sparkles, Send, MoreHorizontal, CheckCircle2, ChevronUp, Volume2, VolumeX } from 'lucide-react-native';
 import { useThemeStore } from '../../store/themeStore';
 import { resolveMediaUrl } from '../../utils/api';
+import { AppVideoPlayer } from '../ui/AppVideoPlayer';
 
 const BASE_FLIPS_DATA = [
   { 
@@ -135,51 +136,19 @@ function FlipSlideItem({
       className="bg-black relative"
     >
       {/* Main Background Media */}
-      {Platform.OS === 'web' ? (
-        <video 
-          ref={videoRef}
-          key={`${item.id}-${currentVideoSrc}`}
-          src={currentVideoSrc}
-          autoPlay={isActive}
-          loop 
-          muted={isMuted} 
-          playsInline 
-          poster={item.image}
-          onLoadedMetadata={() => {
-            if (videoRef.current) {
-              if (isActive) {
-                try {
-                  videoRef.current.currentTime = 0;
-                } catch (e) {}
-                videoRef.current.play().catch(() => {});
-              } else {
-                try {
-                  videoRef.current.pause();
-                  videoRef.current.currentTime = 0;
-                } catch (e) {}
-              }
-            }
-          }}
-          onError={() => {
-            if (!videoError) setVideoError(true);
-          }}
-          style={{ 
-            position: 'absolute', 
-            top: 0, 
-            left: 0, 
-            width: '100%', 
-            height: '100%', 
-            objectFit: 'cover',
-            opacity: 0.85
-          }} 
-        />
-      ) : (
-        <Image 
-          source={{ uri: item.image }} 
-          className="w-full h-full absolute inset-0 opacity-80"
-          style={{ resizeMode: 'cover' }}
-        />
-      )}
+      <AppVideoPlayer
+        src={currentVideoSrc}
+        poster={item.image}
+        isPlaying={isActive}
+        isMuted={isMuted}
+        videoRef={videoRef}
+        onError={() => {
+          if (!videoError) setVideoError(true);
+        }}
+        style={{
+          opacity: 0.88,
+        }}
+      />
         
       {/* Core UI Gradients for Cinematic Feel */}
       <View className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-80" />

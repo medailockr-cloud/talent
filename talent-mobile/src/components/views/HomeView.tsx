@@ -9,11 +9,13 @@ import Animated, {
   withTiming,
   runOnJS
 } from 'react-native-reanimated';
-import { Search, EyeOff, Play, Pause, Maximize2, MoreHorizontal, X, Bookmark, MessageCircle, Send, ChevronDown, ChevronRight, Gauge, MapPin, Flag, UserX, User, Bell, Volume2, VolumeX } from 'lucide-react-native';
+import { Search, EyeOff, Play, Pause, Maximize2, MoreHorizontal, X, Bookmark, MessageCircle, Send, ChevronDown, ChevronRight, Gauge, MapPin, Flag, UserX, User, Bell, Volume2, VolumeX, Trophy, Eye, Mic } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useFeed } from '../../hooks/useFeed';
 import { api, resolveMediaUrl } from '../../utils/api';
 import { useThemeStore } from '../../store/themeStore';
+import { AppVideoPlayer } from '../ui/AppVideoPlayer';
+import { LeaderboardModal } from '../ui/LeaderboardModal';
 
 const HEADER_HEIGHT = 130;
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -31,7 +33,6 @@ const initialFeedData = [
     videoUrl: 'http://localhost:3000/uploads/performer_1.mp4',
     isRising: true,
     isNearby: false,
-    isLive: false,
     comments: [
       { id: 'c1', user: 'Arjun Mehta', text: 'Your expression during the final section was powerful.', time: '12m', isUseful: false },
       { id: 'c2', user: 'Riya Sharma', text: 'The ending felt slightly rushed. A longer hold on the final pose could make it stronger.', time: '20m', isFeedback: true, isUseful: false },
@@ -51,7 +52,6 @@ const initialFeedData = [
     videoUrl: 'http://localhost:3000/uploads/performer_2.mp4',
     isRising: false,
     isNearby: true,
-    isLive: true,
     comments: []
   },
   {
@@ -65,7 +65,6 @@ const initialFeedData = [
     videoUrl: 'http://localhost:3000/uploads/performer_3.mp4',
     isRising: true,
     isNearby: false,
-    isLive: false,
     comments: []
   },
   {
@@ -79,7 +78,6 @@ const initialFeedData = [
     videoUrl: 'http://localhost:3000/uploads/performer_4.mp4',
     isRising: false,
     isNearby: false,
-    isLive: true,
     comments: []
   },
   {
@@ -93,7 +91,6 @@ const initialFeedData = [
     videoUrl: 'http://localhost:3000/uploads/performer_5.mp4',
     isRising: true,
     isNearby: true,
-    isLive: false,
     comments: []
   },
   {
@@ -107,7 +104,6 @@ const initialFeedData = [
     videoUrl: 'http://localhost:3000/uploads/performer_1.mp4',
     isRising: false,
     isNearby: true,
-    isLive: false,
     comments: []
   }
 ];
@@ -120,7 +116,8 @@ function FeedVideoCard({
   isMuted,
   setIsMuted,
   onVisible,
-  onManualToggle
+  onManualToggle,
+  isBlindMode
 }: { 
   video: any; 
   playingVideoId: string | null; 
@@ -130,6 +127,7 @@ function FeedVideoCard({
   setIsMuted: (val: boolean) => void;
   onVisible?: (id: string) => void;
   onManualToggle?: (id: string, willPlay: boolean) => void;
+  isBlindMode?: boolean;
 }) {
   const router = useRouter();
   const { theme } = useThemeStore();
@@ -137,6 +135,7 @@ function FeedVideoCard({
   const containerRef = useRef<any>(null);
   
   // Interactive States
+  const [isRevealed, setIsRevealed] = useState(false);
   const [isKept, setIsKept] = useState(video.isLiked || false);
   const [keptText, setKeptText] = useState(video.isLiked ? 'KEPT ✓' : 'KEEP');
   
@@ -270,7 +269,10 @@ function FeedVideoCard({
     }
   }, [judgeScore]);
 
+  const isBlind = Boolean(isBlindMode && !isRevealed && judgeScore === null);
+
   const saveScore = (score: number) => {
+    setIsRevealed(true);
     const finalScore = parseFloat(Math.max(1.0, Math.min(10.0, score)).toFixed(1));
     setJudgeScore(finalScore);
     judgeScoreRef.current = finalScore;
@@ -418,36 +420,18 @@ function FeedVideoCard({
         onPress={togglePlay}
         className="relative w-full aspect-[4/5] rounded-[18px] overflow-hidden border border-white/10 bg-[#000] mb-3.5"
       >
-        {Platform.OS === 'web' ? (
-          <video 
-            ref={videoRef}
-            key={`${video.id}-${srcToUse}`}
-            src={srcToUse} 
-            autoPlay={isPlaying}
-            loop
-            muted={!isPlaying || isMuted}
-            playsInline
-            poster={video.videoThumb || video.thumbnailUrl || 'https://images.unsplash.com/photo-1547153760-18fc86324498?w=800&q=80'}
-            onTimeUpdate={(e: any) => {
-              if (e?.target) setCurrentTime(e.target.currentTime);
-            }}
-            onLoadedMetadata={(e: any) => {
-              if (e?.target) setDuration(e.target.duration);
-            }}
-            onError={() => {
-              if (!videoError) setVideoError(true);
-            }}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-          />
-        ) : (
-          <View className="flex-1 items-center justify-center bg-black">
-            <Image 
-              source={{ uri: video.videoThumb || video.thumbnailUrl || 'https://images.unsplash.com/photo-1547153760-18fc86324498?w=800&q=80' }} 
-              className="w-full h-full opacity-90 absolute" 
-              resizeMode="cover"
-            />
-          </View>
-        )}
+        <AppVideoPlayer
+          src={srcToUse}
+          poster={video.videoThumb || video.thumbnailUrl || 'https://images.unsplash.com/photo-1547153760-18fc86324498?w=800&q=80'}
+          isPlaying={isPlaying}
+          isMuted={!isPlaying || isMuted}
+          videoRef={videoRef}
+          onTimeUpdate={(t) => setCurrentTime(t)}
+          onLoadedMetadata={(d) => setDuration(d)}
+          onError={() => {
+            if (!videoError) setVideoError(true);
+          }}
+        />
         
         {/* Smooth Cinematic Vignette Gradient Overlay (No harsh center band) */}
         <View 
@@ -461,14 +445,14 @@ function FeedVideoCard({
         {/* Top Header Row: Category Badge & Hidden Metrics (Guaranteed Non-Colliding) */}
         <View pointerEvents="none" className="absolute top-3.5 inset-x-3.5 flex-row items-center justify-between z-10">
           <View className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15">
-            <View className="w-1.5 h-1.5 rounded-full bg-[#E91E76]" />
+            <View className="w-1.5 h-1.5 rounded-full bg-[#E50914]" />
             <Text className="text-[10px] font-bold tracking-wider text-white uppercase">PERFORMANCE</Text>
             <View className="w-1 h-1 rounded-full bg-white/40" />
             <Text className="text-white/80 text-[10px] font-semibold">{formatTime(duration) || video.duration || '0:58'}</Text>
           </View>
 
           <View className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 flex-row items-center gap-1.5">
-            <EyeOff color="#E91E76" size={11} strokeWidth={2.2} />
+            <EyeOff color="#E50914" size={11} strokeWidth={2.2} />
             <Text className="text-[9px] font-bold tracking-wider text-white uppercase">METRICS HIDDEN</Text>
           </View>
         </View>
@@ -547,7 +531,7 @@ function FeedVideoCard({
           <View pointerEvents="none" className="absolute inset-0 bg-black/75 backdrop-blur-sm items-center justify-center z-30">
             <Text 
               className="text-white text-[82px] font-black tracking-tighter"
-              style={{ textShadowColor: 'rgba(233,30,118,0.6)', textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 20 }}
+              style={{ textShadowColor: 'rgba(229,9,20,0.6)', textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 20 }}
             >
               {tempScore.toFixed(1)}
             </Text>
@@ -560,6 +544,36 @@ function FeedVideoCard({
             </View>
           </View>
         )}
+        {/* Blind Audition Curtain Overlay */}
+        {isBlind && (
+          <View className="absolute inset-0 z-20 bg-black/85 backdrop-blur-md items-center justify-center p-6">
+            <View 
+              style={{ backgroundColor: theme.primary + '25', borderColor: theme.primary }}
+              className="w-16 h-16 rounded-full items-center justify-center border-2 mb-3 shadow-lg"
+            >
+              <EyeOff color={theme.primary} size={30} />
+            </View>
+            <Text className="text-white text-[17px] font-black tracking-wider uppercase text-center mb-1">
+              BLIND AUDITION
+            </Text>
+            <Text className="text-white/70 text-[11px] text-center max-w-[240px] mb-4 leading-4">
+              Evaluate purely by audio resonance. Slide to judge (1.0-10.0) or tap reveal.
+            </Text>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={(e: any) => {
+                if (e?.stopPropagation) e.stopPropagation();
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                setIsRevealed(true);
+              }}
+              style={{ backgroundColor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.3)' }}
+              className="px-4 py-2 rounded-full border flex-row items-center gap-2"
+            >
+              <Eye color="#fff" size={14} />
+              <Text className="text-white text-[11px] font-bold tracking-wide">Reveal Performer</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </TouchableOpacity>
 
       {/* Author Profile Row */}
@@ -568,26 +582,40 @@ function FeedVideoCard({
           activeOpacity={0.8}
           className="flex-row items-center gap-3 flex-1 mr-2"
           onPress={() => {
+            if (isBlind) {
+              setIsRevealed(true);
+              return;
+            }
             const userId = video.authorId || video.author?.id || video.id;
             router.push(`/profile/${userId}` as any);
           }}
         >
           <View 
-            style={{ borderColor: theme.border }}
-            className="w-11 h-11 rounded-full overflow-hidden border-2 shadow-md"
+            style={{ borderColor: theme.border, backgroundColor: theme.surfaceBg }}
+            className="w-11 h-11 rounded-full overflow-hidden border-2 shadow-md items-center justify-center"
           >
-            <Image source={{ uri: video.avatar || video.authorAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100' }} className="w-full h-full" />
+            {isBlind ? (
+              <EyeOff color={theme.primary} size={20} />
+            ) : (
+              <Image source={{ uri: video.avatar || video.authorAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100' }} className="w-full h-full" />
+            )}
           </View>
           <View className="flex-1">
-            <Text style={{ color: theme.text }} className="text-[15px] font-bold mb-0.5" numberOfLines={1}>{video.author}</Text>
+            <Text style={{ color: theme.text }} className="text-[15px] font-bold mb-0.5" numberOfLines={1}>
+              {isBlind ? "Blind Audition Contestant" : video.author}
+            </Text>
             <View className="flex-row items-center gap-1.5 mb-1">
-              <Text style={{ color: theme.textSecondary }} className="text-[11px]">{(video.role || 'Artist').split('•')[0].trim()}</Text>
+              <Text style={{ color: theme.textSecondary }} className="text-[11px]">
+                {isBlind ? "Unbiased Talent Pool" : (video.role || 'Artist').split('•')[0].trim()}
+              </Text>
               <Text style={{ color: theme.textSecondary }} className="text-[11px]">•</Text>
               <MapPin color={theme.textSecondary} size={10} />
-              <Text style={{ color: theme.textSecondary }} className="text-[11px]">{(video.role || 'World').split('•')[1]?.trim() || 'World'}</Text>
+              <Text style={{ color: theme.textSecondary }} className="text-[11px]">
+                {isBlind ? "Hidden City" : ((video.role || 'World').split('•')[1]?.trim() || 'World')}
+              </Text>
             </View>
             <View className="flex-row items-center gap-1.5 flex-wrap">
-              {(video.tags || video.hashtags || ['#performance', '#talent']).slice(0, 3).map((tag: any, idx: number) => {
+              {(isBlind ? ['#blindaudition', '#purevoice', '#talent'] : (video.tags || video.hashtags || ['#performance', '#talent'])).slice(0, 3).map((tag: any, idx: number) => {
                 const tagText = typeof tag === 'string' ? tag : tag?.name ? `#${tag.name}` : '#performance';
                 return (
                   <Text key={idx} style={{ color: theme.primary }} className="text-[10px] font-medium opacity-80">{tagText}</Text>
@@ -861,24 +889,21 @@ function FeedVideoCard({
 export function HomeView({ user }: { user?: any }) {
   const { theme } = useThemeStore();
   const [activeFeedTab, setActiveFeedTab] = useState('For You');
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   
   // Search & Filters state removed for dedicated screens
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
 
-  const { videos: feedData, isLoading, refetch } = useFeed();
+  const { videos: feedData, isLoading, isRefreshing, isLoadingMore, hasMore, refetch, loadMore } = useFeed();
   const effectiveFeed = (feedData && feedData.length > 0) ? feedData : initialFeedData;
-  const [extraVideos, setExtraVideos] = useState<any[]>([]);
   const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
   const [isGlobalMuted, setIsGlobalMuted] = useState(true);
   const manuallyPausedIdRef = useRef<string | null>(null);
   const autoPlayDebounceRef = useRef<any>(null);
-
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const isLoadingMoreRef = useRef(false);
   const sentinelRef = useRef<any>(null);
 
-  const allFeedItems = [...effectiveFeed, ...extraVideos];
+  const allFeedItems = effectiveFeed;
 
   const hasInitializedPlayingRef = useRef(false);
 
@@ -905,24 +930,9 @@ export function HomeView({ user }: { user?: any }) {
   }, []);
 
   const triggerAutoLoadMore = () => {
-    if (isLoadingMoreRef.current) return;
-    isLoadingMoreRef.current = true;
-    setIsLoadingMore(true);
-
-    setTimeout(() => {
-      setExtraVideos(prev => {
-        const sourceList = (feedData && feedData.length > 0) ? feedData : initialFeedData;
-        const newItems = sourceList.map((item, idx) => ({
-          ...item,
-          id: `${item.id}-page-${prev.length + idx + 1}`
-        }));
-        return [...prev, ...newItems];
-      });
-      setIsLoadingMore(false);
-      setTimeout(() => {
-        isLoadingMoreRef.current = false;
-      }, 400);
-    }, 300);
+    if (hasMore && !isLoadingMore) {
+      loadMore();
+    }
   };
 
   // IntersectionObserver for automatic infinite loading on Web
@@ -958,7 +968,7 @@ export function HomeView({ user }: { user?: any }) {
     let matchesTab = true;
     if (activeFeedTab === 'Rising') matchesTab = v.isRising;
     if (activeFeedTab === 'Nearby') matchesTab = v.isNearby;
-    if (activeFeedTab === 'Live') matchesTab = v.isLive;
+    if (activeFeedTab === 'Blind Audition') matchesTab = true;
     
     return matchesTab;
   });
@@ -1058,21 +1068,24 @@ export function HomeView({ user }: { user?: any }) {
             <Text className="font-bold text-[32px] tracking-tight leading-none font-serif" style={{ color: theme.text }}>talent</Text>
             <Text className="font-bold text-[32px] leading-none ml-[1px] font-serif" style={{ color: theme.primary }}>.</Text>
           </View>
-          <View className="flex-row items-center gap-6">
+          <View className="flex-row items-center gap-5">
+            <TouchableOpacity activeOpacity={0.7} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setIsLeaderboardOpen(true); }}>
+              <Trophy color="#F59E0B" size={23} strokeWidth={2.2} />
+            </TouchableOpacity>
             <TouchableOpacity activeOpacity={0.7} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/search' as any); }}>
-              <Search color={theme.text} size={24} strokeWidth={2} />
+              <Search color={theme.text} size={23} strokeWidth={2} />
             </TouchableOpacity>
             <TouchableOpacity activeOpacity={0.7} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/messages' as any); }}>
-              <MessageCircle color={theme.text} size={24} strokeWidth={2} />
+              <MessageCircle color={theme.text} size={23} strokeWidth={2} />
             </TouchableOpacity>
             <TouchableOpacity activeOpacity={0.7} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/notifications' as any); }}>
-              <Bell color={theme.text} size={24} strokeWidth={2} />
+              <Bell color={theme.text} size={23} strokeWidth={2} />
             </TouchableOpacity>
           </View>
         </View>
         
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 10 }}>
-          {['For You', 'Rising', 'Nearby', 'Live', 'All Genres'].map((tab) => {
+          {['For You', 'Rising', 'Blind Audition', 'Nearby', 'All Genres'].map((tab) => {
             const isActive = activeFeedTab === tab;
             return (
               <TouchableOpacity activeOpacity={0.7}
@@ -1092,8 +1105,8 @@ export function HomeView({ user }: { user?: any }) {
                 >
                   {tab}
                 </Text>
-                {tab === 'Live' && (
-                  <View style={{ backgroundColor: theme.primary }} className="w-1.5 h-1.5 rounded-full ml-2 -mt-1" />
+                {tab === 'Blind Audition' && (
+                  <EyeOff color={isActive ? theme.primary : theme.textSecondary} size={13} style={{ marginLeft: 6 }} />
                 )}
                 {tab === 'All Genres' && (
                   <ChevronDown color={theme.textSecondary} size={14} className="ml-1" />
@@ -1131,6 +1144,7 @@ export function HomeView({ user }: { user?: any }) {
                 setIsMuted={setIsGlobalMuted}
                 onVisible={handleCardVisible}
                 onManualToggle={handleManualToggle}
+                isBlindMode={activeFeedTab === 'Blind Audition'}
               />
             ))}
 
@@ -1149,6 +1163,12 @@ export function HomeView({ user }: { user?: any }) {
           </>
         )}
       </Animated.ScrollView>
+
+      {/* Weekly Leaderboard Modal */}
+      <LeaderboardModal 
+        visible={isLeaderboardOpen} 
+        onClose={() => setIsLeaderboardOpen(false)} 
+      />
     </View>
   );
 }

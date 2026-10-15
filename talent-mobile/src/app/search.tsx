@@ -53,7 +53,13 @@ export default function DiscoverScreen() {
         className="px-4 pt-12 pb-4 border-b flex-row items-center gap-3"
       >
         <TouchableOpacity 
-          onPress={() => router.back()} 
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/');
+            }
+          }}
           style={{ backgroundColor: theme.surfaceBg }}
           className="w-10 h-10 items-center justify-center rounded-full"
         >

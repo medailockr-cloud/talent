@@ -504,7 +504,7 @@ export function renderStageThumbnail(
     ctx.fillRect(0, 0, width, height);
     drawBokeh(ctx, width * 0.5, height * 0.5, 90, 'rgba(255, 80, 80, 0.7)');
   } else if (palette === 'creatorjam') {
-    // Concert stage with blue & pink concert lighting & silhouette of audience hands
+    // Concert stage with blue & red concert lighting & silhouette of audience hands
     const g = ctx.createLinearGradient(0, 0, width, height);
     g.addColorStop(0, '#100D30');
     g.addColorStop(0.5, '#351240');
@@ -512,7 +512,7 @@ export function renderStageThumbnail(
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, width, height);
     drawBokeh(ctx, width * 0.3, height * 0.35, 110, 'rgba(60, 140, 255, 0.7)');
-    drawBokeh(ctx, width * 0.7, height * 0.35, 110, 'rgba(233, 30, 118, 0.75)');
+    drawBokeh(ctx, width * 0.7, height * 0.35, 110, 'rgba(229, 9, 20, 0.75)');
     // Crowd hands raised at bottom
     ctx.fillStyle = '#05030A';
     for (let x = 10; x < width; x += 28) {

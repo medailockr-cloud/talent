@@ -45,7 +45,7 @@ export const resolveMediaUrl = (url?: string | null): string => {
 
 export const api = axios.create({
   baseURL: API_URL,
-  timeout: 10000, // 10 seconds
+  timeout: 60000, // 60 seconds (allows Render free tier cold-starts to wake up)
 });
 
 // Interceptor to automatically attach JWT token to every request
