@@ -134,7 +134,14 @@ export function LeaderboardModal({ visible, onClose }: LeaderboardModalProps) {
             </View>
           ) : (
             <ScrollView className="flex-1 p-4" contentContainerStyle={{ paddingBottom: 50 }}>
-              {/* TOP 3 PODIUM */}
+              {performers.length === 0 ? (
+                <View className="items-center justify-center py-20">
+                  <Trophy color={theme.textSecondary} size={36} style={{ opacity: 0.3, marginBottom: 12 }} />
+                  <Text style={{ color: theme.textSecondary }} className="text-[14px]">No leaderboard rankings yet.</Text>
+                </View>
+              ) : (
+                <>
+                  {/* TOP 3 PODIUM */}
               {top3.length > 0 && (
                 <View className="flex-row items-end justify-center gap-2 mb-8 pt-4">
                   {/* 2nd Place */}
@@ -152,7 +159,7 @@ export function LeaderboardModal({ visible, onClose }: LeaderboardModalProps) {
                           source={{
                             uri:
                               top3[1].performer?.avatarUrl ||
-                              'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100',
+                              `https://ui-avatars.com/api/?name=${encodeURIComponent(top3[1].performer?.name || top3[1].performer?.username || 'User')}&background=94A3B8&color=000`,
                           }}
                           className="w-16 h-16 rounded-full border-2 border-[#94A3B8]"
                         />
@@ -193,7 +200,7 @@ export function LeaderboardModal({ visible, onClose }: LeaderboardModalProps) {
                           source={{
                             uri:
                               top3[0].performer?.avatarUrl ||
-                              'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100',
+                              `https://ui-avatars.com/api/?name=${encodeURIComponent(top3[0].performer?.name || top3[0].performer?.username || 'User')}&background=EAB308&color=000`,
                           }}
                           className="w-20 h-20 rounded-full border-2 border-[#EAB308] shadow-lg"
                         />
@@ -231,7 +238,7 @@ export function LeaderboardModal({ visible, onClose }: LeaderboardModalProps) {
                           source={{
                             uri:
                               top3[2].performer?.avatarUrl ||
-                              'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100',
+                              `https://ui-avatars.com/api/?name=${encodeURIComponent(top3[2].performer?.name || top3[2].performer?.username || 'User')}&background=CD7F32&color=fff`,
                           }}
                           className="w-16 h-16 rounded-full border-2 border-[#CD7F32]"
                         />
@@ -313,6 +320,8 @@ export function LeaderboardModal({ visible, onClose }: LeaderboardModalProps) {
                   </TouchableOpacity>
                 ))}
               </View>
+                </>
+              )}
             </ScrollView>
           )}
         </View>

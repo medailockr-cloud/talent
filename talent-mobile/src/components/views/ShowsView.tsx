@@ -156,7 +156,7 @@ export function ShowsView() {
         title: newTitle.trim(),
         location: locString,
         date: newDate,
-        image: newImage.trim() || 'https://images.unsplash.com/photo-1516280440503-6c8c4a93883a?w=800&q=80',
+        image: newImage.trim() || '',
       });
 
       if (res.data) {
@@ -368,9 +368,7 @@ export function ShowsView() {
                   >
                     <Image
                       source={{
-                        uri:
-                          show.image ||
-                          'https://images.unsplash.com/photo-1516280440503-6c8c4a93883a?w=800&q=80',
+                        uri: show.image || '',
                       }}
                       className="w-full h-full opacity-80"
                       resizeMode="cover"
@@ -722,7 +720,7 @@ export function ShowsView() {
                 <TextInput
                   value={newImage}
                   onChangeText={setNewImage}
-                  placeholder="https://images.unsplash.com/..."
+                  placeholder="https://example.com/poster.jpg"
                   placeholderTextColor={theme.textSecondary}
                   style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border, color: theme.text }}
                   className="px-4 py-3 rounded-xl border text-[14px]"

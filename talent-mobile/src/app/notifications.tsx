@@ -31,50 +31,10 @@ export default function NotificationsScreen() {
   const fetchNotifications = async () => {
     try {
       const res = await api.get('/notifications');
-      if (res.data?.notifications && res.data.notifications.length > 0) {
+      if (Array.isArray(res.data?.notifications)) {
         setNotifications(res.data.notifications);
       } else {
-        // Fallback realistic notification seed for vibrant experience
-        setNotifications([
-          {
-            id: 101,
-            type: 'LIKE',
-            isRead: false,
-            createdAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-            actor: {
-              id: 2,
-              name: 'Kiara Nair',
-              username: 'kiara_dance',
-              avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120',
-            },
-            video: { id: 1, title: 'Contemporary Flow' },
-          },
-          {
-            id: 102,
-            type: 'RATING',
-            isRead: false,
-            createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
-            actor: {
-              id: 3,
-              name: 'Arjun Menon',
-              username: 'arjun_acoustic',
-              avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120',
-            },
-            video: { id: 1, title: 'Contemporary Flow' },
-          },
-          {
-            id: 103,
-            type: 'FOLLOW',
-            isRead: true,
-            createdAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
-            actor: {
-              id: 4,
-              name: 'Meera Rao',
-              username: 'meera_strings',
-              avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120',
-            },
-          },
-        ]);
+        setNotifications([]);
       }
     } catch (error) {
       console.warn('Notifications fetch error:', error);

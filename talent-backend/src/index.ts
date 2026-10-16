@@ -37,8 +37,6 @@ Sentry.init({
   ],
   tracesSampleRate: 1.0,
 });
-
-Sentry.setupExpressErrorHandler(app);
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*' }
@@ -2075,6 +2073,8 @@ app.post('/api/shows/:showId/book', requireAuth, async (req: any, res: any) => {
     res.status(500).json({ error: 'Booking failed' });
   }
 });
+
+Sentry.setupExpressErrorHandler(app);
 
 // Global error handler (handles Multer errors, boundary issues, etc.)
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {

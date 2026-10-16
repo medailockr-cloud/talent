@@ -5,63 +5,7 @@ import { useThemeStore } from '../../store/themeStore';
 import { resolveMediaUrl } from '../../utils/api';
 import { AppVideoPlayer } from '../ui/AppVideoPlayer';
 
-const BASE_FLIPS_DATA = [
-  { 
-    id: '1', 
-    name: 'Aarav Menon', 
-    role: 'Acoustic Indie • Bengaluru', 
-    videoUrl: 'http://localhost:3000/uploads/performer_1.mp4',
-    backupVideoUrl: 'http://localhost:3000/uploads/performer_2.mp4',
-    image: 'https://images.unsplash.com/photo-1516280440503-6c8c4a93883a?w=800&q=80', 
-    tags: ['Original Music', 'Acoustic', 'Live Vocals'], 
-    talentScore: 92,
-    isVerified: true
-  },
-  { 
-    id: '2', 
-    name: 'Maya Sen', 
-    role: 'Classical Violin • Mumbai', 
-    videoUrl: 'http://localhost:3000/uploads/performer_2.mp4',
-    backupVideoUrl: 'http://localhost:3000/uploads/performer_3.mp4',
-    image: 'https://images.unsplash.com/photo-1460723237483-7a6dc9d0b212?w=800&q=80', 
-    tags: ['Classical', 'Instrumental', 'Symphony'], 
-    talentScore: 88,
-    isVerified: false
-  },
-  { 
-    id: '3', 
-    name: 'The Groove Crew', 
-    role: 'Street Dance • Kochi', 
-    videoUrl: 'http://localhost:3000/uploads/performer_3.mp4',
-    backupVideoUrl: 'http://localhost:3000/uploads/performer_4.mp4',
-    image: 'https://images.unsplash.com/photo-1535525153412-5a42439a210d?w=800&q=80', 
-    tags: ['Hip Hop', 'Freestyle', 'Crew'], 
-    talentScore: 96,
-    isVerified: true
-  },
-  {
-    id: '4',
-    name: 'Kiara Nair',
-    role: 'Contemporary Stage • Delhi',
-    videoUrl: 'http://localhost:3000/uploads/performer_4.mp4',
-    backupVideoUrl: 'http://localhost:3000/uploads/performer_5.mp4',
-    image: 'https://images.unsplash.com/photo-1547153760-18fc86324498?w=800&q=80',
-    tags: ['Contemporary', 'Spotlight', 'Original Choreography'],
-    talentScore: 95,
-    isVerified: true
-  },
-  {
-    id: '5',
-    name: 'Kabir Shah',
-    role: 'Studio Vocals & Beatbox • Mumbai',
-    videoUrl: 'http://localhost:3000/uploads/performer_5.mp4',
-    backupVideoUrl: 'http://localhost:3000/uploads/performer_1.mp4',
-    image: 'https://images.unsplash.com/photo-1516280440502-a2fc9977823b?w=800&q=80',
-    tags: ['Beatbox', 'Studio Take', 'Vocal Percussion'],
-    talentScore: 91,
-    isVerified: false
-  }
-];
+const BASE_FLIPS_DATA: any[] = [];
 
 // Export alias for backward compatibility with external imports or Hot-Reload cache
 export const FLIPS_DATA = BASE_FLIPS_DATA;
@@ -85,8 +29,8 @@ function FlipSlideItem({
   const [videoError, setVideoError] = useState(false);
   const videoRef = useRef<any>(null);
   const currentVideoSrc = resolveMediaUrl(videoError
-    ? (item.backupVideoUrl || 'http://localhost:3000/uploads/performer_1.mp4')
-    : (item.videoUrl || 'http://localhost:3000/uploads/performer_1.mp4'));
+    ? (item.backupVideoUrl || '')
+    : (item.videoUrl || ''));
 
   // Update muted state without resetting video time
   useEffect(() => {
@@ -219,7 +163,7 @@ function FlipSlideItem({
       <View className="absolute bottom-28 left-5 right-24 z-20">
         {/* Tags */}
         <View className="flex-row flex-wrap gap-2 mb-4">
-          {item.tags.map((tag, i) => (
+          {item.tags?.map((tag: string, i: number) => (
             <View key={i} className="px-3 py-1.5 rounded-full border border-white/20 bg-white/10 backdrop-blur-md">
               <Text className="text-white font-medium text-[11px] tracking-wide">{tag}</Text>
             </View>
@@ -386,6 +330,15 @@ export function FlipsView() {
       width={width}
     />
   );
+
+  if (flipsData.length === 0) {
+    return (
+      <View className="flex-1 bg-black items-center justify-center px-6">
+        <Text className="text-white text-[16px] font-bold text-center">No Flips yet</Text>
+        <Text className="text-zinc-500 text-[13px] text-center mt-1.5">Short-form audition reels will appear here.</Text>
+      </View>
+    );
+  }
 
   return (
     <View className="flex-1 bg-black">

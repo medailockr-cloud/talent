@@ -74,19 +74,10 @@ import { useThemeStore, THEMES, ThemeId } from "../../store/themeStore";
 import { FollowersModal } from "../ui/FollowersModal";
 import io from "socket.io-client";
 
-const coverImg =
-  "https://images.unsplash.com/photo-1493225457124-a1a2a4fa3e93?w=800&q=80";
-const avatarImg =
-  "https://images.unsplash.com/photo-1493225457124-a1a2a4fa3e93?w=200&q=80";
+const coverImg = "";
+const avatarImg = "https://ui-avatars.com/api/?name=User&background=E50914&color=fff";
 
-// Real dummy video URLs served from local backend uploads
-const dummyVideos = [
-  resolveMediaUrl("http://localhost:3000/uploads/performer_1.mp4"),
-  resolveMediaUrl("http://localhost:3000/uploads/performer_2.mp4"),
-  resolveMediaUrl("http://localhost:3000/uploads/performer_3.mp4"),
-  resolveMediaUrl("http://localhost:3000/uploads/performer_4.mp4"),
-  resolveMediaUrl("http://localhost:3000/uploads/performer_5.mp4"),
-];
+
 
 // Helper to detect image media
 const isMediaImage = (url?: string) => {
@@ -365,18 +356,6 @@ function ShowPreviewModal({
                 </Text>
               </View>
               <View className="flex-row gap-3">
-                <Image
-                  source={{
-                    uri: "https://images.unsplash.com/photo-1540039155733-d7696d4eb98e?w=200",
-                  }}
-                  className="w-[100px] h-[80px] rounded-xl opacity-80"
-                />
-                <Image
-                  source={{
-                    uri: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=200",
-                  }}
-                  className="w-[100px] h-[80px] rounded-xl opacity-80"
-                />
               </View>
             </View>
 
@@ -1414,10 +1393,7 @@ export function ProfileView({
               const videoId = String(video.id || i);
               const title = editedTitles[videoId] || video.title || "Performance Take";
               const videoThumb =
-                video.thumbnailUrl ||
-                (i === 0
-                  ? "https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=800&q=80"
-                  : "https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=300");
+                video.thumbnailUrl || video.url || "";
               return (
                 <ProfileFeedVideoCard
                   key={videoId}
@@ -1429,7 +1405,7 @@ export function ProfileView({
                     avatar: profileData?.avatarUrl || avatarImg,
                     videoThumb: videoThumb,
                     duration: video.duration || "0:58",
-                    videoUrl: video.url || dummyVideos[0],
+                    videoUrl: video.url || "",
                     userRating: video.userRating,
                   }}
                   playingVideoId={playingVideoId}
@@ -1445,7 +1421,7 @@ export function ProfileView({
                     openPostOptions({
                       id: videoId,
                       title: title,
-                      videoUrl: video.url || dummyVideos[0],
+                      videoUrl: video.url || "",
                       img: videoThumb,
                       time: video.duration || "0:58",
                       isImg: isMediaImage(video.url),
@@ -1913,45 +1889,12 @@ export function ProfileView({
               </View>
 
               {(() => {
-                const fallbackPerformances = [
-                  {
-                    id: "dummy-1",
-                    title: "Monsoon Motion",
-                    time: "03:24",
-                    img: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300",
-                    videoUrl: dummyVideos[1],
-                    isImg: false,
-                  },
-                  {
-                    id: "dummy-2",
-                    title: "City Lights",
-                    time: "02:48",
-                    img: "https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=300",
-                    videoUrl: dummyVideos[2],
-                    isImg: false,
-                  },
-                  {
-                    id: "dummy-3",
-                    title: "Falling Again",
-                    time: "03:10",
-                    img: "https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=300",
-                    videoUrl: dummyVideos[3],
-                    isImg: false,
-                  },
-                  {
-                    id: "dummy-4",
-                    title: "Studio Pulse",
-                    time: "01:54",
-                    img: "https://images.unsplash.com/photo-1516280440502-a2fc9977823b?w=300",
-                    videoUrl: dummyVideos[4],
-                    isImg: false,
-                  },
-                ];
+                const fallbackPerformances: any[] = [];
 
                 const hasUploadedVideos = Boolean(profileData?.videos && profileData.videos.length > 0);
                 const availableVideos = hasUploadedVideos
                   ? profileData.videos.filter((v: any) => !deletedVideoIds.has(String(v.id || '')))
-                  : fallbackPerformances.filter((f: any) => !deletedVideoIds.has(String(f.id)));
+                  : [];
 
                 // Pick pinned or first
                 const pinned = pinnedVideoId
@@ -1985,12 +1928,12 @@ export function ProfileView({
                 }
 
                 const featuredId = String(featuredVideo.id);
-                const featuredVideoUrl = featuredVideo.url || featuredVideo.videoUrl || dummyVideos[0];
+                const featuredVideoUrl = featuredVideo.url || featuredVideo.videoUrl || "";
                 const featuredTitle = editedTitles[featuredId] || featuredVideo.title || "Acoustic Sunset Sessions";
                 const isImg = isMediaImage(featuredVideoUrl);
                 const featuredCategory = featuredVideo.category || (isImg ? "Visual Art" : "Performance");
                 const featuredViews = featuredVideo.views ? `${featuredVideo.views} views` : "3.2M views";
-                const posterUrl = featuredVideo.thumbnailUrl || featuredVideo.img || "https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=800&q=80";
+                const posterUrl = featuredVideo.thumbnailUrl || featuredVideo.img || featuredVideo.url || "";
 
                 return (
                   <TouchableOpacity
@@ -2138,41 +2081,6 @@ export function ProfileView({
                 contentContainerStyle={{ paddingRight: 40, gap: 12 }}
               >
                 {(() => {
-                  const fallbackPerformances = [
-                    {
-                      id: "dummy-1",
-                      title: "Monsoon Motion",
-                      time: "03:24",
-                      img: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300",
-                      videoUrl: dummyVideos[1],
-                      isImg: false,
-                    },
-                    {
-                      id: "dummy-2",
-                      title: "City Lights",
-                      time: "02:48",
-                      img: "https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=300",
-                      videoUrl: dummyVideos[2],
-                      isImg: false,
-                    },
-                    {
-                      id: "dummy-3",
-                      title: "Falling Again",
-                      time: "03:10",
-                      img: "https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=300",
-                      videoUrl: dummyVideos[3],
-                      isImg: false,
-                    },
-                    {
-                      id: "dummy-4",
-                      title: "Studio Pulse",
-                      time: "01:54",
-                      img: "https://images.unsplash.com/photo-1516280440502-a2fc9977823b?w=300",
-                      videoUrl: dummyVideos[4],
-                      isImg: false,
-                    },
-                  ];
-
                   const rawItems =
                     profileData?.videos && profileData.videos.length > 0
                       ? profileData.videos.map((v: any, idx: number) => {
@@ -2184,16 +2092,12 @@ export function ProfileView({
                             time: isImg ? "Photo" : (v.duration || "02:40"),
                             img: isImg
                               ? v.url
-                              : v.thumbnailUrl ||
-                                fallbackPerformances[idx % fallbackPerformances.length].img,
+                              : (v.thumbnailUrl || ""),
                             videoUrl: v.url,
                             isImg,
                           };
                         })
-                      : fallbackPerformances.map((f: any) => ({
-                          ...f,
-                          title: editedTitles[f.id] || f.title,
-                        }));
+                      : [];
 
                   const itemsToDisplay = rawItems
                     .filter((perf: any) => !deletedVideoIds.has(String(perf.id)))
@@ -2373,28 +2277,8 @@ export function ProfileView({
                 className="pl-5"
                 contentContainerStyle={{ paddingRight: 40, gap: 12 }}
               >
-                {(shows && shows.length > 0 ? shows : [
-                  {
-                    id: 1,
-                    date: "2024-10-24",
-                    title: "Live at The Next Stage",
-                    location: "Bengaluru, India • ₹799",
-                    visiting: 149,
-                    isVisiting: true,
-                    image:
-                      "https://images.unsplash.com/photo-1540039155733-d7696d4eb98e?w=100",
-                  },
-                  {
-                    id: 2,
-                    date: "2024-11-16",
-                    title: "Sofar Sounds",
-                    location: "Bengaluru, India",
-                    visiting: 86,
-                    isVisiting: false,
-                    image:
-                      "https://images.unsplash.com/photo-1470229722913-7c092db65f8c?w=100",
-                  },
-                ]).map((show, i) => {
+                {(shows && shows.length > 0 ? (
+                  shows.map((show, i) => {
                   const date = new Date(show.date);
                   const dateM = date.getDate().toString();
                   const dateD = date
@@ -2482,7 +2366,18 @@ export function ProfileView({
                       </View>
                     </TouchableOpacity>
                   );
-                })}
+                })
+              ) : (
+                <View
+                  style={{ borderColor: theme.border, backgroundColor: theme.surfaceBg }}
+                  className="py-5 px-6 rounded-2xl border border-dashed items-center justify-center my-1"
+                >
+                  <Calendar color={theme.textSecondary} size={24} />
+                  <Text className="text-[13px] font-bold mt-2" style={{ color: theme.text }}>
+                    No Upcoming Shows
+                  </Text>
+                </View>
+              ))}
               </ScrollView>
             </View>
           </View>
@@ -3531,7 +3426,7 @@ export function ProfileView({
                 <View className="flex-row items-center gap-3 flex-1 mr-3">
                   <View className="w-12 h-12 rounded-xl overflow-hidden bg-black/40 border" style={{ borderColor: theme.border }}>
                     <Image
-                      source={{ uri: selectedPostForOptions.img || selectedPostForOptions.thumbnailUrl || dummyVideos[0] }}
+                      source={{ uri: selectedPostForOptions.img || selectedPostForOptions.thumbnailUrl || "" }}
                       className="w-full h-full"
                       resizeMode="cover"
                     />

@@ -5,14 +5,15 @@ import Redis from 'ioredis';
 const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
 
 export const redis = new Redis(redisUrl, {
+  enableOfflineQueue: false,
+  connectTimeout: 1500,
   maxRetriesPerRequest: null,
   retryStrategy(times) {
-    // Stop retrying if there's no redis server available after 3 tries (useful for local dev)
-    if (times > 3) {
-      console.log('Redis server not found, caching will be disabled gracefully.');
+    // Stop retrying quickly if there's no redis server available locally
+    if (times > 2) {
       return null;
     }
-    return Math.min(times * 50, 2000);
+    return Math.min(times * 50, 500);
   },
 });
 

@@ -253,7 +253,7 @@ export default function DiscoverScreen() {
                       className="flex-row items-center gap-3.5 mb-2.5 p-3 rounded-2xl border"
                     >
                       <Image 
-                        source={{ uri: user.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100' }} 
+                        source={{ uri: user.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || user.username || 'User')}&background=E50914&color=fff` }} 
                         className="w-12 h-12 rounded-full" 
                       />
                       <View className="flex-1">
@@ -312,7 +312,7 @@ export default function DiscoverScreen() {
                       className="flex-row items-center gap-3.5 mb-2.5 p-3 rounded-2xl border"
                     >
                       <Image 
-                        source={{ uri: video.authorAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100' }} 
+                        source={{ uri: video.authorAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(video.author || 'Artist')}&background=E50914&color=fff` }} 
                         className="w-12 h-12 rounded-full" 
                       />
                       <View className="flex-1">

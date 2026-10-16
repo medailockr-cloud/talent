@@ -20,93 +20,7 @@ import { LeaderboardModal } from '../ui/LeaderboardModal';
 const HEADER_HEIGHT = 130;
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// 6 Dummy videos with guaranteed streaming backend video files
-const initialFeedData = [
-  {
-    id: '1',
-    author: 'Kiara Nair',
-    role: 'Contemporary Dancer • Kochi, India',
-    tags: ['#dance', '#contemporary', '#kerala'],
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100',
-    videoThumb: 'https://images.unsplash.com/photo-1547153760-18fc86324498?w=800&q=80',
-    duration: '0:58',
-    videoUrl: 'http://localhost:3000/uploads/performer_1.mp4',
-    isRising: true,
-    isNearby: false,
-    comments: [
-      { id: 'c1', user: 'Arjun Mehta', text: 'Your expression during the final section was powerful.', time: '12m', isUseful: false },
-      { id: 'c2', user: 'Riya Sharma', text: 'The ending felt slightly rushed. A longer hold on the final pose could make it stronger.', time: '20m', isFeedback: true, isUseful: false },
-      { id: 'c3', user: 'Neha Kapoor', text: 'I’m working on a dance film in Bengaluru. Would love to discuss a collaboration.', time: '1h', isOpportunity: true, isUseful: false },
-      { id: 'c4', user: 'Dev Patel', text: 'How did you train that transition?', time: '2h', isQuestion: true, isUseful: false },
-      { id: 'c5', user: 'Kiara Nair', text: 'Thank you! That section was mostly improvised.', time: '3h', isArtist: true, isUseful: false }
-    ]
-  },
-  {
-    id: '2',
-    author: 'Arjun Menon',
-    role: 'Singer-Songwriter • Bengaluru, India',
-    tags: ['#music', '#singer', '#original'],
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100',
-    videoThumb: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&q=80',
-    duration: '1:00',
-    videoUrl: 'http://localhost:3000/uploads/performer_2.mp4',
-    isRising: false,
-    isNearby: true,
-    comments: []
-  },
-  {
-    id: '3',
-    author: 'Meera Rao',
-    role: 'Classical Violinist • Chennai, India',
-    tags: ['#classical', '#violin', '#carnatic'],
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100',
-    videoThumb: 'https://images.unsplash.com/photo-1505228395891-9a51e7e86bf6?w=800&q=80',
-    duration: '1:45',
-    videoUrl: 'http://localhost:3000/uploads/performer_3.mp4',
-    isRising: true,
-    isNearby: false,
-    comments: []
-  },
-  {
-    id: '4',
-    author: 'Kabir Shah',
-    role: 'Studio Vocals & Beatbox • Mumbai, India',
-    tags: ['#beatbox', '#hiphop', '#vocalpercussion'],
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100',
-    videoThumb: 'https://images.unsplash.com/photo-1516280440502-a2fc9977823b?w=800&q=80',
-    duration: '0:30',
-    videoUrl: 'http://localhost:3000/uploads/performer_4.mp4',
-    isRising: false,
-    isNearby: false,
-    comments: []
-  },
-  {
-    id: '5',
-    author: 'Ananya Iyer',
-    role: 'Street Dancer • Hyderabad, India',
-    tags: ['#dance', '#breakdance', '#hiphop'],
-    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=100',
-    videoThumb: 'https://images.unsplash.com/photo-1527224857830-43a7ace8526d?w=800&q=80',
-    duration: '2:15',
-    videoUrl: 'http://localhost:3000/uploads/performer_5.mp4',
-    isRising: true,
-    isNearby: true,
-    comments: []
-  },
-  {
-    id: '6',
-    author: 'Rohan Das',
-    role: 'Guitarist • Pune, India',
-    tags: ['#guitar', '#acoustic', '#fingerstyle'],
-    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100',
-    videoThumb: 'https://images.unsplash.com/photo-1510915361894-db8b60106cb1?w=800&q=80',
-    duration: '1:10',
-    videoUrl: 'http://localhost:3000/uploads/performer_1.mp4',
-    isRising: false,
-    isNearby: true,
-    comments: []
-  }
-];
+
 
 function FeedVideoCard({ 
   video, 
@@ -157,9 +71,9 @@ function FeedVideoCard({
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  const mainSrc = resolveMediaUrl(video.url || video.videoUrl || 'http://localhost:3000/uploads/performer_1.mp4');
-  const fallbackSrc = resolveMediaUrl('http://localhost:3000/uploads/performer_1.mp4');
-  const srcToUse = videoError ? fallbackSrc : mainSrc;
+  const mainSrc = resolveMediaUrl(video.url || video.videoUrl || '');
+  const fallbackSrc = resolveMediaUrl(video.url || video.videoUrl || '');
+  const srcToUse = mainSrc;
 
   // Autoplay IntersectionObserver for web
   useEffect(() => {
@@ -422,7 +336,7 @@ function FeedVideoCard({
       >
         <AppVideoPlayer
           src={srcToUse}
-          poster={video.videoThumb || video.thumbnailUrl || 'https://images.unsplash.com/photo-1547153760-18fc86324498?w=800&q=80'}
+          poster={video.videoThumb || video.thumbnailUrl || ''}
           isPlaying={isPlaying}
           isMuted={!isPlaying || isMuted}
           videoRef={videoRef}
@@ -597,7 +511,7 @@ function FeedVideoCard({
             {isBlind ? (
               <EyeOff color={theme.primary} size={20} />
             ) : (
-              <Image source={{ uri: video.avatar || video.authorAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100' }} className="w-full h-full" />
+              <Image source={{ uri: video.avatar || video.authorAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(video.author || 'User')}&background=E50914&color=fff` }} className="w-full h-full" />
             )}
           </View>
           <View className="flex-1">
@@ -777,11 +691,7 @@ function FeedVideoCard({
                           style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
                           className="w-8 h-8 rounded-full items-center justify-center border overflow-hidden"
                         >
-                          {c.user === 'You' ? (
-                             <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100' }} className="w-full h-full" />
-                          ) : (
-                             <Text style={{ color: theme.textSecondary }} className="text-xs font-bold">{c.user.charAt(0)}</Text>
-                          )}
+                          <User color={theme.textSecondary} size={16} />
                         </View>
                         <View className="flex-1">
                           <View className="flex-row items-center gap-2 mb-1">
@@ -833,10 +743,10 @@ function FeedVideoCard({
                 >
                   <View className="flex-row items-center gap-3">
                     <View 
-                      style={{ borderColor: theme.border }}
-                      className="w-8 h-8 rounded-full overflow-hidden border"
+                      style={{ borderColor: theme.border, backgroundColor: theme.surfaceBg }}
+                      className="w-8 h-8 rounded-full items-center justify-center border"
                     >
-                      <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100' }} className="w-full h-full" />
+                      <User color={theme.textSecondary} size={15} />
                     </View>
                     <TextInput
                       value={commentText}
@@ -896,7 +806,7 @@ export function HomeView({ user }: { user?: any }) {
   const scrollRef = useRef<ScrollView>(null);
 
   const { videos: feedData, isLoading, isRefreshing, isLoadingMore, hasMore, refetch, loadMore } = useFeed();
-  const effectiveFeed = (feedData && feedData.length > 0) ? feedData : initialFeedData;
+  const effectiveFeed = feedData || [];
   const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
   const [isGlobalMuted, setIsGlobalMuted] = useState(true);
   const manuallyPausedIdRef = useRef<string | null>(null);
