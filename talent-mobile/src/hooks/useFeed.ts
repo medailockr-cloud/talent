@@ -1,6 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../utils/api';
 
+const isMediaImage = (url?: string | null): boolean => {
+  if (!url) return false;
+  return /\.(jpg|jpeg|png|webp|gif|bmp|heic)(\?.*)?$/i.test(url);
+};
+
 export function useFeed(userId?: number) {
   const [videos, setVideos] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -25,7 +30,9 @@ export function useFeed(userId?: number) {
     try {
       const url = userId ? `/feed?userId=${userId}&limit=10` : '/feed?limit=10';
       const res = await api.get(url);
-      const incoming = Array.isArray(res.data?.videos) ? res.data.videos : [];
+      const rawIncoming = Array.isArray(res.data?.videos) ? res.data.videos : [];
+      // Homepage feed is only for videos, no images (images can be seen on users' profiles)
+      const incoming = rawIncoming.filter((v: any) => !isMediaImage(v.url || v.videoUrl));
       setVideos(incoming);
       setHasMore(incoming.length >= 10);
     } catch (err) {
@@ -51,7 +58,8 @@ export function useFeed(userId?: number) {
         : `/feed?limit=10&cursor=${cursor}`;
 
       const res = await api.get(url);
-      const incoming = Array.isArray(res.data?.videos) ? res.data.videos : [];
+      const rawIncoming = Array.isArray(res.data?.videos) ? res.data.videos : [];
+      const incoming = rawIncoming.filter((v: any) => !isMediaImage(v.url || v.videoUrl));
 
       if (incoming.length === 0) {
         setHasMore(false);

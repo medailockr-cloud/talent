@@ -111,6 +111,12 @@ const upload = multer({ storage });
 // Serve static files from the uploads directory
 app.use('/uploads', express.static(uploadDir));
 
+// Helper to check if a URL points to an image
+export const isImageMedia = (url?: string | null): boolean => {
+  if (!url) return false;
+  return /\.(jpg|jpeg|png|webp|gif|bmp|heic)(\?.*)?$/i.test(url);
+};
+
 // API Route for Step 3 - Now using Prisma!
 app.get('/api/feed', async (req, res) => {
   try {
@@ -123,11 +129,13 @@ app.get('/api/feed', async (req, res) => {
     const cachedFeed = await getCachedFeed(cacheKey);
     if (cachedFeed) {
       console.log('Serving feed from Redis cache');
-      return res.json({ videos: cachedFeed });
+      const filteredCached = cachedFeed.filter((v: any) => !isImageMedia(v.url));
+      return res.json({ videos: filteredCached });
     }
     
-    const videos = await prisma.video.findMany({
-      take: limit,
+    // Fetch videos (take extra to ensure limit items remain after filtering out images)
+    const rawVideos = await prisma.video.findMany({
+      take: limit * 2,
       skip: cursor ? 1 : 0,
       cursor: cursor ? { id: cursor } : undefined,
       include: {
@@ -144,6 +152,9 @@ app.get('/api/feed', async (req, res) => {
       }
     });
 
+    // Homepage feed is strictly for videos only. Images are excluded from the homepage and only shown on user profiles.
+    const videos = rawVideos.filter(v => !isImageMedia(v.url)).slice(0, limit);
+
 
 
     // Format the response to match what the mobile app expects
@@ -151,6 +162,8 @@ app.get('/api/feed', async (req, res) => {
       id: v.id,
       title: v.title,
       author: v.author.name || v.author.username,
+      authorAvatar: v.author.avatarUrl,
+      authorId: v.author.id,
       url: v.url,
       views: v.views,
       hashtags: v.hashtags.map((h: any) => h.name),
@@ -1749,9 +1762,9 @@ app.get('/api/feed/following', requireAuth, async (req, res) => {
       return res.json({ videos: [] });
     }
     
-    const videos = await prisma.video.findMany({
+    const rawVideos = await prisma.video.findMany({
       where: { authorId: { in: followingIds } },
-      take: limit,
+      take: limit * 2,
       orderBy: { createdAt: 'desc' },
       include: {
         author: true, likes: true, hashtags: true,
@@ -1759,6 +1772,8 @@ app.get('/api/feed/following', requireAuth, async (req, res) => {
       }
     });
     
+    // Homepage following feed is strictly for videos only
+    const videos = rawVideos.filter(v => !isImageMedia(v.url)).slice(0, limit);
     res.json({ videos });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch following feed' });

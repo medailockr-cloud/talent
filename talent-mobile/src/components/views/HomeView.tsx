@@ -20,6 +20,11 @@ import { LeaderboardModal } from '../ui/LeaderboardModal';
 const HEADER_HEIGHT = 130;
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+const isMediaImage = (url?: string | null): boolean => {
+  if (!url) return false;
+  return /\.(jpg|jpeg|png|webp|gif|bmp|heic)(\?.*)?$/i.test(url);
+};
+
 
 
 function FeedVideoCard({ 
@@ -813,7 +818,8 @@ export function HomeView({ user }: { user?: any }) {
   const autoPlayDebounceRef = useRef<any>(null);
   const sentinelRef = useRef<any>(null);
 
-  const allFeedItems = effectiveFeed;
+  // Homepage feed is strictly for videos only. Images are excluded from the homepage and only shown on user profiles.
+  const allFeedItems = effectiveFeed.filter(v => !isMediaImage(v.url || v.videoUrl));
 
   const hasInitializedPlayingRef = useRef(false);
 
@@ -873,8 +879,9 @@ export function HomeView({ user }: { user?: any }) {
     }
   }, [allFeedItems.length]);
   
-  // Filter Logic based on Tabs and Search
+  // Filter Logic based on Tabs and Search (strictly exclude images)
   const filteredData = allFeedItems.filter(v => {
+    if (isMediaImage(v.url || v.videoUrl)) return false;
     let matchesTab = true;
     if (activeFeedTab === 'Rising') matchesTab = v.isRising;
     if (activeFeedTab === 'Nearby') matchesTab = v.isNearby;
@@ -1038,8 +1045,32 @@ export function HomeView({ user }: { user?: any }) {
         scrollEventThrottle={16}
       >
         {filteredData.length === 0 ? (
-          <View className="items-center justify-center py-20">
-            <Text style={{ color: theme.textSecondary }} className="text-[15px]">No performances found.</Text>
+          <View className="items-center justify-center py-20 px-6">
+            <View 
+              style={{ backgroundColor: `${theme.primary}15`, borderColor: `${theme.primary}30` }}
+              className="w-16 h-16 rounded-full border items-center justify-center mb-4"
+            >
+              <Mic color={theme.primary} size={28} />
+            </View>
+            <Text style={{ color: theme.text }} className="text-[17px] font-bold mb-1 text-center">
+              No Video Performances Yet
+            </Text>
+            <Text style={{ color: theme.textSecondary }} className="text-[13px] text-center max-w-[280px] leading-5 mb-5">
+              The homepage is dedicated strictly to video performances. Upload a video take to be featured!
+            </Text>
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push('/create');
+              }}
+              style={{ backgroundColor: theme.primary }}
+              className="px-6 py-2.5 rounded-full flex-row items-center gap-2 shadow-lg"
+            >
+              <Play color="#fff" size={14} fill="#fff" />
+              <Text className="text-white font-bold text-xs uppercase tracking-wider">
+                Upload Video Take
+              </Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <>
