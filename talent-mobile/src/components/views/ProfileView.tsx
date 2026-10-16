@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import * as ImagePicker from "expo-image-picker";
 import {
   View,
@@ -386,7 +386,7 @@ function ShowPreviewModal({
                     8:00 PM
                   </Text>
                   <Text className="text-[#D1D5DB] text-[12px] flex-1">
-                    Aarav Nair Unamplified Living Room Set
+                    {show?.title || "Artist Live Session"}
                   </Text>
                 </View>
               </View>
@@ -429,7 +429,7 @@ function ShowPreviewModal({
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 const title = encodeURIComponent(show.title || "Talent Live Show");
-                const loc = encodeURIComponent(show.location || "Bengaluru");
+                const loc = encodeURIComponent(show.location || "Live Concert Venue");
                 Linking.openURL(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&location=${loc}`).catch(() => {
                   Alert.alert("Calendar", "Added to calendar schedule.");
                 });
@@ -1027,7 +1027,7 @@ export function ProfileView({
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       const title = editedTitles[selectedPostForOptions.id] || selectedPostForOptions.title || "Performance";
       await RNShare.share({
-        message: `Watch "${title}" by ${profileData?.name || "Aarav Nair"} on Talent App! https://talent.app/video/${selectedPostForOptions.id}`,
+        message: `Watch "${title}" by ${profileData?.name || "Artist"} on Talent App! https://talent.app/video/${selectedPostForOptions.id}`,
         title: title,
       });
     } catch (e) {
@@ -1149,15 +1149,15 @@ export function ProfileView({
   };
 
   const fetchProfile = useCallback(async () => {
+    const isViewingSelf = !user?.id || (authUser?.id && String(user?.id) === String(authUser?.id));
+    const endpoint = isViewingSelf ? "/profile/me" : `/profile/${user.id}`;
+
     try {
       setIsLoading(true);
       if (!user?.id && !authUser) {
         setIsLoading(false);
         return;
       }
-      // If viewing current user, prioritize /profile/me for session consistency
-      const isViewingSelf = !user?.id || (authUser?.id && String(user?.id) === String(authUser?.id));
-      const endpoint = isViewingSelf ? "/profile/me" : `/profile/${user.id}`;
 
       const response = await api.get(endpoint);
       setProfileData(response.data);
@@ -1177,15 +1177,21 @@ export function ProfileView({
         try {
           const showsRes = await api.get(`/shows/${userId}`);
           setShows(showsRes.data || []);
-        } catch (e) {
-          console.error("Failed to fetch shows:", e);
+        } catch (e: any) {
+          console.warn("Failed to fetch shows:", e?.message || e);
         }
       }
     } catch (error: any) {
-      if (error.response?.status === 401) {
-        console.log("Unauthorized: Please log in to view profile");
+      const status = error.response?.status;
+      if (status === 401 || status === 404) {
+        console.log(`Profile fetch (${endpoint}): status ${status} (unauthenticated or removed).`);
+        if (isViewingSelf) {
+          useAuthStore.getState().logout().catch(() => {});
+        }
+        setProfileData(null);
       } else {
-        console.error("Failed to fetch profile:", error);
+        console.warn("Could not load profile:", error.message || error);
+        setProfileData(null);
       }
     } finally {
       setIsLoading(false);
@@ -1247,7 +1253,7 @@ export function ProfileView({
   const handleShare = async () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const name = profileData?.name || "Aarav Nair";
+      const name = profileData?.name || (isOwnProfile ? "My Profile" : "Artist");
       const id = profileData?.id || user?.id || "";
       const shareUrl = typeof window !== 'undefined' && window.location?.origin
         ? `${window.location.origin}/profile/${id}`
@@ -1340,17 +1346,17 @@ export function ProfileView({
         "• Taylor 814ce Grand Auditorium (Solid Sitka Spruce / Indian Rosewood)\n• Shure SM58 Vocal Microphone\n• Strymon Timeline Multi-Delay Pedal\n• Tunings: D-A-D-F#-A-D (Open D) & Standard"
       );
     } else if (actionName === "Open Spotify") {
-      const name = encodeURIComponent(profileData?.name || "Aarav Nair");
+      const name = encodeURIComponent(profileData?.name || "Artist");
       Linking.openURL(`https://open.spotify.com/search/${name}`).catch(() => {
         Alert.alert("Spotify", "Unable to open Spotify.");
       });
     } else if (actionName === "Open YouTube") {
-      const name = encodeURIComponent(profileData?.name || "Aarav Nair");
+      const name = encodeURIComponent(profileData?.name || "Artist");
       Linking.openURL(`https://www.youtube.com/results?search_query=${name}`).catch(() => {
         Alert.alert("YouTube", "Unable to open YouTube.");
       });
     } else if (actionName === "Open Instagram") {
-      const handle = profileData?.username || profileData?.name?.toLowerCase().replace(/\s+/g, '') || "aaravnair";
+      const handle = profileData?.username || profileData?.name?.toLowerCase().replace(/\s+/g, '') || "artist";
       Linking.openURL(`https://www.instagram.com/${handle}`).catch(() => {
         Alert.alert("Instagram", "Unable to open Instagram.");
       });
@@ -1376,7 +1382,7 @@ export function ProfileView({
             <ChevronLeft color="#fff" size={24} />
           </TouchableOpacity>
           <Text className="text-white font-bold text-[16px] ml-4">
-            {profileData?.name || "Aarav Nair"}'s Performances
+            {profileData?.name || (isOwnProfile ? "My" : "Artist")}'s Performances
           </Text>
         </View>
         <ScrollView
@@ -1431,6 +1437,58 @@ export function ProfileView({
               );
             })}
         </ScrollView>
+      </View>
+    );
+  }
+
+  const averageScore = useMemo(() => {
+    if (!profileData?.videos || profileData.videos.length === 0) return "—";
+    const rated = profileData.videos.filter((v: any) => typeof v.averageRating === 'number' && v.averageRating > 0);
+    if (rated.length === 0) return "—";
+    const sum = rated.reduce((acc: number, v: any) => acc + v.averageRating, 0);
+    return (sum / rated.length).toFixed(1);
+  }, [profileData?.videos]);
+
+  if (isLoading && !profileData) {
+    return (
+      <View className="flex-1 items-center justify-center" style={{ backgroundColor: theme.bg }}>
+        <ActivityIndicator size="large" color={theme.primary} />
+      </View>
+    );
+  }
+
+  if (!profileData && !isLoading) {
+    return (
+      <View className="flex-1 items-center justify-center p-6" style={{ backgroundColor: theme.bg }}>
+        <View 
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+          className="w-full max-w-[360px] p-8 rounded-3xl border items-center text-center shadow-xl"
+        >
+          <View 
+            style={{ backgroundColor: `${theme.primary}15`, borderColor: `${theme.primary}30` }}
+            className="w-20 h-20 rounded-full border items-center justify-center mb-5"
+          >
+            <UserX color={theme.primary} size={36} />
+          </View>
+          <Text className="text-xl font-bold mb-2 text-center" style={{ color: theme.text }}>
+            Artist Not Found
+          </Text>
+          <Text className="text-sm text-center mb-6 leading-5" style={{ color: theme.textSecondary }}>
+            This artist profile does not exist or has been removed.
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              if (onBack) onBack();
+              else if (router.canGoBack()) router.back();
+              else router.replace('/');
+            }}
+            style={{ backgroundColor: theme.primary }}
+            className="px-6 py-3 rounded-full flex-row items-center gap-2"
+          >
+            <ChevronLeft color="#fff" size={18} />
+            <Text className="text-white font-semibold text-sm">Return to Stage</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -1521,7 +1579,7 @@ export function ProfileView({
               } else {
                 Alert.alert(
                   "Online",
-                  `${profileData?.name || "Aarav Nair"} is currently online & accepting bookings!`,
+                  `${profileData?.name || "Artist"} is currently online & accepting bookings!`,
                 );
               }
             }}
@@ -1553,17 +1611,19 @@ export function ProfileView({
                 className="text-[32px] font-serif font-bold tracking-tight text-center"
                 style={{ color: theme.text }}
               >
-                {profileData?.name || "Aarav Nair"}
+                {profileData?.name || (isOwnProfile ? "My Profile" : "Artist Profile")}
               </Text>
-              <TouchableOpacity
-                onPress={() =>
-                  Alert.alert("Verified Stage Artist", "Level 4 Calibrated")
-                }
-                style={{ backgroundColor: theme.primary }}
-                className="w-[22px] h-[22px] rounded-full items-center justify-center shadow-md"
-              >
-                <Check color="#fff" strokeWidth={3.5} size={13} />
-              </TouchableOpacity>
+              {profileData?.isVerified && (
+                <TouchableOpacity
+                  onPress={() =>
+                    Alert.alert("Verified Stage Artist", "Level 4 Calibrated")
+                  }
+                  style={{ backgroundColor: theme.primary }}
+                  className="w-[22px] h-[22px] rounded-full items-center justify-center shadow-md"
+                >
+                  <Check color="#fff" strokeWidth={3.5} size={13} />
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* Role & Location */}
@@ -1578,28 +1638,30 @@ export function ProfileView({
                   </React.Fragment>
                 ))
               ) : (
+                <Text className="text-[13px]" style={{ color: theme.textSecondary }}>Artist</Text>
+              )}
+              {Boolean(profileData?.location) && (
                 <>
-                  <Text className="text-[13px]" style={{ color: theme.textSecondary }}>Singer</Text>
                   <View className="w-1 h-1 rounded-full" style={{ backgroundColor: theme.textSecondary }} />
-                  <Text className="text-[13px]" style={{ color: theme.textSecondary }}>Songwriter</Text>
+                  <View className="flex-row items-center justify-center gap-1">
+                    <MapPin color={theme.primary} fill={theme.primary} size={13} />
+                    <Text className="text-[13px]" style={{ color: theme.textSecondary }}>
+                      {profileData.location}
+                    </Text>
+                  </View>
                 </>
               )}
-              <View className="w-1 h-1 rounded-full" style={{ backgroundColor: theme.textSecondary }} />
-              <View className="flex-row items-center justify-center gap-1">
-                <MapPin color={theme.primary} fill={theme.primary} size={13} />
-                <Text className="text-[13px]" style={{ color: theme.textSecondary }}>
-                  {profileData?.location || "Bengaluru, India"}
-                </Text>
-              </View>
             </View>
 
             {/* Quote / Caption */}
-            <Text 
-              className="text-[15px] italic text-center mt-3 px-6 leading-6 opacity-90"
-              style={{ color: theme.text }}
-            >
-              "{profileData?.quote || "Music is the language of the spirit."}"
-            </Text>
+            {Boolean(profileData?.quote || profileData?.bio) && (
+              <Text 
+                className="text-[15px] italic text-center mt-3 px-6 leading-6 opacity-90"
+                style={{ color: theme.text }}
+              >
+                "{profileData?.quote || profileData?.bio}"
+              </Text>
+            )}
           </View>
 
           {/* Metrics 4-Grid Cards */}
@@ -1610,7 +1672,7 @@ export function ProfileView({
               className="flex-1 p-3 rounded-2xl border items-start min-h-[72px] justify-between">
               <Star color={theme.primary} fill={theme.primary} size={18} />
               <View className="mt-2">
-                <Text className="text-[17px] font-bold" style={{ color: theme.text }}>4.8</Text>
+                <Text className="text-[17px] font-bold" style={{ color: theme.text }}>{averageScore}</Text>
                 <Text className="text-[11px] font-medium mt-0.5" style={{ color: theme.textSecondary }}>
                   Blind Score
                 </Text>
@@ -2552,7 +2614,7 @@ export function ProfileView({
                   className="flex-row items-center justify-between border rounded-xl p-4"
                 >
                   <Text className="text-[14px]" style={{ color: theme.text }}>
-                    Instagram • @{profileData?.username || profileData?.name?.toLowerCase().replace(/\s+/g, '') || "aaravnair"}
+                    Instagram • @{profileData?.username || profileData?.name?.toLowerCase().replace(/\s+/g, '') || "artist"}
                   </Text>
                   <ExternalLink color={theme.textSecondary} size={16} />
                 </TouchableOpacity>
@@ -3098,7 +3160,7 @@ export function ProfileView({
             >
               <View className="flex-row justify-between items-center mb-6">
                 <Text className="text-[20px] font-bold" style={{ color: theme.text }}>
-                  Invite {profileData?.name || "Aarav Nair"}
+                  Invite {profileData?.name || "Artist"}
                 </Text>
                 <TouchableOpacity onPress={() => setIsInviteModalOpen(false)}>
                   <X color={theme.textSecondary} size={24} />
@@ -3199,8 +3261,10 @@ export function ProfileView({
                 style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
                 className="border rounded-xl p-4 mb-4"
               >
-                <Text className="text-[28px] font-bold text-center" style={{ color: theme.text }}>4.8</Text>
-                <Text className="text-[12px] font-semibold text-center mb-4" style={{ color: theme.primary }}>Top 5% Artist</Text>
+                <Text className="text-[28px] font-bold text-center" style={{ color: theme.text }}>{averageScore}</Text>
+                <Text className="text-[12px] font-semibold text-center mb-4" style={{ color: theme.primary }}>
+                  {averageScore !== "—" ? "Blind Audition Rating" : "No Calibrations Recorded"}
+                </Text>
                 <View className="flex-row items-center justify-between mb-3">
                   <Text className="text-[13px]" style={{ color: theme.textSecondary }}>Vocal Control</Text>
                   <Text className="font-bold text-[13px]" style={{ color: theme.text }}>4.9</Text>
