@@ -70,7 +70,7 @@ import * as Haptics from "expo-haptics";
 import { Switch } from "react-native";
 import { api, resolveMediaUrl, BACKEND_URL } from "../../utils/api";
 import { useAuthStore } from "../../store/authStore";
-import { useThemeStore, THEMES, ThemeId } from "../../store/themeStore";
+import { useThemeStore, THEMES, ThemeId, ORDERED_THEME_IDS } from "../../store/themeStore";
 import { FollowersModal } from "../ui/FollowersModal";
 import io from "socket.io-client";
 
@@ -902,6 +902,7 @@ export function ProfileView({
 
   const { user: authUser, checkAuth } = useAuthStore();
   const { theme, themeId, setTheme } = useThemeStore();
+  const [themeFilter, setThemeFilter] = useState<'all' | 'zed' | 'light' | 'dark'>('all');
   const isOwnProfile = Boolean(authUser?.id) && (
     (!user?.id && Boolean(profileData?.id))
       ? String(profileData?.id) === String(authUser?.id)
@@ -2949,12 +2950,67 @@ export function ProfileView({
                       </View>
                     </View>
 
-                    {/* Theme Options */}
-                    <Text className="text-[12px] font-bold tracking-wider uppercase mb-3" style={{ color: theme.textSecondary }}>
-                      AVAILABLE THEMES
-                    </Text>
+                    {/* Theme Filter Header & Pills */}
+                    <View className="flex-row items-center justify-between mb-2.5">
+                      <Text className="text-[12px] font-bold tracking-wider uppercase" style={{ color: theme.textSecondary }}>
+                        AVAILABLE THEMES ({ORDERED_THEME_IDS.length})
+                      </Text>
+                      <Text className="text-[11px] font-medium" style={{ color: theme.primary }}>
+                        Zed & Studio
+                      </Text>
+                    </View>
 
-                    {(['dark', 'light'] as ThemeId[]).map((id) => {
+                    {/* Filter Category Tabs */}
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      className="mb-4"
+                      contentContainerStyle={{ gap: 8, paddingRight: 8 }}
+                    >
+                      {[
+                        { key: "all", label: "All Themes" },
+                        { key: "zed", label: "⚡ Zed Editor" },
+                        { key: "light", label: "☀️ Light" },
+                        { key: "dark", label: "🌙 Dark" },
+                      ].map((tab) => {
+                        const isActive = themeFilter === tab.key;
+                        return (
+                          <TouchableOpacity
+                            key={tab.key}
+                            onPress={() => {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              setThemeFilter(tab.key as any);
+                            }}
+                            className="px-3.5 py-1.5 rounded-full border"
+                            style={{
+                              backgroundColor: isActive
+                                ? theme.primary
+                                : theme.isDark
+                                ? "rgba(255,255,255,0.06)"
+                                : "rgba(0,0,0,0.04)",
+                              borderColor: isActive ? theme.primary : theme.border,
+                            }}
+                          >
+                            <Text
+                              className="text-[12px] font-semibold"
+                              style={{ color: isActive ? "#FFFFFF" : theme.text }}
+                            >
+                              {tab.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+
+                    {/* Themes List */}
+                    {ORDERED_THEME_IDS.filter((id) => {
+                      const itemTheme = THEMES[id];
+                      if (!itemTheme) return false;
+                      if (themeFilter === "zed") return itemTheme.category === "Zed";
+                      if (themeFilter === "light") return !itemTheme.isDark;
+                      if (themeFilter === "dark") return itemTheme.isDark;
+                      return true;
+                    }).map((id) => {
                       const itemTheme = THEMES[id];
                       const isSelected = themeId === id;
 
@@ -2968,8 +3024,18 @@ export function ProfileView({
                           }}
                           className="rounded-2xl p-4 mb-3 border flex-row items-center justify-between"
                           style={{
-                            backgroundColor: isSelected ? (itemTheme.isDark ? '#141419' : '#F4F4F5') : (itemTheme.isDark ? '#0D0E12' : '#FFFFFF'),
-                            borderColor: isSelected ? itemTheme.primary : (itemTheme.isDark ? 'rgba(255,255,255,0.08)' : '#E4E4E7'),
+                            backgroundColor: isSelected
+                              ? itemTheme.isDark
+                                ? "#141419"
+                                : "#F4F4F5"
+                              : itemTheme.isDark
+                              ? "#0D0E12"
+                              : "#FFFFFF",
+                            borderColor: isSelected
+                              ? itemTheme.primary
+                              : itemTheme.isDark
+                              ? "rgba(255,255,255,0.08)"
+                              : "#E4E4E7",
                             borderWidth: isSelected ? 2 : 1,
                           }}
                         >
@@ -2978,9 +3044,9 @@ export function ProfileView({
                             <View
                               className="w-12 h-12 rounded-xl items-center justify-center relative"
                               style={{
-                                backgroundColor: itemTheme.isDark ? itemTheme.cardBg : '#F4F4F5',
+                                backgroundColor: itemTheme.isDark ? itemTheme.cardBg : "#F4F4F5",
                                 borderWidth: 1,
-                                borderColor: itemTheme.primary + '50',
+                                borderColor: itemTheme.primary + "50",
                               }}
                             >
                               {itemTheme.isDark ? (
@@ -2989,11 +3055,11 @@ export function ProfileView({
                                 <Sun color={itemTheme.primary} size={22} />
                               )}
                               {/* Accent dot indicator */}
-                              <View 
+                              <View
                                 className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 items-center justify-center"
-                                style={{ 
+                                style={{
                                   backgroundColor: itemTheme.accent,
-                                  borderColor: itemTheme.isDark ? '#000000' : '#FFFFFF' 
+                                  borderColor: itemTheme.isDark ? "#000000" : "#FFFFFF",
                                 }}
                               />
                             </View>
@@ -3002,27 +3068,47 @@ export function ProfileView({
                               <View className="flex-row items-center gap-2 mb-0.5">
                                 <Text
                                   className="text-[16px] font-bold"
-                                  style={{ color: itemTheme.isDark ? '#FFFFFF' : '#18181B' }}
+                                  style={{ color: itemTheme.isDark ? "#FFFFFF" : "#18181B" }}
                                 >
                                   {itemTheme.name}
                                 </Text>
-                                {id === 'light' ? (
-                                  <View className="bg-[#E91E76]/15 px-1.5 py-0.5 rounded border border-[#E91E76]/30">
-                                    <Text className="text-[#E91E76] text-[9px] font-bold tracking-wider uppercase">
-                                      DEFAULT
-                                    </Text>
-                                  </View>
-                                ) : (
-                                  <View className="bg-white/10 px-1.5 py-0.5 rounded">
-                                    <Text className="text-white/80 text-[9px] font-bold tracking-wider uppercase">
-                                      STAGE DARK
+                                {itemTheme.badge && (
+                                  <View
+                                    className="px-1.5 py-0.5 rounded border"
+                                    style={{
+                                      backgroundColor:
+                                        id === "light"
+                                          ? `${itemTheme.primary}20`
+                                          : itemTheme.isDark
+                                          ? "rgba(255, 255, 255, 0.08)"
+                                          : "rgba(0, 0, 0, 0.05)",
+                                      borderColor:
+                                        id === "light"
+                                          ? `${itemTheme.primary}40`
+                                          : itemTheme.isDark
+                                          ? "rgba(255, 255, 255, 0.15)"
+                                          : "rgba(0, 0, 0, 0.1)",
+                                    }}
+                                  >
+                                    <Text
+                                      className="text-[9px] font-bold tracking-wider uppercase"
+                                      style={{
+                                        color:
+                                          id === "light"
+                                            ? itemTheme.primary
+                                            : itemTheme.isDark
+                                            ? "#E5E7EB"
+                                            : "#4B5563",
+                                      }}
+                                    >
+                                      {itemTheme.badge}
                                     </Text>
                                   </View>
                                 )}
                               </View>
                               <Text
                                 className="text-[12px] mb-2 leading-4"
-                                style={{ color: itemTheme.isDark ? '#9CA3AF' : '#71717A' }}
+                                style={{ color: itemTheme.isDark ? "#9CA3AF" : "#71717A" }}
                                 numberOfLines={2}
                               >
                                 {itemTheme.description}
@@ -3030,24 +3116,30 @@ export function ProfileView({
 
                               {/* Color palette preview strip */}
                               <View className="flex-row items-center gap-1.5">
-                                <View 
-                                  className="w-4 h-4 rounded-full border border-black/20" 
-                                  style={{ backgroundColor: itemTheme.bg }} 
+                                <View
+                                  className="w-4 h-4 rounded-full border border-black/20"
+                                  style={{ backgroundColor: itemTheme.bg }}
                                 />
-                                <View 
-                                  className="w-4 h-4 rounded-full" 
-                                  style={{ backgroundColor: itemTheme.primary }} 
+                                <View
+                                  className="w-4 h-4 rounded-full"
+                                  style={{ backgroundColor: itemTheme.primary }}
                                 />
-                                <View 
-                                  className="w-4 h-4 rounded-full" 
-                                  style={{ backgroundColor: itemTheme.accent }} 
+                                <View
+                                  className="w-4 h-4 rounded-full"
+                                  style={{ backgroundColor: itemTheme.accent }}
                                 />
                                 {itemTheme.accentAlt && (
-                                  <View 
-                                    className="w-4 h-4 rounded-full" 
-                                    style={{ backgroundColor: itemTheme.accentAlt }} 
+                                  <View
+                                    className="w-4 h-4 rounded-full"
+                                    style={{ backgroundColor: itemTheme.accentAlt }}
                                   />
                                 )}
+                                <Text
+                                  className="text-[10px] ml-1.5 font-medium"
+                                  style={{ color: itemTheme.isDark ? "#9CA3AF" : "#71717A" }}
+                                >
+                                  {itemTheme.tagline}
+                                </Text>
                               </View>
                             </View>
                           </View>
@@ -3056,8 +3148,12 @@ export function ProfileView({
                           <View
                             className="w-6 h-6 rounded-full items-center justify-center border-2"
                             style={{
-                              borderColor: isSelected ? itemTheme.primary : (itemTheme.isDark ? '#4B5563' : '#D1D5DB'),
-                              backgroundColor: isSelected ? itemTheme.primary : 'transparent',
+                              borderColor: isSelected
+                                ? itemTheme.primary
+                                : itemTheme.isDark
+                                ? "#4B5563"
+                                : "#D1D5DB",
+                              backgroundColor: isSelected ? itemTheme.primary : "transparent",
                             }}
                           >
                             {isSelected && <Check color="#FFFFFF" size={14} strokeWidth={3} />}

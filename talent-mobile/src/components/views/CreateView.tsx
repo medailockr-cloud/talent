@@ -13,6 +13,7 @@ import {
   PanResponder,
   Animated,
   Alert,
+  Modal,
 } from "react-native";
 import {
   CameraView,
@@ -596,6 +597,17 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   const { theme } = useThemeStore();
   const { drafts, loadDrafts, saveDraft, deleteDraft, clearDrafts } = useDraftsStore();
   const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    title: string;
+    message: string;
+    confirmText?: string;
+    confirmStyle?: "destructive" | "primary";
+    onConfirm: () => void | Promise<void>;
+    secondaryText?: string;
+    secondaryStyle?: "destructive" | "default";
+    onSecondary?: () => void | Promise<void>;
+    cancelText?: string;
+  } | null>(null);
 
   useEffect(() => {
     loadDrafts();
@@ -677,6 +689,17 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     }, 100);
     return () => clearInterval(interval);
   }, [previewPlayer, mediaType]);
+
+  useEffect(() => {
+    if (previewPlayer && mediaType === "video" && recordedVideoUri) {
+      try {
+        previewPlayer.replace(recordedVideoUri);
+        previewPlayer.play();
+      } catch (err) {
+        // Player already running or preparing source
+      }
+    }
+  }, [previewPlayer, recordedVideoUri, mediaType]);
 
   const activeFilterConfig =
     TALENT_FILTERS.find((f) => f.name === activeFilter) || TALENT_FILTERS[0];
@@ -1219,7 +1242,15 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
       if (showFeedback) {
-        Alert.alert("Draft Saved", "Your performance has been saved to Studio Drafts.");
+        setConfirmModal({
+          title: "Draft Saved",
+          message: `"${saved.title}" has been safely saved to your Studio Drafts.`,
+          confirmText: "View Drafts",
+          confirmStyle: "primary",
+          onConfirm: () => {
+            setStep("DRAFTS");
+          },
+        });
       }
       return saved;
     } catch (e) {
@@ -1230,6 +1261,9 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   };
 
   const handleResumeDraft = (draft: CreateDraft) => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
     setActiveDraftId(draft.id);
     setRecordedVideoUri(draft.mediaUri);
     setMediaType(draft.mediaType || "video");
@@ -1255,6 +1289,14 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     if (draft.duration) {
       setDuration(draft.duration);
     }
+    if (draft.mediaType === "video" && previewPlayer) {
+      try {
+        previewPlayer.replace(draft.mediaUri);
+        previewPlayer.play();
+      } catch (err) {
+        // Player preparing
+      }
+    }
     setStep("PREVIEW");
   };
 
@@ -1269,7 +1311,12 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     rightEl?: React.ReactNode;
   }) => (
     <View className="flex-row items-center justify-between px-5 mb-5">
-      <TouchableOpacity onPress={onBack} className="p-1 -ml-1">
+      <TouchableOpacity
+        onPress={onBack}
+        className="p-1.5 -ml-1.5 rounded-full"
+        hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+        activeOpacity={0.7}
+      >
         <ChevronLeft color={theme.text} size={28} />
       </TouchableOpacity>
       {title && (
@@ -1367,33 +1414,39 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     <View className="flex-1" style={{ backgroundColor: theme.bg, paddingTop: Math.max(insets.top, 20) }}>
       <TopNav
         title="Studio Drafts"
-        onBack={() => setStep("HOME")}
+        onBack={() => {
+          if (Platform.OS !== "web") {
+            Haptics.selectionAsync();
+          }
+          setStep("HOME");
+        }}
         rightEl={
           drafts.length > 0 ? (
             <TouchableOpacity
               onPress={() => {
-                Alert.alert(
-                  "Clear All Drafts",
-                  "Are you sure you want to delete all saved drafts from your studio cache?",
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    {
-                      text: "Clear All",
-                      style: "destructive",
-                      onPress: async () => {
-                        await clearDrafts();
-                        if (Platform.OS !== "web") {
-                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                        }
-                      },
-                    },
-                  ]
-                );
+                if (Platform.OS !== "web") {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                }
+                setConfirmModal({
+                  title: "Clear All Drafts?",
+                  message: "Are you sure you want to delete all saved drafts from your studio cache? This cannot be undone.",
+                  confirmText: "Clear All",
+                  confirmStyle: "destructive",
+                  onConfirm: async () => {
+                    await clearDrafts();
+                    if (Platform.OS !== "web") {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    }
+                  },
+                });
               }}
-              className="p-2 rounded-full border"
+              hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+              className="p-2.5 rounded-full border items-center justify-center cursor-pointer"
               style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+              activeOpacity={0.7}
+              accessibilityLabel="Clear all drafts"
             >
-              <Trash2 color="#EF4444" size={16} />
+              <Trash2 color="#EF4444" size={17} />
             </TouchableOpacity>
           ) : undefined
         }
@@ -1418,16 +1471,30 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           </Text>
           <TouchableOpacity
             onPress={() => {
+              if (!camPermission?.granted) requestCamPermission();
+              if (!micPermission?.granted) requestMicPermission();
               setCameraMode("video");
               setStep("RECORD");
             }}
-            className="px-6 py-3.5 rounded-full flex-row items-center gap-2 shadow-md"
+            className="px-6 py-3.5 rounded-full flex-row items-center gap-2 shadow-md cursor-pointer"
             style={{ backgroundColor: theme.primary }}
             activeOpacity={0.85}
           >
             <Plus color="#fff" size={18} />
             <Text className="text-white font-bold text-sm tracking-wide">
               Start New Performance
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setStep("UPLOAD")}
+            className="px-6 py-3 rounded-full flex-row items-center gap-2 border mt-3 cursor-pointer"
+            style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+            activeOpacity={0.7}
+          >
+            <Upload color={theme.text} size={16} />
+            <Text className="font-semibold text-sm" style={{ color: theme.text }}>
+              Upload Media Instead
             </Text>
           </TouchableOpacity>
         </View>
@@ -1447,13 +1514,15 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           {drafts.map((draft) => (
             <View
               key={draft.id}
-              className="rounded-2xl p-4 mb-3.5 border"
+              className="rounded-2xl p-4 mb-3.5 border shadow-sm"
               style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
             >
               <View className="flex-row items-start">
-                {/* Thumbnail / Media icon preview */}
-                <View
-                  className="w-20 h-24 rounded-xl overflow-hidden mr-3.5 relative border items-center justify-center"
+                {/* Thumbnail / Media icon preview (Clickable to resume) */}
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => handleResumeDraft(draft)}
+                  className="w-20 h-24 rounded-xl overflow-hidden mr-3.5 relative border items-center justify-center cursor-pointer"
                   style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
                 >
                   {draft.coverImageUri || draft.mediaType === "image" ? (
@@ -1469,67 +1538,84 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                   )}
 
                   {/* Media Type / Play badge */}
-                  <View className="absolute inset-0 bg-black/20 items-center justify-center">
-                    <View className="w-7 h-7 rounded-full bg-black/60 items-center justify-center border border-white/20">
-                      <Play color="#fff" size={12} fill="#fff" />
+                  <View className="absolute inset-0 bg-black/25 items-center justify-center">
+                    <View className="w-8 h-8 rounded-full bg-black/70 items-center justify-center border border-white/30 shadow-sm">
+                      <Play color="#fff" size={13} fill="#fff" className="ml-0.5" />
                     </View>
                   </View>
 
-                  <View className="absolute bottom-1 right-1 bg-black/75 px-1.5 py-0.5 rounded">
+                  <View className="absolute bottom-1 right-1 bg-black/80 px-1.5 py-0.5 rounded">
                     <Text className="text-[8px] font-bold text-white uppercase tracking-wider">
                       {draft.mediaType === "image" ? "Photo" : "Video"}
                     </Text>
                   </View>
-                </View>
+                </TouchableOpacity>
 
-                {/* Info details */}
+                {/* Info details (Clickable to resume) */}
                 <View className="flex-1 justify-between min-h-[96px]">
                   <View>
                     <View className="flex-row items-center justify-between mb-0.5">
-                      <Text
-                        className="font-bold text-[16px] flex-1 mr-2"
-                        style={{ color: theme.text }}
-                        numberOfLines={1}
-                      >
-                        {draft.title || "Untitled Take"}
-                      </Text>
                       <TouchableOpacity
-                        onPress={() => {
-                          Alert.alert(
-                            "Delete Draft",
-                            `Are you sure you want to remove "${draft.title || "this draft"}"? This cannot be undone.`,
-                            [
-                              { text: "Cancel", style: "cancel" },
-                              {
-                                text: "Delete",
-                                style: "destructive",
-                                onPress: async () => {
-                                  await deleteDraft(draft.id);
-                                  if (Platform.OS !== "web") {
-                                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                                  }
-                                },
-                              },
-                            ]
-                          );
-                        }}
-                        className="p-1 -mr-1"
+                        activeOpacity={0.8}
+                        onPress={() => handleResumeDraft(draft)}
+                        className="flex-1 mr-2 cursor-pointer"
                       >
-                        <Trash2 color="#EF4444" size={16} />
+                        <Text
+                          className="font-bold text-[16px]"
+                          style={{ color: theme.text }}
+                          numberOfLines={1}
+                        >
+                          {draft.title || "Untitled Take"}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                        onPress={() => {
+                          if (Platform.OS !== "web") {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                          }
+                          setConfirmModal({
+                            title: "Delete Draft?",
+                            message: `Are you sure you want to remove "${draft.title || "this draft"}"? This cannot be undone.`,
+                            confirmText: "Delete",
+                            confirmStyle: "destructive",
+                            onConfirm: async () => {
+                              await deleteDraft(draft.id);
+                              if (Platform.OS !== "web") {
+                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                              }
+                            },
+                          });
+                        }}
+                        className="p-1 -mr-1 cursor-pointer"
+                        accessibilityLabel="Delete this draft"
+                      >
+                        <Trash2 color="#EF4444" size={17} />
                       </TouchableOpacity>
                     </View>
 
-                    <Text className="text-xs font-semibold mb-1" style={{ color: theme.primary }}>
-                      {draft.category} • {draft.subCategory}
-                    </Text>
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => handleResumeDraft(draft)}
+                      className="cursor-pointer"
+                    >
+                      <Text className="text-xs font-semibold mb-1" style={{ color: theme.primary }}>
+                        {draft.category} • {draft.subCategory}
+                      </Text>
 
-                    <Text className="text-[11px] mb-2" style={{ color: theme.textSecondary }}>
-                      Saved {formatDraftTime(draft.updatedAt || draft.createdAt)}
-                    </Text>
+                      <Text className="text-[11px] mb-2" style={{ color: theme.textSecondary }}>
+                        Saved {formatDraftTime(draft.updatedAt || draft.createdAt)}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
 
                   {/* Metadata tags */}
-                  <View className="flex-row flex-wrap gap-1.5">
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => handleResumeDraft(draft)}
+                    className="flex-row flex-wrap gap-1.5 cursor-pointer"
+                  >
                     {draft.activeFilter && draft.activeFilter !== "Original" && (
                       <View
                         className="px-2 py-0.5 rounded-md border"
@@ -1560,18 +1646,18 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                         </Text>
                       </View>
                     ) : null}
-                  </View>
+                  </TouchableOpacity>
                 </View>
               </View>
 
               {/* Resume button */}
               <TouchableOpacity
                 onPress={() => handleResumeDraft(draft)}
-                className="w-full py-2.5 rounded-xl flex-row items-center justify-center gap-2 mt-3.5 shadow-sm"
+                className="w-full py-3 rounded-xl flex-row items-center justify-center gap-2 mt-3.5 shadow-sm cursor-pointer"
                 style={{ backgroundColor: theme.primary }}
                 activeOpacity={0.85}
               >
-                <Edit3 color="#fff" size={14} />
+                <Edit3 color="#fff" size={15} />
                 <Text className="text-white font-bold text-xs uppercase tracking-wider">
                   Resume Performance
                 </Text>
@@ -1835,31 +1921,31 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           if (editMode !== "none") {
             setEditMode("none");
           } else {
-            Alert.alert(
-              "Save as Draft?",
-              "Do you want to save this performance take as a draft before leaving?",
-              [
-                {
-                  text: "Save Draft & Exit",
-                  onPress: async () => {
-                    await handleSaveCurrentDraft(false);
-                    setRecordedVideoUri(null);
-                    setActiveDraftId(null);
-                    setStep("HOME");
-                  },
-                },
-                {
-                  text: "Discard",
-                  style: "destructive",
-                  onPress: () => {
-                    setRecordedVideoUri(null);
-                    setActiveDraftId(null);
-                    setStep("HOME");
-                  },
-                },
-                { text: "Keep Editing", style: "cancel" },
-              ]
-            );
+            setConfirmModal({
+              title: "Save as Draft?",
+              message: "Do you want to save this performance take as a draft before leaving the studio?",
+              confirmText: "Save & Exit",
+              confirmStyle: "primary",
+              onConfirm: async () => {
+                await handleSaveCurrentDraft(false);
+                setRecordedVideoUri(null);
+                const hadDraft = !!activeDraftId;
+                setActiveDraftId(null);
+                setStep(hadDraft ? "DRAFTS" : "HOME");
+              },
+              secondaryText: "Discard Changes",
+              secondaryStyle: "destructive",
+              onSecondary: () => {
+                if (Platform.OS !== "web") {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                }
+                setRecordedVideoUri(null);
+                const hadDraft = !!activeDraftId;
+                setActiveDraftId(null);
+                setStep(hadDraft ? "DRAFTS" : "HOME");
+              },
+              cancelText: "Cancel",
+            });
           }
         }}
         rightEl={
@@ -4073,30 +4159,270 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   );
 
   // --- Main Switch ---
-  switch (step) {
-    case "HOME":
-      return renderHome();
-    case "DRAFTS":
-      return renderDrafts();
-    case "RECORD":
-      return renderRecord();
-    case "UPLOAD":
-      return renderUpload();
-    case "PREVIEW":
-      return renderPreview();
-    case "CHOOSE_TALENT":
-      return renderChooseTalent();
-    case "SET_PURPOSE":
-      return renderSetPurpose();
-    case "DETAILS":
-      return renderDetails();
-    case "SUMMARY":
-      return renderSummary();
-    case "UPLOADING":
-      return renderUploading();
-    case "SUCCESS":
-      return renderSuccess();
-    default:
-      return renderHome();
-  }
+  const renderCurrentStep = () => {
+    switch (step) {
+      case "HOME":
+        return renderHome();
+      case "DRAFTS":
+        return renderDrafts();
+      case "RECORD":
+        return renderRecord();
+      case "UPLOAD":
+        return renderUpload();
+      case "PREVIEW":
+        return renderPreview();
+      case "CHOOSE_TALENT":
+        return renderChooseTalent();
+      case "SET_PURPOSE":
+        return renderSetPurpose();
+      case "DETAILS":
+        return renderDetails();
+      case "SUMMARY":
+        return renderSummary();
+      case "UPLOADING":
+        return renderUploading();
+      case "SUCCESS":
+        return renderSuccess();
+      default:
+        return renderHome();
+    }
+  };
+
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.bg }}>
+      {renderCurrentStep()}
+
+      {/* Universal In-App Confirmation Modal */}
+      <Modal
+        visible={!!confirmModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setConfirmModal(null)}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            paddingHorizontal: 24,
+            backgroundColor: "rgba(0, 0, 0, 0.72)",
+          }}
+        >
+          <View
+            style={{
+              width: "100%",
+              maxWidth: 340,
+              borderRadius: 24,
+              padding: 24,
+              borderWidth: 1,
+              borderColor: theme.border,
+              backgroundColor: theme.cardBg,
+              alignItems: "center",
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.35,
+              shadowRadius: 20,
+              elevation: 10,
+            }}
+          >
+            <View
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 28,
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 16,
+                backgroundColor:
+                  confirmModal?.confirmStyle === "destructive"
+                    ? "#EF444420"
+                    : theme.primary + "20",
+              }}
+            >
+              {confirmModal?.confirmStyle === "destructive" ? (
+                <Trash2 color="#EF4444" size={26} />
+              ) : (
+                <Folder color={theme.primary} size={26} />
+              )}
+            </View>
+
+            <Text
+              style={{
+                fontSize: 19,
+                fontWeight: "700",
+                textAlign: "center",
+                marginBottom: 8,
+                color: theme.text,
+              }}
+            >
+              {confirmModal?.title}
+            </Text>
+
+            <Text
+              style={{
+                fontSize: 13,
+                lineHeight: 18,
+                textAlign: "center",
+                marginBottom: 24,
+                color: theme.textSecondary,
+              }}
+            >
+              {confirmModal?.message}
+            </Text>
+
+            {confirmModal?.secondaryText ? (
+              <View style={{ width: "100%", gap: 10 }}>
+                {/* 1. Primary Action (Save & Exit) */}
+                <TouchableOpacity
+                  onPress={async () => {
+                    const action = confirmModal.onConfirm;
+                    setConfirmModal(null);
+                    if (action) {
+                      await action();
+                    }
+                  }}
+                  style={{
+                    width: "100%",
+                    paddingVertical: 13,
+                    borderRadius: 16,
+                    backgroundColor:
+                      confirmModal.confirmStyle === "destructive"
+                        ? "#EF4444"
+                        : theme.primary,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={{ fontWeight: "700", fontSize: 14, color: "#FFFFFF" }}>
+                    {confirmModal.confirmText || "Save & Exit"}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* 2. Secondary Action (Discard Changes) */}
+                <TouchableOpacity
+                  onPress={async () => {
+                    const action = confirmModal.onSecondary;
+                    setConfirmModal(null);
+                    if (action) {
+                      await action();
+                    }
+                  }}
+                  style={{
+                    width: "100%",
+                    paddingVertical: 12,
+                    borderRadius: 16,
+                    borderWidth: 1,
+                    borderColor:
+                      confirmModal.secondaryStyle === "destructive"
+                        ? "#EF444450"
+                        : theme.border,
+                    backgroundColor:
+                      confirmModal.secondaryStyle === "destructive"
+                        ? "rgba(239, 68, 68, 0.12)"
+                        : theme.surfaceBg,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={{
+                      fontWeight: "700",
+                      fontSize: 14,
+                      color:
+                        confirmModal.secondaryStyle === "destructive"
+                          ? "#EF4444"
+                          : theme.text,
+                    }}
+                  >
+                    {confirmModal.secondaryText}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* 3. Tertiary Action (Cancel / Keep Editing) */}
+                <TouchableOpacity
+                  onPress={() => {
+                    if (Platform.OS !== "web") {
+                      Haptics.selectionAsync();
+                    }
+                    setConfirmModal(null);
+                  }}
+                  style={{
+                    width: "100%",
+                    paddingVertical: 10,
+                    borderRadius: 16,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontWeight: "600", fontSize: 13, color: theme.textSecondary }}>
+                    {confirmModal.cancelText || "Cancel"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={{ width: "100%", flexDirection: "row", gap: 12 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (Platform.OS !== "web") {
+                      Haptics.selectionAsync();
+                    }
+                    setConfirmModal(null);
+                  }}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 12,
+                    borderRadius: 16,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                    backgroundColor: theme.surfaceBg,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontWeight: "600", fontSize: 14, color: theme.text }}>
+                    {confirmModal?.cancelText || "Cancel"}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={async () => {
+                    const action = confirmModal?.onConfirm;
+                    setConfirmModal(null);
+                    if (action) {
+                      await action();
+                    }
+                  }}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 12,
+                    borderRadius: 16,
+                    backgroundColor:
+                      confirmModal?.confirmStyle === "destructive"
+                        ? "#EF4444"
+                        : theme.primary,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={{ fontWeight: "700", fontSize: 14, color: "#FFFFFF" }}>
+                    {confirmModal?.confirmText || "Confirm"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
 }
