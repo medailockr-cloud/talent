@@ -378,7 +378,7 @@ export function ShowsView() {
                     {/* Top Badges */}
                     <View className="absolute top-3 inset-x-3 flex-row items-center justify-between">
                       <View className="bg-black/60 backdrop-blur-md px-3 py-1 rounded-full border border-white/20 flex-row items-center gap-1.5">
-                        <Calendar color="#E50914" size={11} />
+                        <Calendar color="#E91E76" size={11} />
                         <Text className="text-white text-[11px] font-bold">
                           {formatShowDate(show.date)}
                         </Text>
@@ -408,7 +408,7 @@ export function ShowsView() {
                               show.host?.avatarUrl ||
                               `https://ui-avatars.com/api/?name=${encodeURIComponent(
                                 show.host?.name || show.host?.username || 'Artist'
-                              )}&background=E50914&color=fff`,
+                              )}&background=E91E76&color=fff`,
                           }}
                           className="w-6 h-6 rounded-full border border-white/40"
                         />
@@ -505,7 +505,7 @@ export function ShowsView() {
                 style={{ borderBottomColor: theme.border }}
               >
                 <View className="flex-row items-center gap-2">
-                  <View className="bg-[#E50914] px-2 py-0.5 rounded">
+                  <View className="bg-[#E91E76] px-2 py-0.5 rounded">
                     <Text className="text-white text-[10px] font-bold uppercase tracking-wider">Show Details</Text>
                   </View>
                   <Text className="font-bold text-[14px] max-w-[200px]" style={{ color: theme.text }} numberOfLines={1}>
@@ -522,7 +522,7 @@ export function ShowsView() {
               </View>
 
               <ScrollView className="flex-1 p-5" contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
-                <Text className="text-[#E50914] text-[11px] font-bold tracking-widest uppercase mb-1">
+                <Text className="text-[#E91E76] text-[11px] font-bold tracking-widest uppercase mb-1">
                   Verified Artist Concert
                 </Text>
                 <Text className="text-[24px] font-bold leading-tight mb-3" style={{ color: theme.text }}>

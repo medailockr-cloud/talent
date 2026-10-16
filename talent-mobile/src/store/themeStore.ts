@@ -52,16 +52,16 @@ export const THEMES: Record<ThemeId, AppTheme> & Record<string, AppTheme> = {
     id: 'dark',
     name: 'Dark Theme',
     tagline: 'Signature Obsidian Stage',
-    description: 'Concert stage spotlight with signature scarlet red pulse and obsidian depths.',
+    description: 'Concert stage spotlight with signature neon magenta pulse and obsidian depths.',
     icon: 'Moon',
     isDark: true,
     bg: '#050608',
     cardBg: '#12141A',
     surfaceBg: '#1A1D24',
     headerBg: '#050608',
-    primary: '#E50914',
-    primaryLight: '#FF3B30',
-    primaryDark: '#B91C1C',
+    primary: '#E91E76',
+    primaryLight: '#F06292',
+    primaryDark: '#C2185B',
     accent: '#FB923C',
     accentAlt: '#38BDF8',
     text: '#FFFFFF',
@@ -71,27 +71,27 @@ export const THEMES: Record<ThemeId, AppTheme> & Record<string, AppTheme> = {
     borderStrong: 'rgba(255, 255, 255, 0.16)',
     tabBg: '#000000',
     tabBorder: '#222222',
-    tabActiveTint: '#E50914',
+    tabActiveTint: '#E91E76',
     tabInactiveTint: '#888888',
-    badgeBg: '#E50914',
+    badgeBg: '#E91E76',
     badgeText: '#FFFFFF',
-    gradient: ['#E50914', '#FB923C'],
-    accentGlow: 'rgba(229, 9, 20, 0.45)',
+    gradient: ['#E91E76', '#FB923C'],
+    accentGlow: 'rgba(233, 30, 118, 0.45)',
   },
   light: {
     id: 'light',
     name: 'Light Theme',
     tagline: 'Clean White Studio',
-    description: 'Crisp gallery white canvas with refined borders, crimson red accents, and high-contrast typography.',
+    description: 'Crisp gallery white canvas with refined borders, berry accents, and high-contrast typography.',
     icon: 'Sun',
     isDark: false,
     bg: '#FFFFFF',
     cardBg: '#FAFAFA',
     surfaceBg: '#F0F0F0',
     headerBg: '#FFFFFF',
-    primary: '#E50914',
-    primaryLight: '#FF3B30',
-    primaryDark: '#B91C1C',
+    primary: '#E91E76',
+    primaryLight: '#F06292',
+    primaryDark: '#C2185B',
     accent: '#FB923C',
     accentAlt: '#38BDF8',
     text: '#18181B',
@@ -101,12 +101,12 @@ export const THEMES: Record<ThemeId, AppTheme> & Record<string, AppTheme> = {
     borderStrong: '#D4D4D8',
     tabBg: '#FFFFFF',
     tabBorder: '#E4E4E7',
-    tabActiveTint: '#E50914',
+    tabActiveTint: '#E91E76',
     tabInactiveTint: '#71717A',
-    badgeBg: '#E50914',
+    badgeBg: '#E91E76',
     badgeText: '#FFFFFF',
-    gradient: ['#E50914', '#FB923C'],
-    accentGlow: 'rgba(229, 9, 20, 0.3)',
+    gradient: ['#E91E76', '#FB923C'],
+    accentGlow: 'rgba(233, 30, 118, 0.3)',
   },
 };
 
@@ -117,11 +117,11 @@ THEMES.instagram = THEMES.dark;
 THEMES.instagram_light = THEMES.light;
 
 const normalizeThemeId = (rawId: string | null | undefined): ThemeId => {
-  if (rawId === 'light' || rawId === 'instagram_light' || rawId === 'white') return 'light';
-  return 'dark';
+  if (rawId === 'dark') return 'dark';
+  return 'light';
 };
 
-const THEME_STORAGE_KEY = 'talent_app_theme_id';
+const THEME_STORAGE_KEY = 'talent_app_theme_id_v2';
 
 interface ThemeState {
   themeId: ThemeId;
@@ -147,13 +147,16 @@ const syncWebStyles = (theme: AppTheme) => {
   }
 };
 
+// Initialize web styling with default light theme immediately
+syncWebStyles(THEMES.light);
+
 export const useThemeStore = create<ThemeState>((set, get) => ({
-  themeId: 'dark',
-  theme: THEMES.dark,
+  themeId: 'light',
+  theme: THEMES.light,
 
   setTheme: async (id: ThemeId) => {
     const normId = normalizeThemeId(id);
-    const newTheme = THEMES[normId] || THEMES.dark;
+    const newTheme = THEMES[normId] || THEMES.light;
     set({ themeId: normId, theme: newTheme });
     syncWebStyles(newTheme);
 
@@ -178,7 +181,7 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
       }
 
       const normId = normalizeThemeId(savedId);
-      const activeTheme = THEMES[normId] || THEMES.dark;
+      const activeTheme = THEMES[normId] || THEMES.light;
       set({ themeId: normId, theme: activeTheme });
       syncWebStyles(activeTheme);
     } catch (e) {

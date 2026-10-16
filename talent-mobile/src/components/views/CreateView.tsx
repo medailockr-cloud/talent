@@ -83,12 +83,13 @@ import { useUIStore } from "../../store/uiStore";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useThemeStore } from "../../store/themeStore";
+import { useDraftsStore, CreateDraft } from "../../store/draftsStore";
 
 // --- Types & Filter Configurations ---
 export interface TalentFilter {
   id: string;
   name: string;
-  category: "All" | "Popular" | "Stage" | "Mood" | "Film" | "B&W";
+  category: "All" | "Popular" | "Stage" | "Portrait" | "Cinematic" | "Mood" | "Film" | "B&W";
   badge?: string;
   cssFilter: (intensity: number) => string;
   overlayColor?: string;
@@ -116,48 +117,26 @@ export const TALENT_FILTERS: TalentFilter[] = [
     badge: "POPULAR",
     cssFilter: (int) =>
       `contrast(${1 + 0.3 * int}) saturate(${1 + 0.45 * int}) brightness(${1 + 0.05 * int}) hue-rotate(${-8 * int}deg)`,
-    overlayColor: "rgba(229, 9, 20, 0.16)",
+    overlayColor: "rgba(233, 30, 118, 0.16)",
     overlayOpacity: 0.8,
     secondaryOverlay: "rgba(251, 146, 60, 0.1)",
-    previewBg: "#E50914",
-    accentColor: "#E50914",
+    previewBg: "#E91E76",
+    accentColor: "#E91E76",
     description: "Concert stage glow & punchy mids",
   },
   {
-    id: "studio",
-    name: "Studio",
-    category: "Popular",
+    id: "spotlight",
+    name: "Spotlight",
+    category: "Stage",
+    badge: "DRAMA",
     cssFilter: (int) =>
-      `contrast(${1 + 0.22 * int}) brightness(${1 + 0.08 * int}) saturate(${1 + 0.18 * int})`,
-    overlayColor: "rgba(14, 165, 233, 0.12)",
-    overlayOpacity: 0.7,
-    previewBg: "#0284C7",
-    accentColor: "#38BDF8",
-    description: "Crisp studio clarity & balanced exposure",
-  },
-  {
-    id: "natural",
-    name: "Natural",
-    category: "Popular",
-    cssFilter: (int) =>
-      `brightness(${1 + 0.06 * int}) saturate(${1 + 0.12 * int}) contrast(${1 + 0.08 * int})`,
-    overlayColor: "rgba(245, 158, 11, 0.10)",
-    overlayOpacity: 0.6,
-    previewBg: "#D97706",
-    accentColor: "#FBBF24",
-    description: "Golden hour glow and soft warm radiance",
-  },
-  {
-    id: "bw",
-    name: "Noir B&W",
-    category: "B&W",
-    cssFilter: (int) =>
-      `grayscale(${1 * int}) contrast(${1 + 0.42 * int}) brightness(${1 - 0.06 * int})`,
-    overlayColor: "rgba(17, 24, 39, 0.25)",
-    overlayOpacity: 0.8,
-    previewBg: "#111827",
-    accentColor: "#F3F4F6",
-    description: "High-contrast cinematic monochrome",
+      `contrast(${1 + 0.45 * int}) brightness(${1 - 0.08 * int}) saturate(${1 + 0.3 * int})`,
+    overlayColor: "rgba(99, 102, 241, 0.2)",
+    overlayOpacity: 0.85,
+    secondaryOverlay: "rgba(244, 63, 94, 0.12)",
+    previewBg: "#4338CA",
+    accentColor: "#818CF8",
+    description: "Dramatic theatre spotlight with deep vignette",
   },
   {
     id: "live",
@@ -174,21 +153,166 @@ export const TALENT_FILTERS: TalentFilter[] = [
     description: "Cyberpunk live arena lasers & violet neon",
   },
   {
-    id: "lowlight",
-    name: "Low Light",
-    category: "Mood",
+    id: "goldenhour",
+    name: "Golden Hour",
+    category: "Stage",
+    badge: "GLOW",
     cssFilter: (int) =>
-      `brightness(${1 + 0.35 * int}) contrast(${1 + 0.18 * int}) saturate(${1 + 0.15 * int})`,
-    overlayColor: "rgba(255, 255, 255, 0.12)",
+      `sepia(${0.25 * int}) saturate(${1 + 0.5 * int}) brightness(${1 + 0.12 * int}) hue-rotate(${-10 * int}deg)`,
+    overlayColor: "rgba(245, 158, 11, 0.22)",
+    overlayOpacity: 0.75,
+    secondaryOverlay: "rgba(234, 88, 12, 0.1)",
+    previewBg: "#B45309",
+    accentColor: "#FBBF24",
+    description: "Warm afternoon sunburst & golden amphitheatre aura",
+  },
+  {
+    id: "pyroarena",
+    name: "Pyro Arena",
+    category: "Stage",
+    badge: "HOT",
+    cssFilter: (int) =>
+      `contrast(${1 + 0.52 * int}) saturate(${1 + 0.65 * int}) brightness(${1 - 0.04 * int}) hue-rotate(${-20 * int}deg)`,
+    overlayColor: "rgba(239, 68, 68, 0.24)",
+    overlayOpacity: 0.85,
+    secondaryOverlay: "rgba(249, 115, 22, 0.16)",
+    previewBg: "#DC2626",
+    accentColor: "#F87171",
+    description: "Fierce stadium rock & pyro red energy",
+  },
+  {
+    id: "studio",
+    name: "Studio",
+    category: "Popular",
+    badge: "PRO",
+    cssFilter: (int) =>
+      `contrast(${1 + 0.22 * int}) brightness(${1 + 0.08 * int}) saturate(${1 + 0.18 * int})`,
+    overlayColor: "rgba(14, 165, 233, 0.12)",
+    overlayOpacity: 0.7,
+    previewBg: "#0284C7",
+    accentColor: "#38BDF8",
+    description: "Crisp studio clarity & balanced exposure",
+  },
+  {
+    id: "autofix",
+    name: "Auto Fix",
+    category: "Popular",
+    badge: "AI",
+    cssFilter: (int) =>
+      `contrast(${1 + 0.22 * int}) brightness(${1 + 0.1 * int}) saturate(${1 + 0.22 * int})`,
+    overlayColor: "rgba(233, 30, 118, 0.08)",
+    overlayOpacity: 0.7,
+    previewBg: "#E91E76",
+    accentColor: "#F472B6",
+    description: "Smart luminance & dynamic range balance",
+  },
+  {
+    id: "natural",
+    name: "Natural",
+    category: "Popular",
+    cssFilter: (int) =>
+      `brightness(${1 + 0.06 * int}) saturate(${1 + 0.12 * int}) contrast(${1 + 0.08 * int})`,
+    overlayColor: "rgba(245, 158, 11, 0.10)",
     overlayOpacity: 0.6,
-    previewBg: "#475569",
+    previewBg: "#D97706",
+    accentColor: "#FBBF24",
+    description: "Soft warm radiance & natural skin luster",
+  },
+  {
+    id: "silk",
+    name: "Silk & Glow",
+    category: "Portrait",
+    badge: "BEAUTY",
+    cssFilter: (int) =>
+      `brightness(${1 + 0.15 * int}) contrast(${1 - 0.06 * int}) saturate(${1 + 0.18 * int})`,
+    overlayColor: "rgba(253, 230, 138, 0.14)",
+    overlayOpacity: 0.65,
+    previewBg: "#F59E0B",
+    accentColor: "#FDE68A",
+    description: "Soft luminous skin tones & dreamy beauty diffusion",
+  },
+  {
+    id: "porcelain",
+    name: "Porcelain",
+    category: "Portrait",
+    cssFilter: (int) =>
+      `brightness(${1 + 0.18 * int}) contrast(${1 + 0.14 * int}) saturate(${1 - 0.08 * int})`,
+    overlayColor: "rgba(241, 245, 249, 0.16)",
+    overlayOpacity: 0.65,
+    previewBg: "#94A3B8",
+    accentColor: "#F8FAFC",
+    description: "Clean high-key studio glamour illumination",
+  },
+  {
+    id: "warmhoney",
+    name: "Warm Honey",
+    category: "Portrait",
+    cssFilter: (int) =>
+      `sepia(${0.22 * int}) saturate(${1 + 0.38 * int}) contrast(${1 + 0.16 * int}) brightness(${1 + 0.05 * int})`,
+    overlayColor: "rgba(217, 119, 6, 0.18)",
+    overlayOpacity: 0.7,
+    previewBg: "#92400E",
+    accentColor: "#F59E0B",
+    description: "Rich caramel warmth for dancers & singers",
+  },
+  {
+    id: "tealorange",
+    name: "Teal & Orange",
+    category: "Cinematic",
+    badge: "CINEMA",
+    cssFilter: (int) =>
+      `contrast(${1 + 0.38 * int}) saturate(${1 + 0.42 * int}) hue-rotate(${14 * int}deg)`,
+    overlayColor: "rgba(13, 148, 136, 0.2)",
+    overlayOpacity: 0.8,
+    secondaryOverlay: "rgba(249, 115, 22, 0.15)",
+    previewBg: "#0F766E",
+    accentColor: "#2DD4BF",
+    description: "Hollywood signature blockbuster color grade",
+  },
+  {
+    id: "neotokyo",
+    name: "Neo Tokyo",
+    category: "Cinematic",
+    badge: "SCI-FI",
+    cssFilter: (int) =>
+      `contrast(${1 + 0.45 * int}) saturate(${1 + 0.7 * int}) hue-rotate(${165 * int}deg)`,
+    overlayColor: "rgba(6, 182, 212, 0.22)",
+    overlayOpacity: 0.85,
+    secondaryOverlay: "rgba(236, 72, 153, 0.18)",
+    previewBg: "#0891B2",
+    accentColor: "#67E8F9",
+    description: "Rain-slicked neon cyan and magenta haze",
+  },
+  {
+    id: "silverscreen",
+    name: "Silver Screen",
+    category: "Cinematic",
+    cssFilter: (int) =>
+      `contrast(${1 + 0.36 * int}) saturate(${1 - 0.4 * int}) brightness(${1 - 0.05 * int})`,
+    overlayColor: "rgba(71, 85, 105, 0.22)",
+    overlayOpacity: 0.75,
+    previewBg: "#334155",
     accentColor: "#94A3B8",
-    description: "Nightclub & dim room exposure booster",
+    description: "Bleached thriller palette with silver dynamic range",
+  },
+  {
+    id: "portra",
+    name: "Portra 400",
+    category: "Film",
+    badge: "ANALOG",
+    cssFilter: (int) =>
+      `contrast(${1 + 0.14 * int}) saturate(${1 + 0.24 * int}) sepia(${0.16 * int}) brightness(${1 + 0.07 * int})`,
+    overlayColor: "rgba(254, 215, 170, 0.16)",
+    overlayOpacity: 0.7,
+    previewBg: "#C2410C",
+    accentColor: "#FDBA74",
+    description: "Iconic pastel emulsion & organic skin tones",
   },
   {
     id: "vintage",
     name: "Vintage '92",
     category: "Film",
+    badge: "RETRO",
     cssFilter: (int) =>
       `sepia(${0.55 * int}) contrast(${1 + 0.18 * int}) brightness(${1 - 0.04 * int}) saturate(${1 + 0.2 * int})`,
     overlayColor: "rgba(180, 83, 9, 0.22)",
@@ -198,30 +322,18 @@ export const TALENT_FILTERS: TalentFilter[] = [
     description: "35mm grain aesthetic & analogue warmth",
   },
   {
-    id: "cyber",
-    name: "Cyberpunk",
-    category: "Mood",
+    id: "vividchrome",
+    name: "Vivid Chrome",
+    category: "Film",
+    badge: "VIVID",
     cssFilter: (int) =>
-      `hue-rotate(${135 * int}deg) saturate(${1 + 0.6 * int}) contrast(${1 + 0.3 * int})`,
-    overlayColor: "rgba(244, 63, 94, 0.18)",
-    overlayOpacity: 0.8,
-    secondaryOverlay: "rgba(59, 130, 246, 0.18)",
-    previewBg: "#E11D48",
-    accentColor: "#FB7185",
-    description: "Dual-tone hyper-contrast nightscape",
-  },
-  {
-    id: "autofix",
-    name: "Auto Fix",
-    category: "Popular",
-    badge: "AI",
-    cssFilter: (int) =>
-      `contrast(${1 + 0.22 * int}) brightness(${1 + 0.1 * int}) saturate(${1 + 0.22 * int})`,
-    overlayColor: "rgba(229, 9, 20, 0.08)",
+      `contrast(${1 + 0.4 * int}) saturate(${1 + 0.75 * int}) brightness(${1 - 0.02 * int})`,
+    overlayColor: "rgba(16, 185, 129, 0.16)",
     overlayOpacity: 0.7,
-    previewBg: "#E50914",
-    accentColor: "#F87171",
-    description: "Smart luminance & dynamic range balance",
+    secondaryOverlay: "rgba(59, 130, 246, 0.12)",
+    previewBg: "#047857",
+    accentColor: "#6EE7B7",
+    description: "Ultra-saturated slide film with punchy primaries",
   },
   {
     id: "emerald",
@@ -236,9 +348,23 @@ export const TALENT_FILTERS: TalentFilter[] = [
     description: "Indie festival teal & emerald cinematic tint",
   },
   {
+    id: "vhs",
+    name: "VHS '88",
+    category: "Film",
+    badge: "LO-FI",
+    cssFilter: (int) =>
+      `contrast(${1 + 0.22 * int}) saturate(${1 + 0.38 * int}) hue-rotate(${-18 * int}deg) brightness(${1 + 0.06 * int})`,
+    overlayColor: "rgba(219, 39, 119, 0.18)",
+    overlayOpacity: 0.75,
+    previewBg: "#9D174D",
+    accentColor: "#F472B6",
+    description: "Camcorder nostalgia & analog tape color bleed",
+  },
+  {
     id: "sunset",
     name: "Sunset Dream",
     category: "Mood",
+    badge: "DUSK",
     cssFilter: (int) =>
       `sepia(${0.3 * int}) saturate(${1 + 0.45 * int}) brightness(${1 + 0.06 * int}) hue-rotate(${-15 * int}deg)`,
     overlayColor: "rgba(244, 63, 94, 0.18)",
@@ -247,6 +373,111 @@ export const TALENT_FILTERS: TalentFilter[] = [
     previewBg: "#BE123C",
     accentColor: "#FDA4AF",
     description: "Radiant dusk horizon & magenta blush",
+  },
+  {
+    id: "midnight",
+    name: "Midnight Blue",
+    category: "Mood",
+    badge: "NIGHT",
+    cssFilter: (int) =>
+      `brightness(${1 - 0.12 * int}) contrast(${1 + 0.3 * int}) hue-rotate(${190 * int}deg) saturate(${1 + 0.32 * int})`,
+    overlayColor: "rgba(30, 58, 138, 0.26)",
+    overlayOpacity: 0.85,
+    secondaryOverlay: "rgba(56, 189, 248, 0.12)",
+    previewBg: "#1E3A8A",
+    accentColor: "#60A5FA",
+    description: "Moody late-night electric blue ambiance",
+  },
+  {
+    id: "candypop",
+    name: "Candy Pop",
+    category: "Mood",
+    badge: "POP",
+    cssFilter: (int) =>
+      `saturate(${1 + 0.85 * int}) contrast(${1 + 0.25 * int}) brightness(${1 + 0.12 * int})`,
+    overlayColor: "rgba(244, 114, 182, 0.2)",
+    overlayOpacity: 0.8,
+    secondaryOverlay: "rgba(192, 132, 252, 0.14)",
+    previewBg: "#DB2777",
+    accentColor: "#F472B6",
+    description: "Bursting pastel candy punch for upbeat moves",
+  },
+  {
+    id: "ethereal",
+    name: "Ethereal Mist",
+    category: "Mood",
+    cssFilter: (int) =>
+      `brightness(${1 + 0.16 * int}) contrast(${1 - 0.1 * int}) saturate(${1 + 0.22 * int}) hue-rotate(${20 * int}deg)`,
+    overlayColor: "rgba(167, 139, 250, 0.2)",
+    overlayOpacity: 0.75,
+    previewBg: "#7C3AED",
+    accentColor: "#C4B5FD",
+    description: "Dreamy lavender glow with soft highlights",
+  },
+  {
+    id: "lowlight",
+    name: "Low Light",
+    category: "Mood",
+    cssFilter: (int) =>
+      `brightness(${1 + 0.35 * int}) contrast(${1 + 0.18 * int}) saturate(${1 + 0.15 * int})`,
+    overlayColor: "rgba(255, 255, 255, 0.12)",
+    overlayOpacity: 0.6,
+    previewBg: "#475569",
+    accentColor: "#94A3B8",
+    description: "Nightclub & dim room exposure booster",
+  },
+  {
+    id: "cyber",
+    name: "Cyberpunk",
+    category: "Mood",
+    badge: "FUTURISTIC",
+    cssFilter: (int) =>
+      `hue-rotate(${135 * int}deg) saturate(${1 + 0.6 * int}) contrast(${1 + 0.3 * int})`,
+    overlayColor: "rgba(244, 63, 94, 0.18)",
+    overlayOpacity: 0.8,
+    secondaryOverlay: "rgba(59, 130, 246, 0.18)",
+    previewBg: "#E11D48",
+    accentColor: "#FB7185",
+    description: "Dual-tone hyper-contrast nightscape",
+  },
+  {
+    id: "bw",
+    name: "Noir B&W",
+    category: "B&W",
+    badge: "CLASSIC",
+    cssFilter: (int) =>
+      `grayscale(${1 * int}) contrast(${1 + 0.42 * int}) brightness(${1 - 0.06 * int})`,
+    overlayColor: "rgba(17, 24, 39, 0.25)",
+    overlayOpacity: 0.8,
+    previewBg: "#111827",
+    accentColor: "#F3F4F6",
+    description: "High-contrast cinematic monochrome",
+  },
+  {
+    id: "graphite",
+    name: "Graphite Deep",
+    category: "B&W",
+    badge: "CRISP",
+    cssFilter: (int) =>
+      `grayscale(${1 * int}) contrast(${1 + 0.75 * int}) brightness(${1 - 0.12 * int})`,
+    overlayColor: "rgba(0, 0, 0, 0.35)",
+    overlayOpacity: 0.9,
+    previewBg: "#030712",
+    accentColor: "#E5E7EB",
+    description: "Inky crushed blacks & punchy silver highlights",
+  },
+  {
+    id: "sepianostalgia",
+    name: "Sepia Archive",
+    category: "B&W",
+    badge: "VINTAGE",
+    cssFilter: (int) =>
+      `sepia(${0.9 * int}) contrast(${1 + 0.22 * int}) brightness(${1 - 0.02 * int})`,
+    overlayColor: "rgba(120, 53, 15, 0.24)",
+    overlayOpacity: 0.8,
+    previewBg: "#78350F",
+    accentColor: "#D97706",
+    description: "Timeless antique museum sepia print",
   },
 ];
 
@@ -310,7 +541,7 @@ export const SOUND_TRACKS: SoundTrack[] = [
     artist: "Talent Beat Lab",
     genre: "Lo-Fi / Soul",
     duration: "02:18",
-    accent: "#E50914",
+    accent: "#E91E76",
   },
   {
     id: "track-2",
@@ -356,12 +587,20 @@ type CreateStep =
   | "DETAILS"
   | "SUMMARY"
   | "UPLOADING"
-  | "SUCCESS";
+  | "SUCCESS"
+  | "DRAFTS";
 
 export function CreateView({ onClose }: { onClose?: () => void }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useThemeStore();
+  const { drafts, loadDrafts, saveDraft, deleteDraft, clearDrafts } = useDraftsStore();
+  const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadDrafts();
+  }, [loadDrafts]);
+
   // --- Permissions ---
   const [facing, setFacing] = useState<"front" | "back">(
     Platform.OS === "web" ? "front" : "back",
@@ -806,6 +1045,10 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       await submitToServer();
       clearInterval(interval);
       setUploadProgress(100);
+      if (activeDraftId) {
+        await deleteDraft(activeDraftId);
+        setActiveDraftId(null);
+      }
       setTimeout(() => {
         setStep("SUCCESS");
       }, 400);
@@ -925,6 +1168,96 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     }
   };
 
+  // --- Studio Drafts Helpers ---
+  const formatDraftTime = (timestamp?: number) => {
+    if (!timestamp) return "Recently";
+    const diff = Date.now() - timestamp;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "Just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    const d = new Date(timestamp);
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  };
+
+  const handleSaveCurrentDraft = async (showFeedback = true) => {
+    if (!recordedVideoUri) {
+      Alert.alert("No Media", "Please record or select a video before saving a draft.");
+      return null;
+    }
+    try {
+      const saved = await saveDraft({
+        id: activeDraftId || undefined,
+        mediaUri: recordedVideoUri,
+        mediaType,
+        cameraMode,
+        title: title.trim() || "Untitled Take",
+        category,
+        subCategory,
+        purpose,
+        location,
+        allowJudging,
+        allowComments,
+        visibility,
+        activeFilter,
+        filterIntensity,
+        adjustments,
+        selectedSoundTrack,
+        originalAudioVolume,
+        isOriginalMuted,
+        captionText,
+        captionStyle,
+        showCaptions,
+        coverImageUri,
+        duration,
+      });
+      setActiveDraftId(saved.id);
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      if (showFeedback) {
+        Alert.alert("Draft Saved", "Your performance has been saved to Studio Drafts.");
+      }
+      return saved;
+    } catch (e) {
+      console.error("Failed to save draft:", e);
+      Alert.alert("Error", "Could not save draft. Please try again.");
+      return null;
+    }
+  };
+
+  const handleResumeDraft = (draft: CreateDraft) => {
+    setActiveDraftId(draft.id);
+    setRecordedVideoUri(draft.mediaUri);
+    setMediaType(draft.mediaType || "video");
+    setCameraMode(draft.cameraMode || (draft.mediaType === "image" ? "photo" : "video"));
+    setTitle(draft.title || "");
+    setCategory(draft.category || "Dance");
+    setSubCategory(draft.subCategory || "Contemporary");
+    setPurpose(draft.purpose || "Get Discovered");
+    setLocation(draft.location || "Bengaluru, India");
+    setAllowJudging(draft.allowJudging ?? true);
+    setAllowComments(draft.allowComments ?? true);
+    setVisibility(draft.visibility || "Public");
+    setActiveFilter(draft.activeFilter || "Original");
+    setFilterIntensity(draft.filterIntensity ?? 0.85);
+    setAdjustments(draft.adjustments || { brightness: 0, contrast: 0, saturation: 0, warmth: 0 });
+    setSelectedSoundTrack(draft.selectedSoundTrack || "none");
+    setOriginalAudioVolume(draft.originalAudioVolume ?? 100);
+    setIsOriginalMuted(draft.isOriginalMuted ?? false);
+    setCaptionText(draft.captionText || "");
+    setCaptionStyle(draft.captionStyle || "classic");
+    setShowCaptions(draft.showCaptions ?? false);
+    setCoverImageUri(draft.coverImageUri || null);
+    if (draft.duration) {
+      setDuration(draft.duration);
+    }
+    setStep("PREVIEW");
+  };
+
   // --- Render Helpers ---
   const TopNav = ({
     title,
@@ -1019,15 +1352,235 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       <TouchableOpacity 
         className="rounded-2xl p-4 flex-row items-center self-start px-6 mt-2 border"
         style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
-        onPress={() => {
-          Alert.alert("Drafts", "You have 2 saved drafts available in studio cache.");
-        }}
+        onPress={() => setStep("DRAFTS")}
       >
-        <Folder color={theme.textSecondary} size={20} className="mr-3" />
-        <Text className="font-medium" style={{ color: theme.text }}>Drafts • 2</Text>
+        <Folder color={drafts.length > 0 ? theme.primary : theme.textSecondary} size={20} className="mr-3" />
+        <Text className="font-medium" style={{ color: theme.text }}>
+          Drafts {drafts.length > 0 ? `• ${drafts.length}` : "• 0"}
+        </Text>
         <ChevronRight color={theme.textSecondary} size={16} className="ml-2" />
       </TouchableOpacity>
     </ScrollView>
+  );
+
+  const renderDrafts = () => (
+    <View className="flex-1" style={{ backgroundColor: theme.bg, paddingTop: Math.max(insets.top, 20) }}>
+      <TopNav
+        title="Studio Drafts"
+        onBack={() => setStep("HOME")}
+        rightEl={
+          drafts.length > 0 ? (
+            <TouchableOpacity
+              onPress={() => {
+                Alert.alert(
+                  "Clear All Drafts",
+                  "Are you sure you want to delete all saved drafts from your studio cache?",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Clear All",
+                      style: "destructive",
+                      onPress: async () => {
+                        await clearDrafts();
+                        if (Platform.OS !== "web") {
+                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        }
+                      },
+                    },
+                  ]
+                );
+              }}
+              className="p-2 rounded-full border"
+              style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+            >
+              <Trash2 color="#EF4444" size={16} />
+            </TouchableOpacity>
+          ) : undefined
+        }
+      />
+
+      {drafts.length === 0 ? (
+        <View className="flex-1 items-center justify-center px-8 pb-16">
+          <View
+            className="w-24 h-24 rounded-full items-center justify-center mb-5 border"
+            style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+          >
+            <Folder color={theme.textSecondary} size={42} opacity={0.6} />
+          </View>
+          <Text className="text-2xl font-bold mb-2 text-center" style={{ color: theme.text }}>
+            No Saved Drafts
+          </Text>
+          <Text
+            className="text-center text-sm mb-8 leading-relaxed max-w-[280px]"
+            style={{ color: theme.textSecondary }}
+          >
+            When you record or upload a performance and choose "Save Draft", it will appear here so you can continue editing anytime.
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              setCameraMode("video");
+              setStep("RECORD");
+            }}
+            className="px-6 py-3.5 rounded-full flex-row items-center gap-2 shadow-md"
+            style={{ backgroundColor: theme.primary }}
+            activeOpacity={0.85}
+          >
+            <Plus color="#fff" size={18} />
+            <Text className="text-white font-bold text-sm tracking-wide">
+              Start New Performance
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <ScrollView
+          className="flex-1 px-5"
+          contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 40) }}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text
+            style={{ color: theme.textSecondary }}
+            className="text-xs font-semibold uppercase tracking-wider mb-4"
+          >
+            {drafts.length} {drafts.length === 1 ? "Saved Take" : "Saved Takes"} In Studio Cache
+          </Text>
+
+          {drafts.map((draft) => (
+            <View
+              key={draft.id}
+              className="rounded-2xl p-4 mb-3.5 border"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+            >
+              <View className="flex-row items-start">
+                {/* Thumbnail / Media icon preview */}
+                <View
+                  className="w-20 h-24 rounded-xl overflow-hidden mr-3.5 relative border items-center justify-center"
+                  style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                >
+                  {draft.coverImageUri || draft.mediaType === "image" ? (
+                    <Image
+                      source={{ uri: draft.coverImageUri || draft.mediaUri }}
+                      className="w-full h-full"
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View className="items-center justify-center">
+                      <FileVideo color={theme.textSecondary} size={28} opacity={0.7} />
+                    </View>
+                  )}
+
+                  {/* Media Type / Play badge */}
+                  <View className="absolute inset-0 bg-black/20 items-center justify-center">
+                    <View className="w-7 h-7 rounded-full bg-black/60 items-center justify-center border border-white/20">
+                      <Play color="#fff" size={12} fill="#fff" />
+                    </View>
+                  </View>
+
+                  <View className="absolute bottom-1 right-1 bg-black/75 px-1.5 py-0.5 rounded">
+                    <Text className="text-[8px] font-bold text-white uppercase tracking-wider">
+                      {draft.mediaType === "image" ? "Photo" : "Video"}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Info details */}
+                <View className="flex-1 justify-between min-h-[96px]">
+                  <View>
+                    <View className="flex-row items-center justify-between mb-0.5">
+                      <Text
+                        className="font-bold text-[16px] flex-1 mr-2"
+                        style={{ color: theme.text }}
+                        numberOfLines={1}
+                      >
+                        {draft.title || "Untitled Take"}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => {
+                          Alert.alert(
+                            "Delete Draft",
+                            `Are you sure you want to remove "${draft.title || "this draft"}"? This cannot be undone.`,
+                            [
+                              { text: "Cancel", style: "cancel" },
+                              {
+                                text: "Delete",
+                                style: "destructive",
+                                onPress: async () => {
+                                  await deleteDraft(draft.id);
+                                  if (Platform.OS !== "web") {
+                                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                  }
+                                },
+                              },
+                            ]
+                          );
+                        }}
+                        className="p-1 -mr-1"
+                      >
+                        <Trash2 color="#EF4444" size={16} />
+                      </TouchableOpacity>
+                    </View>
+
+                    <Text className="text-xs font-semibold mb-1" style={{ color: theme.primary }}>
+                      {draft.category} • {draft.subCategory}
+                    </Text>
+
+                    <Text className="text-[11px] mb-2" style={{ color: theme.textSecondary }}>
+                      Saved {formatDraftTime(draft.updatedAt || draft.createdAt)}
+                    </Text>
+                  </View>
+
+                  {/* Metadata tags */}
+                  <View className="flex-row flex-wrap gap-1.5">
+                    {draft.activeFilter && draft.activeFilter !== "Original" && (
+                      <View
+                        className="px-2 py-0.5 rounded-md border"
+                        style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                      >
+                        <Text className="text-[10px]" style={{ color: theme.textSecondary }}>
+                          Filter: {draft.activeFilter}
+                        </Text>
+                      </View>
+                    )}
+                    {draft.selectedSoundTrack && draft.selectedSoundTrack !== "none" && (
+                      <View
+                        className="px-2 py-0.5 rounded-md border"
+                        style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                      >
+                        <Text className="text-[10px]" style={{ color: theme.textSecondary }}>
+                          Audio: Added
+                        </Text>
+                      </View>
+                    )}
+                    {draft.captionText ? (
+                      <View
+                        className="px-2 py-0.5 rounded-md border"
+                        style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                      >
+                        <Text className="text-[10px]" style={{ color: theme.textSecondary }}>
+                          Caption: Set
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+              </View>
+
+              {/* Resume button */}
+              <TouchableOpacity
+                onPress={() => handleResumeDraft(draft)}
+                className="w-full py-2.5 rounded-xl flex-row items-center justify-center gap-2 mt-3.5 shadow-sm"
+                style={{ backgroundColor: theme.primary }}
+                activeOpacity={0.85}
+              >
+                <Edit3 color="#fff" size={14} />
+                <Text className="text-white font-bold text-xs uppercase tracking-wider">
+                  Resume Performance
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+    </View>
   );
 
   const renderRecord = () => {
@@ -1037,7 +1590,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           <Text className="text-white">Camera permission is required.</Text>
           <TouchableOpacity
             onPress={requestCamPermission}
-            className="mt-4 bg-[#E50914] px-4 py-2 rounded"
+            className="mt-4 bg-[#E91E76] px-4 py-2 rounded"
           >
             <Text className="text-white">Grant Permission</Text>
           </TouchableOpacity>
@@ -1109,7 +1662,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                 className="py-1"
               >
                 <Text
-                  className={`font-bold text-[14px] tracking-wider uppercase ${cameraMode === "video" ? "text-[#E50914] border-b-2 border-[#E50914] pb-0.5" : "text-white/60"}`}
+                  className={`font-bold text-[14px] tracking-wider uppercase ${cameraMode === "video" ? "text-[#E91E76] border-b-2 border-[#E91E76] pb-0.5" : "text-white/60"}`}
                 >
                   Video
                 </Text>
@@ -1122,7 +1675,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                 className="py-1"
               >
                 <Text
-                  className={`font-bold text-[14px] tracking-wider uppercase ${cameraMode === "photo" ? "text-[#E50914] border-b-2 border-[#E50914] pb-0.5" : "text-white/60"}`}
+                  className={`font-bold text-[14px] tracking-wider uppercase ${cameraMode === "photo" ? "text-[#E91E76] border-b-2 border-[#E91E76] pb-0.5" : "text-white/60"}`}
                 >
                   Photo
                 </Text>
@@ -1139,7 +1692,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     cameraMode === "photo"
                       ? "border-white/80 w-[80px] h-[80px]"
                       : isRecording
-                        ? "border-[#E50914] w-[88px] h-[88px]"
+                        ? "border-[#E91E76] w-[88px] h-[88px]"
                         : "border-white/50 w-[80px] h-[80px]"
                   }`}
                 >
@@ -1148,8 +1701,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                       cameraMode === "photo"
                         ? "bg-white w-[64px] h-[64px]"
                         : isRecording
-                          ? "bg-[#E50914] w-[36px] h-[36px] rounded-md"
-                          : "bg-[#E50914] w-[64px] h-[64px]"
+                          ? "bg-[#E91E76] w-[36px] h-[36px] rounded-md"
+                          : "bg-[#E91E76] w-[64px] h-[64px]"
                     }`}
                   />
                 </View>
@@ -1282,18 +1835,55 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           if (editMode !== "none") {
             setEditMode("none");
           } else {
-            setRecordedVideoUri(null);
-            setStep("RECORD");
+            Alert.alert(
+              "Save as Draft?",
+              "Do you want to save this performance take as a draft before leaving?",
+              [
+                {
+                  text: "Save Draft & Exit",
+                  onPress: async () => {
+                    await handleSaveCurrentDraft(false);
+                    setRecordedVideoUri(null);
+                    setActiveDraftId(null);
+                    setStep("HOME");
+                  },
+                },
+                {
+                  text: "Discard",
+                  style: "destructive",
+                  onPress: () => {
+                    setRecordedVideoUri(null);
+                    setActiveDraftId(null);
+                    setStep("HOME");
+                  },
+                },
+                { text: "Keep Editing", style: "cancel" },
+              ]
+            );
           }
         }}
         rightEl={
-          <TouchableOpacity
-            onPress={() => setStep("CHOOSE_TALENT")}
-            className="bg-[#E50914] px-4 py-1.5 rounded-full flex-row items-center gap-1"
-          >
-            <Text className="text-white font-bold text-sm">Next</Text>
-            <ChevronRight color="#fff" size={16} />
-          </TouchableOpacity>
+          <View className="flex-row items-center gap-2">
+            <TouchableOpacity
+              onPress={async () => {
+                await handleSaveCurrentDraft(true);
+              }}
+              className="px-3 py-1.5 rounded-full border flex-row items-center gap-1.5"
+              style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+            >
+              <Folder color={theme.text} size={13} />
+              <Text className="text-xs font-semibold" style={{ color: theme.text }}>
+                Save Draft
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setStep("CHOOSE_TALENT")}
+              className="bg-[#E91E76] px-4 py-1.5 rounded-full flex-row items-center gap-1"
+            >
+              <Text className="text-white font-bold text-sm">Next</Text>
+              <ChevronRight color="#fff" size={16} />
+            </TouchableOpacity>
+          </View>
         }
       />
 
@@ -1387,7 +1977,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
           {/* Floating Filter Badge Top Left */}
           <View className="absolute top-4 left-4 bg-black/60 px-3 py-1.5 rounded-full flex-row items-center gap-1.5 border border-white/15 backdrop-blur-md z-20">
-            <Aperture color="#E50914" size={13} />
+            <Aperture color="#E91E76" size={13} />
             <Text className="text-white text-[11px] font-semibold tracking-wide">
               {isComparing
                 ? "Original Raw"
@@ -1407,7 +1997,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             }}
             className={`absolute top-4 right-4 px-3 py-1.5 rounded-full flex-row items-center gap-1.5 border z-20 backdrop-blur-md transition-all ${
               isComparing
-                ? "bg-[#E50914] border-[#E50914]"
+                ? "bg-[#E91E76] border-[#E91E76]"
                 : "bg-black/60 border-white/20"
             }`}
           >
@@ -1428,7 +2018,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
               </>
             ) : (
               <>
-                <Play color="#E50914" size={10} fill="#E50914" />
+                <Play color="#E91E76" size={10} fill="#E91E76" />
                 <Text className="text-white/80 text-[10px] font-medium">
                   Video
                 </Text>
@@ -1453,9 +2043,9 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                   captionStyle === "neon"
                     ? {
                         backgroundColor: "rgba(10, 10, 18, 0.88)",
-                        borderColor: isDraggingCaption ? "#fff" : "#E50914",
+                        borderColor: isDraggingCaption ? "#fff" : "#E91E76",
                         borderWidth: 2,
-                        shadowColor: "#E50914",
+                        shadowColor: "#E91E76",
                         shadowOpacity: 0.9,
                         shadowRadius: 10,
                       }
@@ -1492,7 +2082,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     captionStyle === "neon"
                       ? {
                           color: "#FFFFFF",
-                          textShadowColor: "#E50914",
+                          textShadowColor: "#E91E76",
                           textShadowRadius: 8,
                         }
                       : captionStyle === "yellow"
@@ -1515,8 +2105,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
           {/* Selected Soundtrack Active Badge */}
           {selectedSoundTrack !== "none" && (
-            <View className="absolute top-4 right-32 bg-black/60 px-2 py-1 rounded-full flex-row items-center gap-1 border border-[#E50914]/40 backdrop-blur-md z-20">
-              <Music2 color="#E50914" size={11} />
+            <View className="absolute top-4 right-32 bg-black/60 px-2 py-1 rounded-full flex-row items-center gap-1 border border-[#E91E76]/40 backdrop-blur-md z-20">
+              <Music2 color="#E91E76" size={11} />
               <Text
                 className="text-white text-[9px] font-semibold max-w-[80px]"
                 numberOfLines={1}
@@ -1544,7 +2134,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                 <View className="w-full h-1 bg-white/25 rounded-full flex-row items-center pointer-events-none">
                   <View
                     style={{ width: `${(currentTime / duration) * 100}%` }}
-                    className="h-full bg-[#E50914] rounded-l-full"
+                    className="h-full bg-[#E91E76] rounded-l-full"
                   />
                   <View className="w-3 h-3 bg-white rounded-full -ml-1 shadow-md pointer-events-none" />
                 </View>
@@ -1572,19 +2162,19 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             }}
             className={`w-[18%] aspect-square rounded-2xl items-center justify-center border bg-[#1A1D24] ${
               editMode === "filters"
-                ? "border-[#E50914] bg-[#E50914]/15"
+                ? "border-[#E91E76] bg-[#E91E76]/15"
                 : "border-white/10"
             }`}
           >
             <Aperture
-              color={editMode === "filters" ? "#E50914" : "#fff"}
+              color={editMode === "filters" ? "#E91E76" : "#fff"}
               size={22}
               className="mb-1"
             />
             <Text
               className={
                 editMode === "filters"
-                  ? "text-[#E50914] text-[10px] font-bold"
+                  ? "text-[#E91E76] text-[10px] font-bold"
                   : "text-white text-[10px]"
               }
             >
@@ -1599,19 +2189,19 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             }}
             className={`w-[18%] aspect-square rounded-2xl items-center justify-center border bg-[#1A1D24] ${
               editMode === "cover"
-                ? "border-[#E50914] bg-[#E50914]/15"
+                ? "border-[#E91E76] bg-[#E91E76]/15"
                 : "border-white/10"
             }`}
           >
             <ImageIcon
-              color={editMode === "cover" ? "#E50914" : "#fff"}
+              color={editMode === "cover" ? "#E91E76" : "#fff"}
               size={22}
               className="mb-1"
             />
             <Text
               className={
                 editMode === "cover"
-                  ? "text-[#E50914] text-[10px] font-bold"
+                  ? "text-[#E91E76] text-[10px] font-bold"
                   : "text-white text-[10px]"
               }
             >
@@ -1626,19 +2216,19 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             }}
             className={`w-[18%] aspect-square rounded-2xl items-center justify-center border bg-[#1A1D24] ${
               editMode === "trim"
-                ? "border-[#E50914] bg-[#E50914]/15"
+                ? "border-[#E91E76] bg-[#E91E76]/15"
                 : "border-white/10"
             }`}
           >
             <Scissors
-              color={editMode === "trim" ? "#E50914" : "#fff"}
+              color={editMode === "trim" ? "#E91E76" : "#fff"}
               size={22}
               className="mb-1"
             />
             <Text
               className={
                 editMode === "trim"
-                  ? "text-[#E50914] text-[10px] font-bold"
+                  ? "text-[#E91E76] text-[10px] font-bold"
                   : "text-white text-[10px]"
               }
             >
@@ -1653,19 +2243,19 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             }}
             className={`w-[18%] aspect-square rounded-2xl items-center justify-center border bg-[#1A1D24] ${
               editMode === "sound"
-                ? "border-[#E50914] bg-[#E50914]/15"
+                ? "border-[#E91E76] bg-[#E91E76]/15"
                 : "border-white/10"
             }`}
           >
             <Music2
-              color={editMode === "sound" ? "#E50914" : "#fff"}
+              color={editMode === "sound" ? "#E91E76" : "#fff"}
               size={22}
               className="mb-1"
             />
             <Text
               className={
                 editMode === "sound"
-                  ? "text-[#E50914] text-[10px] font-bold"
+                  ? "text-[#E91E76] text-[10px] font-bold"
                   : "text-white text-[10px]"
               }
             >
@@ -1680,19 +2270,19 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             }}
             className={`w-[18%] aspect-square rounded-2xl items-center justify-center border bg-[#1A1D24] ${
               editMode === "caption"
-                ? "border-[#E50914] bg-[#E50914]/15"
+                ? "border-[#E91E76] bg-[#E91E76]/15"
                 : "border-white/10"
             }`}
           >
             <Subtitles
-              color={editMode === "caption" ? "#E50914" : "#fff"}
+              color={editMode === "caption" ? "#E91E76" : "#fff"}
               size={22}
               className="mb-1"
             />
             <Text
               className={
                 editMode === "caption"
-                  ? "text-[#E50914] text-[10px] font-bold"
+                  ? "text-[#E91E76] text-[10px] font-bold"
                   : "text-white text-[10px]"
               }
             >
@@ -1711,7 +2301,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                   onPress={() => setActiveFilterSubTab("presets")}
                   className={`px-3 py-1 rounded-full flex-row items-center gap-1.5 ${
                     activeFilterSubTab === "presets"
-                      ? "bg-[#E50914]"
+                      ? "bg-[#E91E76]"
                       : "bg-white/5"
                   }`}
                 >
@@ -1725,7 +2315,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                   onPress={() => setActiveFilterSubTab("adjust")}
                   className={`px-3 py-1 rounded-full flex-row items-center gap-1.5 ${
                     activeFilterSubTab === "adjust"
-                      ? "bg-[#E50914]"
+                      ? "bg-[#E91E76]"
                       : "bg-white/5"
                   }`}
                 >
@@ -1767,7 +2357,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                   className="mb-3"
                   contentContainerStyle={{ gap: 6 }}
                 >
-                  {["All", "Popular", "Stage", "Mood", "Film", "B&W"].map(
+                  {["All", "Popular", "Stage", "Portrait", "Cinematic", "Mood", "Film", "B&W"].map(
                     (cat) => (
                       <TouchableOpacity
                         key={cat}
@@ -1821,7 +2411,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                         <View
                           className={`w-16 h-16 rounded-2xl overflow-hidden mb-1.5 relative border-2 ${
                             isSelected
-                              ? "border-[#E50914] shadow-lg shadow-[#E50914]/50"
+                              ? "border-[#E91E76] shadow-lg shadow-[#E91E76]/50"
                               : "border-white/15"
                           }`}
                         >
@@ -1861,7 +2451,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
                           {/* Badge tag if any */}
                           {filter.badge && (
-                            <View className="absolute top-1 left-1 bg-[#E50914] px-1 py-0.5 rounded-[4px]">
+                            <View className="absolute top-1 left-1 bg-[#E91E76] px-1 py-0.5 rounded-[4px]">
                               <Text className="text-[7px] font-black text-white">
                                 {filter.badge}
                               </Text>
@@ -1870,7 +2460,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
                           {/* Selected Checkmark Indicator */}
                           {isSelected && (
-                            <View className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-[#E50914] items-center justify-center border border-white">
+                            <View className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-[#E91E76] items-center justify-center border border-white">
                               <Check color="#fff" size={9} strokeWidth={3} />
                             </View>
                           )}
@@ -1880,7 +2470,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                           numberOfLines={1}
                           className={`text-[11px] font-medium text-center ${
                             isSelected
-                              ? "text-[#E50914] font-bold"
+                              ? "text-[#E91E76] font-bold"
                               : "text-white/80"
                           }`}
                         >
@@ -1891,18 +2481,40 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                   })}
                 </ScrollView>
 
+                {/* Active Filter Info / Description Banner */}
+                {activeFilterConfig && (
+                  <View className="mb-2.5 px-2.5 py-1.5 rounded-xl bg-white/5 flex-row items-center justify-between border border-white/5">
+                    <View className="flex-row items-center gap-1.5 flex-1 mr-2">
+                      <Sparkles color="#E91E76" size={12} />
+                      <Text
+                        className="text-white/75 text-[10px] font-medium leading-tight"
+                        numberOfLines={1}
+                      >
+                        {activeFilterConfig.description}
+                      </Text>
+                    </View>
+                    {activeFilterConfig.badge && (
+                      <View className="bg-[#E91E76]/25 px-1.5 py-0.5 rounded-[4px] border border-[#E91E76]/40">
+                        <Text className="text-[#E91E76] text-[8px] font-black tracking-wider">
+                          {activeFilterConfig.badge}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
                 {/* Filter Strength / Intensity Draggable Slider */}
                 {activeFilter !== "Original" && (
                   <View className="bg-white/5 rounded-2xl p-3 border border-white/5">
                     <View className="flex-row items-center justify-between mb-2">
                       <View className="flex-row items-center gap-2">
-                        <Sun color="#E50914" size={15} />
+                        <Sun color="#E91E76" size={15} />
                         <Text className="text-white text-[12px] font-semibold">
                           Intensity Slider
                         </Text>
                       </View>
-                      <View className="bg-[#E50914]/20 px-2.5 py-0.5 rounded-full border border-[#E50914]/40">
-                        <Text className="text-[#E50914] text-[11px] font-bold">
+                      <View className="bg-[#E91E76]/20 px-2.5 py-0.5 rounded-full border border-[#E91E76]/40">
+                        <Text className="text-[#E91E76] text-[11px] font-bold">
                           {Math.round(filterIntensity * 100)}%
                         </Text>
                       </View>
@@ -1922,7 +2534,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                       <View className="w-full h-2 bg-white/10 rounded-full overflow-hidden relative">
                         <View
                           style={{ width: `${Math.max(0, Math.min(100, filterIntensity * 100))}%` }}
-                          className="h-full bg-[#E50914] rounded-full"
+                          className="h-full bg-[#E91E76] rounded-full"
                         />
                       </View>
 
@@ -1932,9 +2544,9 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                           left: `${Math.max(0, Math.min(100, filterIntensity * 100))}%`,
                           marginLeft: -10,
                         }}
-                        className="absolute top-1/2 -mt-2.5 w-5 h-5 rounded-full bg-white shadow-md border-2 border-[#E50914] items-center justify-center pointer-events-none"
+                        className="absolute top-1/2 -mt-2.5 w-5 h-5 rounded-full bg-white shadow-md border-2 border-[#E91E76] items-center justify-center pointer-events-none"
                       >
-                        <View className="w-1.5 h-1.5 rounded-full bg-[#E50914]" />
+                        <View className="w-1.5 h-1.5 rounded-full bg-[#E91E76]" />
                       </View>
                     </View>
 
@@ -1951,7 +2563,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                           <Text
                             className={`text-[9px] font-semibold ${
                               Math.round(filterIntensity * 100) === mark
-                                ? "text-[#E50914] font-bold"
+                                ? "text-[#E91E76] font-bold"
                                 : "text-[#9CA3AF]"
                             }`}
                           >
@@ -1993,7 +2605,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                         <View
                           className={`w-16 h-16 rounded-2xl overflow-hidden mb-1.5 relative border-2 items-center justify-center ${
                             isSelected
-                              ? "border-[#E50914] shadow-lg shadow-[#E50914]/50 bg-[#E50914]/15"
+                              ? "border-[#E91E76] shadow-lg shadow-[#E91E76]/50 bg-[#E91E76]/15"
                               : "border-white/15 bg-white/5"
                           }`}
                         >
@@ -2021,7 +2633,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                             }}
                           >
                             <IconComponent
-                              color={isSelected ? "#E50914" : "#FFFFFF"}
+                              color={isSelected ? "#E91E76" : "#FFFFFF"}
                               size={20}
                               strokeWidth={2}
                             />
@@ -2029,7 +2641,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
                           {/* Current Value Badge if not 0 */}
                           {hasAdjustment && (
-                            <View className="absolute top-1 left-1 bg-[#E50914] px-1 py-0.5 rounded-[4px]">
+                            <View className="absolute top-1 left-1 bg-[#E91E76] px-1 py-0.5 rounded-[4px]">
                               <Text className="text-[7px] font-black text-white">
                                 {currentVal > 0 ? `+${currentVal}` : `${currentVal}`}
                               </Text>
@@ -2038,7 +2650,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
                           {/* Selected Checkmark Indicator */}
                           {isSelected && (
-                            <View className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-[#E50914] items-center justify-center border border-white">
+                            <View className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-[#E91E76] items-center justify-center border border-white">
                               <Check color="#fff" size={9} strokeWidth={3} />
                             </View>
                           )}
@@ -2048,7 +2660,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                           numberOfLines={1}
                           className={`text-[11px] font-medium text-center ${
                             isSelected
-                              ? "text-[#E50914] font-bold"
+                              ? "text-[#E91E76] font-bold"
                               : "text-white/80"
                           }`}
                         >
@@ -2076,7 +2688,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     <View className="bg-white/5 rounded-2xl p-3 border border-white/5">
                       <View className="flex-row items-center justify-between mb-2">
                         <View className="flex-row items-center gap-2">
-                          <ActiveIcon color="#E50914" size={15} />
+                          <ActiveIcon color="#E91E76" size={15} />
                           <Text className="text-white text-[12px] font-semibold">
                             {activeOpt.label} Slider
                           </Text>
@@ -2100,8 +2712,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                               </Text>
                             </TouchableOpacity>
                           )}
-                          <View className="bg-[#E50914]/20 px-2.5 py-0.5 rounded-full border border-[#E50914]/40">
-                            <Text className="text-[#E50914] text-[11px] font-bold">
+                          <View className="bg-[#E91E76]/20 px-2.5 py-0.5 rounded-full border border-[#E91E76]/40">
+                            <Text className="text-[#E91E76] text-[11px] font-bold">
                               {currentVal > 0
                                 ? `+${currentVal}%`
                                 : `${currentVal}%`}
@@ -2132,7 +2744,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                                 left: "50%",
                                 width: `${(currentVal / 50) * 50}%`,
                               }}
-                              className="h-full bg-[#E50914] rounded-r-full"
+                              className="h-full bg-[#E91E76] rounded-r-full"
                             />
                           ) : (
                             <View
@@ -2140,7 +2752,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                                 left: `${50 - (Math.abs(currentVal) / 50) * 50}%`,
                                 width: `${(Math.abs(currentVal) / 50) * 50}%`,
                               }}
-                              className="h-full bg-[#E50914] rounded-l-full"
+                              className="h-full bg-[#E91E76] rounded-l-full"
                             />
                           )}
                         </View>
@@ -2151,9 +2763,9 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                             left: `${knobPct}%`,
                             marginLeft: -10,
                           }}
-                          className="absolute top-1/2 -mt-2.5 w-5 h-5 rounded-full bg-white shadow-md border-2 border-[#E50914] items-center justify-center pointer-events-none"
+                          className="absolute top-1/2 -mt-2.5 w-5 h-5 rounded-full bg-white shadow-md border-2 border-[#E91E76] items-center justify-center pointer-events-none"
                         >
-                          <View className="w-1.5 h-1.5 rounded-full bg-[#E50914]" />
+                          <View className="w-1.5 h-1.5 rounded-full bg-[#E91E76]" />
                         </View>
                       </View>
 
@@ -2175,7 +2787,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                             <Text
                               className={`text-[9px] font-semibold ${
                                 currentVal === mark
-                                  ? "text-[#E50914] font-bold"
+                                  ? "text-[#E91E76] font-bold"
                                   : "text-[#9CA3AF]"
                               }`}
                             >
@@ -2204,7 +2816,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
               </View>
               <TouchableOpacity
                 onPress={pickPhoto}
-                className="bg-[#E50914] px-3 py-1.5 rounded-full flex-row items-center gap-1"
+                className="bg-[#E91E76] px-3 py-1.5 rounded-full flex-row items-center gap-1"
               >
                 <ImagePlus color="#fff" size={13} />
                 <Text className="text-white font-bold text-[11px]">Upload</Text>
@@ -2212,7 +2824,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             </View>
 
             <View className="flex-row gap-3 items-center">
-              <View className="w-16 h-20 rounded-xl overflow-hidden border-2 border-[#E50914] relative">
+              <View className="w-16 h-20 rounded-xl overflow-hidden border-2 border-[#E91E76] relative">
                 {recordedVideoUri && (
                   <Image
                     source={{ uri: recordedVideoUri }}
@@ -2287,11 +2899,11 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                 ))}
               </View>
 
-              <View className="absolute left-[10%] right-[20%] h-full border-4 border-[#E50914] rounded-lg bg-transparent pointer-events-none">
-                <View className="absolute -left-3 top-0 bottom-0 w-3 bg-[#E50914] rounded-l-md justify-center items-center">
+              <View className="absolute left-[10%] right-[20%] h-full border-4 border-[#E91E76] rounded-lg bg-transparent pointer-events-none">
+                <View className="absolute -left-3 top-0 bottom-0 w-3 bg-[#E91E76] rounded-l-md justify-center items-center">
                   <View className="w-1 h-4 bg-white rounded-full" />
                 </View>
-                <View className="absolute -right-3 top-0 bottom-0 w-3 bg-[#E50914] rounded-r-md justify-center items-center">
+                <View className="absolute -right-3 top-0 bottom-0 w-3 bg-[#E91E76] rounded-r-md justify-center items-center">
                   <View className="w-1 h-4 bg-white rounded-full" />
                 </View>
               </View>
@@ -2315,9 +2927,9 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                   Balance original live recording & background music
                 </Text>
               </View>
-              <View className="bg-[#E50914]/15 px-2.5 py-1 rounded-full border border-[#E50914]/30 flex-row items-center gap-1">
-                <Music2 color="#E50914" size={12} />
-                <Text className="text-[#E50914] text-[10px] font-bold">
+              <View className="bg-[#E91E76]/15 px-2.5 py-1 rounded-full border border-[#E91E76]/30 flex-row items-center gap-1">
+                <Music2 color="#E91E76" size={12} />
+                <Text className="text-[#E91E76] text-[10px] font-bold">
                   {selectedSoundTrack === "none" ? "Raw Mic" : "Mixed Track"}
                 </Text>
               </View>
@@ -2331,10 +2943,10 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                 </Text>
                 <TouchableOpacity
                   onPress={pickCustomAudio}
-                  className="bg-[#E50914]/15 border border-[#E50914]/40 px-2.5 py-1 rounded-full flex-row items-center gap-1"
+                  className="bg-[#E91E76]/15 border border-[#E91E76]/40 px-2.5 py-1 rounded-full flex-row items-center gap-1"
                 >
-                  <Plus color="#E50914" size={11} strokeWidth={2.5} />
-                  <Text className="text-[#E50914] text-[10px] font-bold">
+                  <Plus color="#E91E76" size={11} strokeWidth={2.5} />
+                  <Text className="text-[#E91E76] text-[10px] font-bold">
                     Add Your Music
                   </Text>
                 </TouchableOpacity>
@@ -2348,16 +2960,16 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                 {/* Upload Your Own Song Card */}
                 <TouchableOpacity
                   onPress={pickCustomAudio}
-                  className="p-2.5 rounded-2xl border border-dashed border-[#E50914]/50 bg-[#E50914]/10 items-center justify-center"
+                  className="p-2.5 rounded-2xl border border-dashed border-[#E91E76]/50 bg-[#E91E76]/10 items-center justify-center"
                   style={{ width: 120, height: 76 }}
                 >
-                  <View className="w-6 h-6 rounded-full bg-[#E50914] items-center justify-center mb-1 shadow-sm">
+                  <View className="w-6 h-6 rounded-full bg-[#E91E76] items-center justify-center mb-1 shadow-sm">
                     <Plus color="#fff" size={14} strokeWidth={3} />
                   </View>
                   <Text className="text-white text-[11px] font-bold text-center">
                     Add Song
                   </Text>
-                  <Text className="text-[#E50914] text-[9px] font-medium text-center">
+                  <Text className="text-[#E91E76] text-[9px] font-medium text-center">
                     Audio / MP3
                   </Text>
                 </TouchableOpacity>
@@ -2373,7 +2985,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                       }}
                       className={`p-2.5 rounded-2xl border items-start justify-between relative ${
                         isSelected
-                          ? "border-[#E50914] bg-[#E50914]/15"
+                          ? "border-[#E91E76] bg-[#E91E76]/15"
                           : "border-white/10 bg-white/5"
                       }`}
                       style={{ width: 132, height: 76 }}
@@ -2383,7 +2995,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                           className="w-6 h-6 rounded-lg items-center justify-center"
                           style={{
                             backgroundColor: isSelected
-                              ? "#E50914"
+                              ? "#E91E76"
                               : "rgba(255, 255, 255, 0.1)",
                           }}
                         >
@@ -2405,7 +3017,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                             </TouchableOpacity>
                           )}
                           {isSelected && (
-                            <View className="w-4 h-4 rounded-full bg-[#E50914] items-center justify-center">
+                            <View className="w-4 h-4 rounded-full bg-[#E91E76] items-center justify-center">
                               <Check color="#fff" size={9} strokeWidth={3} />
                             </View>
                           )}
@@ -2417,14 +3029,14 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                           <Text
                             numberOfLines={1}
                             className={`text-xs font-bold flex-1 ${
-                              isSelected ? "text-[#E50914]" : "text-white"
+                              isSelected ? "text-[#E91E76]" : "text-white"
                             }`}
                           >
                             {track.name}
                           </Text>
                           {track.isCustom && (
-                            <View className="bg-[#E50914]/30 px-1 rounded">
-                              <Text className="text-[7px] text-[#F87171] font-bold">
+                            <View className="bg-[#E91E76]/30 px-1 rounded">
+                              <Text className="text-[7px] text-[#F472B6] font-bold">
                                 MINE
                               </Text>
                             </View>
@@ -2459,7 +3071,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     {isOriginalMuted ? (
                       <VolumeX color="#EF4444" size={13} />
                     ) : (
-                      <Volume2 color="#E50914" size={13} />
+                      <Volume2 color="#E91E76" size={13} />
                     )}
                   </TouchableOpacity>
                   <Text className="text-white text-[12px] font-semibold">
@@ -2479,8 +3091,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                       {isOriginalMuted ? "Unmute" : "Mute"}
                     </Text>
                   </TouchableOpacity>
-                  <View className="bg-[#E50914]/20 px-2.5 py-0.5 rounded-full border border-[#E50914]/40">
-                    <Text className="text-[#E50914] text-[11px] font-bold">
+                  <View className="bg-[#E91E76]/20 px-2.5 py-0.5 rounded-full border border-[#E91E76]/40">
+                    <Text className="text-[#E91E76] text-[11px] font-bold">
                       {isOriginalMuted ? "0%" : `${originalAudioVolume}%`}
                     </Text>
                   </View>
@@ -2502,7 +3114,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     style={{
                       width: `${isOriginalMuted ? 0 : Math.max(0, Math.min(100, (originalAudioVolume / 150) * 100))}%`,
                     }}
-                    className="h-full bg-[#E50914] rounded-full"
+                    className="h-full bg-[#E91E76] rounded-full"
                   />
                 </View>
                 <View
@@ -2510,9 +3122,9 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     left: `${isOriginalMuted ? 0 : Math.max(0, Math.min(100, (originalAudioVolume / 150) * 100))}%`,
                     marginLeft: -10,
                   }}
-                  className="absolute top-1/2 -mt-2.5 w-5 h-5 rounded-full bg-white shadow-md border-2 border-[#E50914] items-center justify-center pointer-events-none"
+                  className="absolute top-1/2 -mt-2.5 w-5 h-5 rounded-full bg-white shadow-md border-2 border-[#E91E76] items-center justify-center pointer-events-none"
                 >
-                  <View className="w-1.5 h-1.5 rounded-full bg-[#E50914]" />
+                  <View className="w-1.5 h-1.5 rounded-full bg-[#E91E76]" />
                 </View>
               </View>
 
@@ -2530,7 +3142,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     <Text
                       className={`text-[9px] font-semibold ${
                         !isOriginalMuted && originalAudioVolume === mark
-                          ? "text-[#E50914] font-bold"
+                          ? "text-[#E91E76] font-bold"
                           : "text-[#9CA3AF]"
                       }`}
                     >
@@ -2638,19 +3250,19 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                       }}
                       className={`px-3 py-1.5 rounded-full border flex-row items-center gap-1.5 ${
                         isActive
-                          ? "bg-[#E50914]/15 border-[#E50914]"
+                          ? "bg-[#E91E76]/15 border-[#E91E76]"
                           : "bg-white/5 border-white/10"
                       }`}
                     >
                       <Text
                         className={`text-[11px] font-semibold ${
-                          isActive ? "text-[#E50914]" : "text-[#D1D5DB]"
+                          isActive ? "text-[#E91E76]" : "text-[#D1D5DB]"
                         }`}
                       >
                         {fx.label}
                       </Text>
                       {isActive && (
-                        <Check color="#E50914" size={10} strokeWidth={3} />
+                        <Check color="#E91E76" size={10} strokeWidth={3} />
                       )}
                     </TouchableOpacity>
                   );
@@ -2677,7 +3289,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                   setShowCaptions(!showCaptions);
                 }}
                 className={`px-3 py-1.5 rounded-full flex-row items-center gap-1.5 ${
-                  showCaptions ? "bg-[#E50914]" : "bg-white/10"
+                  showCaptions ? "bg-[#E91E76]" : "bg-white/10"
                 }`}
               >
                 <Subtitles color="#fff" size={12} />
@@ -2736,14 +3348,14 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     }}
                     className={`px-3 py-1.5 rounded-full border ${
                       captionText === phrase
-                        ? "bg-[#E50914]/15 border-[#E50914]"
+                        ? "bg-[#E91E76]/15 border-[#E91E76]"
                         : "bg-white/5 border-white/10"
                     }`}
                   >
                     <Text
                       className={`text-[11px] font-medium ${
                         captionText === phrase
-                          ? "text-[#E50914] font-bold"
+                          ? "text-[#E91E76] font-bold"
                           : "text-white/80"
                       }`}
                     >
@@ -2785,7 +3397,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                       }}
                       className={`flex-1 py-2 rounded-lg items-center ${
                         captionStyle === st.id
-                          ? "bg-[#E50914]"
+                          ? "bg-[#E91E76]"
                           : "bg-transparent"
                       }`}
                     >
@@ -2807,7 +3419,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
         {/* AI Best Moment Enhancement Banner */}
         <View className="bg-[#1A1D24] p-3.5 rounded-2xl flex-row items-center border border-white/5">
-          <Sparkles color="#E50914" size={22} className="mr-3" />
+          <Sparkles color="#E91E76" size={22} className="mr-3" />
           <View className="flex-1 mr-2">
             <Text className="text-white font-bold text-sm mb-0.5">
               Auto Color & Filter Match
@@ -2822,7 +3434,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
               setActiveFilter("Stage");
               setFilterIntensity(0.9);
             }}
-            className="bg-[#E50914] px-4 py-1.5 rounded-full"
+            className="bg-[#E91E76] px-4 py-1.5 rounded-full"
           >
             <Text className="text-white font-bold text-xs">Auto Apply</Text>
           </TouchableOpacity>
@@ -3295,6 +3907,27 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             Publish Performance
           </Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          className="w-full py-3.5 rounded-full items-center justify-center border mt-3 flex-row gap-2"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+          activeOpacity={0.8}
+          onPress={async () => {
+            await handleSaveCurrentDraft(false);
+            Alert.alert(
+              "Draft Saved",
+              "You can resume and publish this performance anytime from Studio Drafts."
+            );
+            setRecordedVideoUri(null);
+            setActiveDraftId(null);
+            setStep("HOME");
+          }}
+        >
+          <Folder color={theme.text} size={18} />
+          <Text className="font-bold text-[15px]" style={{ color: theme.text }}>
+            Save as Draft (Finish Later)
+          </Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -3415,6 +4048,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           setStep("HOME");
           setRecordedVideoUri(null);
           setTitle("");
+          setActiveDraftId(null);
           router.replace("/(tabs)/you");
         }}
         className="w-full py-4 rounded-full items-center justify-center mb-4"
@@ -3430,6 +4064,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           setStep("HOME");
           setRecordedVideoUri(null);
           setTitle("");
+          setActiveDraftId(null);
         }}
       >
         <Text className="text-[#9CA3AF] font-medium py-3">Create Another</Text>
@@ -3441,6 +4076,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   switch (step) {
     case "HOME":
       return renderHome();
+    case "DRAFTS":
+      return renderDrafts();
     case "RECORD":
       return renderRecord();
     case "UPLOAD":

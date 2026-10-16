@@ -364,14 +364,14 @@ function FeedVideoCard({
         {/* Top Header Row: Category Badge & Hidden Metrics (Guaranteed Non-Colliding) */}
         <View pointerEvents="none" className="absolute top-3.5 inset-x-3.5 flex-row items-center justify-between z-10">
           <View className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15">
-            <View className="w-1.5 h-1.5 rounded-full bg-[#E50914]" />
+            <View className="w-1.5 h-1.5 rounded-full bg-[#E91E76]" />
             <Text className="text-[10px] font-bold tracking-wider text-white uppercase">PERFORMANCE</Text>
             <View className="w-1 h-1 rounded-full bg-white/40" />
             <Text className="text-white/80 text-[10px] font-semibold">{formatTime(duration) || video.duration || '0:58'}</Text>
           </View>
 
           <View className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 flex-row items-center gap-1.5">
-            <EyeOff color="#E50914" size={11} strokeWidth={2.2} />
+            <EyeOff color="#E91E76" size={11} strokeWidth={2.2} />
             <Text className="text-[9px] font-bold tracking-wider text-white uppercase">METRICS HIDDEN</Text>
           </View>
         </View>
@@ -516,7 +516,7 @@ function FeedVideoCard({
             {isBlind ? (
               <EyeOff color={theme.primary} size={20} />
             ) : (
-              <Image source={{ uri: video.avatar || video.authorAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(video.author || 'User')}&background=E50914&color=fff` }} className="w-full h-full" />
+              <Image source={{ uri: video.avatar || video.authorAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(video.author || 'User')}&background=E91E76&color=fff` }} className="w-full h-full" />
             )}
           </View>
           <View className="flex-1">

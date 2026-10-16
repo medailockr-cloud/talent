@@ -199,7 +199,7 @@ export default function NotificationsScreen() {
                 resolveMediaUrl(notif.actor?.avatarUrl) ||
                 `https://ui-avatars.com/api/?name=${encodeURIComponent(
                   notif.actor?.name || notif.actor?.username || 'Artist'
-                )}&background=E50914&color=fff`;
+                )}&background=E91E76&color=fff`;
 
               return (
                 <TouchableOpacity

@@ -290,7 +290,7 @@ export function LeaderboardModal({ visible, onClose }: LeaderboardModalProps) {
                           item.performer?.avatarUrl ||
                           `https://ui-avatars.com/api/?name=${encodeURIComponent(
                             item.performer?.name || item.performer?.username || 'User'
-                          )}&background=E50914&color=fff`,
+                          )}&background=E91E76&color=fff`,
                       }}
                       className="w-11 h-11 rounded-full"
                     />
