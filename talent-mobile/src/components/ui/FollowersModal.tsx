@@ -27,6 +27,7 @@ interface FollowersModalProps {
   onClose: () => void;
   userId?: number | string;
   initialTab?: 'followers' | 'following';
+  onFollowChange?: () => void;
 }
 
 export function FollowersModal({
@@ -34,6 +35,7 @@ export function FollowersModal({
   onClose,
   userId,
   initialTab = 'followers',
+  onFollowChange,
 }: FollowersModalProps) {
   const router = useRouter();
   const { theme } = useThemeStore();
@@ -61,51 +63,14 @@ export function FollowersModal({
           : `/users/${userId}/following`;
 
         const res = await api.get(endpoint);
-        if (Array.isArray(res.data) && res.data.length > 0) {
+        if (Array.isArray(res.data)) {
           setUsersList(res.data);
         } else {
-          // Fallback realistic peer data
-          setUsersList([
-            {
-              id: 2,
-              name: 'Kiara Nair',
-              username: 'kiaranair',
-              title: 'Contemporary Dancer',
-              location: 'Kochi',
-              avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120',
-              isFollowing: true,
-            },
-            {
-              id: 3,
-              name: 'Arjun Menon',
-              username: 'arjunacoustic',
-              title: 'Acoustic Songwriter',
-              location: 'Bengaluru',
-              avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120',
-              isFollowing: false,
-            },
-            {
-              id: 4,
-              name: 'Meera Rao',
-              username: 'meeraviolin',
-              title: 'Violinist & Composer',
-              location: 'Chennai',
-              avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120',
-              isFollowing: true,
-            },
-            {
-              id: 5,
-              name: 'Kabir Shah',
-              username: 'kabirbeatbox',
-              title: 'Beatbox Performer',
-              location: 'Mumbai',
-              avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120',
-              isFollowing: false,
-            },
-          ]);
+          setUsersList([]);
         }
       } catch (err) {
         console.warn('Fetch followers error:', err);
+        setUsersList([]);
       } finally {
         setLoading(false);
       }
@@ -125,6 +90,7 @@ export function FollowersModal({
       );
 
       await api.post(`/users/${targetUser.id}/follow`);
+      onFollowChange?.();
     } catch (err) {
       console.warn('Follow toggle error:', err);
       // Revert on error

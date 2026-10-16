@@ -68,10 +68,11 @@ import {
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { Switch } from "react-native";
-import { api, resolveMediaUrl } from "../../utils/api";
+import { api, resolveMediaUrl, BACKEND_URL } from "../../utils/api";
 import { useAuthStore } from "../../store/authStore";
 import { useThemeStore, THEMES, ThemeId } from "../../store/themeStore";
 import { FollowersModal } from "../ui/FollowersModal";
+import io from "socket.io-client";
 
 const coverImg =
   "https://images.unsplash.com/photo-1493225457124-a1a2a4fa3e93?w=800&q=80";
@@ -1222,6 +1223,48 @@ export function ProfileView({
     }, [fetchProfile])
   );
 
+  // Live real-time WebSocket listener for follower count updates
+  useEffect(() => {
+    const targetUserId = profileData?.id || user?.id;
+    if (!targetUserId) return;
+
+    const socket = io(BACKEND_URL, {
+      transports: ['websocket'],
+      reconnection: true,
+    });
+
+    socket.on('connect', () => {
+      socket.emit('join_profile', { profileUserId: targetUserId });
+      if (authUser?.id) {
+        socket.emit('join_user', { userId: authUser.id });
+      }
+    });
+
+    socket.on('follower_count_updated', (data: any) => {
+      if (data?.userId === targetUserId) {
+        setProfileData((prev: any) =>
+          prev ? { ...prev, followers: data.followersCount } : prev
+        );
+        if (data.actorId === authUser?.id && data.isFollowing !== undefined) {
+          setBacked(data.isFollowing);
+        }
+      }
+    });
+
+    socket.on('following_count_updated', (data: any) => {
+      if (data?.userId === targetUserId) {
+        setProfileData((prev: any) =>
+          prev ? { ...prev, following: data.followingCount } : prev
+        );
+      }
+    });
+
+    return () => {
+      socket.emit('leave_profile', { profileUserId: targetUserId });
+      socket.disconnect();
+    };
+  }, [profileData?.id, user?.id, authUser?.id]);
+
   const handleShare = async () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1606,7 +1649,7 @@ export function ProfileView({
               <BarChart2 color={theme.textSecondary} size={18} />
               <View className="mt-2">
                 <Text className="text-[17px] font-bold" style={{ color: theme.text }}>
-                  {profileData?.videosCount?.toString() || "5"}
+                  {profileData?.videosCount !== undefined ? profileData.videosCount.toString() : (isLoading ? "..." : "0")}
                 </Text>
                 <Text
                   className="text-[11px] font-medium mt-0.5"
@@ -1626,7 +1669,7 @@ export function ProfileView({
               <Calendar color={theme.primary} size={18} strokeWidth={2} />
               <View className="mt-2">
                 <Text className="text-[17px] font-bold" style={{ color: theme.text }}>
-                  {shows?.length ? shows.length.toString() : "2"}
+                  {shows ? shows.length.toString() : (isLoading ? "..." : "0")}
                 </Text>
                 <Text className="text-[11px] font-medium mt-0.5" style={{ color: theme.textSecondary }}>
                   Shows
@@ -1644,7 +1687,7 @@ export function ProfileView({
               <Users color={theme.textSecondary} size={18} strokeWidth={2} />
               <View className="mt-2">
                 <Text className="text-[17px] font-bold" style={{ color: theme.text }}>
-                  {profileData?.followers?.toString() || "12.4K"}
+                  {profileData?.followers !== undefined ? profileData.followers.toLocaleString() : (isLoading ? "..." : "0")}
                 </Text>
                 <Text className="text-[11px] font-medium mt-0.5" style={{ color: theme.textSecondary }}>
                   Followers
@@ -3292,9 +3335,13 @@ export function ProfileView({
       {/* Followers & Following Modal */}
       <FollowersModal
         visible={isFansModalOpen}
-        onClose={() => setIsFansModalOpen(false)}
+        onClose={() => {
+          setIsFansModalOpen(false);
+          fetchProfile();
+        }}
         userId={profileData?.id || user?.id || authUser?.id}
         initialTab={followersModalTab}
+        onFollowChange={fetchProfile}
       />
 
       {/* Edit Profile Modal */}

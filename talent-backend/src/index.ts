@@ -146,64 +146,7 @@ app.get('/api/feed', async (req, res) => {
       }
     });
 
-    // If the database is empty, let's auto-seed some data so the mobile app isn't blank
-    if (videos.length === 0) {
-      console.log('🌱 Database is empty! Auto-seeding some initial videos...');
-      
-      const hashedSeedPassword = await bcrypt.hash('password123', 10);
-      
-      await prisma.user.create({
-        data: {
-          username: 'janedoe',
-          password: hashedSeedPassword,
-          name: 'Jane Doe',
-          videos: {
-            create: [
-              { title: 'Awesome Singing Performance', url: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4' }
-            ]
-          }
-        }
-      });
-      
-      await prisma.user.create({
-        data: {
-          username: 'johnsmith',
-          password: hashedSeedPassword,
-          name: 'John Smith',
-          videos: {
-            create: [
-              { title: 'Crazy Dance Moves', url: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4' }
-            ]
-          }
-        }
-      });
-      
-      // Fetch again after seeding
-      const seededVideos = await prisma.video.findMany({
-        include: { author: true, likes: true, hashtags: true, comments: { include: { user: true } }, ratings: true },
-        orderBy: { createdAt: 'desc' }
-      });
-      
-      return res.json({ 
-        videos: seededVideos.map(v => ({
-          id: v.id,
-          title: v.title,
-          author: v.author.name || v.author.username,
-          url: v.url,
-          likesCount: v.likes.length,
-          commentsCount: v.comments.length,
-          comments: v.comments.map((c: any) => ({
-            id: c.id,
-            text: c.text,
-            author: c.user.name || c.user.username,
-            createdAt: c.createdAt
-          })),
-          isLiked: userId ? v.likes.some(l => l.userId === userId) : false,
-          averageRating: v.ratings.length ? v.ratings.reduce((acc: any, r: any) => acc + r.score, 0) / v.ratings.length : 0,
-          userRating: userId ? v.ratings.find((r: any) => r.userId === userId)?.score || null : null
-        })) 
-      });
-    }
+
 
     // Format the response to match what the mobile app expects
     let formattedVideos = videos.map(v => ({
@@ -238,9 +181,9 @@ app.get('/api/feed', async (req, res) => {
     await cacheFeed(cacheKey, formattedVideos);
 
     res.json({ videos: formattedVideos });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to fetch videos' });
+  } catch (error: any) {
+    console.error('Error fetching feed:', error);
+    res.status(500).json({ error: error?.message || 'Failed to fetch videos', stack: error?.stack });
   }
 });
 
@@ -740,11 +683,13 @@ app.post('/api/users/:id/follow', requireAuth, async (req, res) => {
       }
     });
 
+    let isFollowing = false;
     if (existingFollow) {
       await prisma.follows.delete({ where: { id: existingFollow.id } });
-      return res.json({ following: false });
+      isFollowing = false;
     } else {
       await prisma.follows.create({ data: { followerId, followingId } });
+      isFollowing = true;
       
       // Generate Notification
       await prisma.notification.create({
@@ -754,9 +699,39 @@ app.post('/api/users/:id/follow', requireAuth, async (req, res) => {
           actorId: followerId
         }
       });
-      
-      return res.json({ following: true });
     }
+
+    // Calculate real-time updated counts from DB
+    const [targetFollowersCount, myFollowingCount] = await Promise.all([
+      prisma.follows.count({ where: { followingId } }),
+      prisma.follows.count({ where: { followerId } })
+    ]);
+
+    // Live WebSocket emission to the user followed
+    io.to(`user_${followingId}`).emit('follower_count_updated', {
+      userId: followingId,
+      followersCount: targetFollowersCount,
+      actorId: followerId,
+      isFollowing
+    });
+
+    // Live broadcast to any active profile viewers
+    io.to(`profile_${followingId}`).emit('follower_count_updated', {
+      userId: followingId,
+      followersCount: targetFollowersCount,
+      actorId: followerId,
+      isFollowing
+    });
+
+    // Live WebSocket emission to the follower
+    io.to(`user_${followerId}`).emit('following_count_updated', {
+      userId: followerId,
+      followingCount: myFollowingCount,
+      targetUserId: followingId,
+      isFollowing
+    });
+
+    return res.json({ following: isFollowing, followersCount: targetFollowersCount });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to toggle follow' });
@@ -953,37 +928,143 @@ app.get('/api/leaderboard', async (req: any, res: any) => {
 // Search and Discovery API
 app.get('/api/discover', async (req, res) => {
   try {
-    const { q, category } = req.query;
-    
-    const where: any = {};
-    if (q) where.title = { contains: q as string };
-    if (category) where.category = category as string;
-    
+    const rawQ = ((req.query.q as string) || '').trim();
+    const category = ((req.query.category as string) || '').trim();
+
+    // Build video search filter
+    const videoConditions: any[] = [];
+
+    // Helper to get category search variations and synonyms
+    const getCategoryTerms = (cat: string) => {
+      const lower = cat.toLowerCase().trim();
+      const terms = new Set<string>([lower]);
+      if (lower.startsWith('sing') || lower === 'singers') {
+        terms.add('sing'); terms.add('song'); terms.add('vocal'); terms.add('music');
+      } else if (lower.startsWith('danc') || lower === 'dancers') {
+        terms.add('dance'); terms.add('dancing'); terms.add('choreograph');
+      } else if (lower.startsWith('guitar') || lower === 'guitarists') {
+        terms.add('guitar'); terms.add('music');
+      } else if (lower.startsWith('comed') || lower === 'comedians') {
+        terms.add('comedy'); terms.add('comedian');
+      } else if (lower.startsWith('band') || lower === 'bands') {
+        terms.add('band'); terms.add('music');
+      } else if (lower.startsWith('music')) {
+        terms.add('music'); terms.add('sing'); terms.add('song');
+      } else if (lower.startsWith('beatbox')) {
+        terms.add('beatbox');
+      } else {
+        const stem = lower.replace(/(ists|ers|ing|s)$/g, '');
+        if (stem.length > 2) terms.add(stem);
+      }
+      return Array.from(terms).filter(t => t.length > 1);
+    };
+
+    if (rawQ) {
+      const cleanTag = rawQ.replace(/^#/, '');
+      videoConditions.push({
+        OR: [
+          { title: { contains: rawQ, mode: 'insensitive' } },
+          { description: { contains: rawQ, mode: 'insensitive' } },
+          { category: { contains: rawQ, mode: 'insensitive' } },
+          { subCategory: { contains: rawQ, mode: 'insensitive' } },
+          { author: { name: { contains: rawQ, mode: 'insensitive' } } },
+          { author: { username: { contains: rawQ, mode: 'insensitive' } } },
+          { author: { title: { contains: rawQ, mode: 'insensitive' } } },
+          { hashtags: { some: { name: { contains: cleanTag, mode: 'insensitive' } } } }
+        ]
+      });
+    }
+
+    if (category && category !== 'All') {
+      const catTerms = getCategoryTerms(category);
+      videoConditions.push({
+        OR: catTerms.flatMap(term => [
+          { category: { contains: term, mode: 'insensitive' } },
+          { subCategory: { contains: term, mode: 'insensitive' } },
+          { title: { contains: term, mode: 'insensitive' } },
+          { author: { title: { contains: term, mode: 'insensitive' } } },
+          { hashtags: { some: { name: { contains: term, mode: 'insensitive' } } } }
+        ])
+      });
+    }
+
+    const videoWhere = videoConditions.length > 0 ? { AND: videoConditions } : {};
+
+    // Also search matching Users / Talent
+    let users: any[] = [];
+    if (rawQ || (category && category !== 'All')) {
+      const userTerms = rawQ ? [rawQ] : getCategoryTerms(category);
+      users = await prisma.user.findMany({
+        where: {
+          OR: userTerms.flatMap(term => [
+            { username: { contains: term, mode: 'insensitive' } },
+            { name: { contains: term, mode: 'insensitive' } },
+            { title: { contains: term, mode: 'insensitive' } },
+            { location: { contains: term, mode: 'insensitive' } },
+            { bio: { contains: term, mode: 'insensitive' } }
+          ])
+        },
+        take: 12,
+        select: {
+          id: true,
+          username: true,
+          name: true,
+          avatarUrl: true,
+          title: true,
+          location: true,
+          _count: {
+            select: { followers: true, videos: true }
+          }
+        }
+      });
+    }
+
     const videos = await prisma.video.findMany({
-      where,
+      where: videoWhere,
       include: {
-        author: { select: { id: true, username: true, name: true, avatarUrl: true } },
+        author: { select: { id: true, username: true, name: true, avatarUrl: true, title: true } },
         likes: true,
         comments: true,
         ratings: true
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      take: 30
     });
-    
+
     const formattedVideos = videos.map(v => ({
       id: v.id,
       title: v.title,
+      description: v.description,
+      category: v.category,
+      subCategory: v.subCategory,
+      authorId: v.author.id,
       author: v.author.name || v.author.username,
+      authorUsername: v.author.username,
       authorAvatar: v.author.avatarUrl,
+      authorTitle: v.author.title,
       url: v.url,
       likesCount: v.likes.length,
       commentsCount: v.comments.length,
-      averageRating: v.ratings.length ? v.ratings.reduce((acc, r) => acc + r.score, 0) / v.ratings.length : 0
+      averageRating: v.ratings.length ? (v.ratings.reduce((acc, r) => acc + r.score, 0) / v.ratings.length).toFixed(1) : null
     }));
 
-    res.json({ videos: formattedVideos });
+    const formattedUsers = users.map(u => ({
+      id: u.id,
+      username: u.username,
+      name: u.name,
+      avatarUrl: u.avatarUrl,
+      title: u.title,
+      location: u.location,
+      followersCount: u._count.followers,
+      videosCount: u._count.videos
+    }));
+
+    res.json({
+      users: formattedUsers,
+      videos: formattedVideos
+    });
   } catch (error) {
-    console.error(error);
+    console.error('Discover error:', error);
     res.status(500).json({ error: 'Failed to search videos' });
   }
 });
@@ -1040,6 +1121,36 @@ const requireAdmin = async (req: express.Request, res: express.Response, next: e
   }
   next();
 };
+
+// Secure Admin wipe endpoint to reset all temporary data on deployed instances
+app.post('/api/admin/system/wipe-all-data', async (req, res) => {
+  const secret = req.headers['x-admin-secret'] || req.body?.secret;
+  if (secret !== 'wipe-temp-data-2026') {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+  try {
+    await prisma.booking.deleteMany();
+    await prisma.show.deleteMany();
+    await prisma.watchHistory.deleteMany();
+    await prisma.savedVideo.deleteMany();
+    await prisma.block.deleteMany();
+    await prisma.message.deleteMany();
+    await prisma.report.deleteMany();
+    await prisma.notification.deleteMany();
+    await prisma.rating.deleteMany();
+    await prisma.comment.deleteMany();
+    await prisma.like.deleteMany();
+    await prisma.liveStream.deleteMany();
+    await prisma.video.deleteMany();
+    await prisma.hashtag.deleteMany();
+    await prisma.follows.deleteMany();
+    await prisma.user.deleteMany();
+    return res.json({ success: true, message: 'All database records successfully wiped clean' });
+  } catch (error: any) {
+    console.error('Error wiping data:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
 
 // Admin API - Get Users
 app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
@@ -1216,8 +1327,10 @@ app.get('/api/users/search', requireAuth, async (req: any, res: any) => {
         id: { not: currentUserId },
         ...(query ? {
           OR: [
-            { username: { contains: query } },
-            { name: { contains: query } }
+            { username: { contains: query, mode: 'insensitive' } },
+            { name: { contains: query, mode: 'insensitive' } },
+            { title: { contains: query, mode: 'insensitive' } },
+            { location: { contains: query, mode: 'insensitive' } }
           ]
         } : {})
       },
@@ -1741,6 +1854,19 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Join profile room for live follower count updates
+  socket.on('join_profile', (data) => {
+    if (data?.profileUserId) {
+      socket.join(`profile_${data.profileUserId}`);
+    }
+  });
+
+  socket.on('leave_profile', (data) => {
+    if (data?.profileUserId) {
+      socket.leave(`profile_${data.profileUserId}`);
+    }
+  });
+
   socket.on('join_chat', (data) => {
     if (data?.chatId) {
       socket.join(`chat_${data.chatId}`); // chatId could be "1_2" (user1 + user2)
@@ -1810,45 +1936,7 @@ app.get('/api/shows', async (req: any, res: any) => {
       } catch (e) {}
     }
 
-    // Auto-seed sample shows if table is empty
-    const count = await prisma.show.count();
-    if (count === 0) {
-      const firstUser = await prisma.user.findFirst();
-      if (firstUser) {
-        await prisma.show.createMany({
-          data: [
-            {
-              title: 'Aarav Nair: Live at The Next Stage',
-              location: 'The Next Stage, Indiranagar, Bengaluru',
-              date: new Date('2026-10-24T20:00:00Z'),
-              image: 'https://images.unsplash.com/photo-1516280440503-6c8c4a93883a?w=800&q=80',
-              hostId: firstUser.id
-            },
-            {
-              title: 'Prithvi Theatre Candlelight Sessions',
-              location: 'Prithvi Theatre, Juhu, Mumbai',
-              date: new Date('2026-11-12T19:30:00Z'),
-              image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&q=80',
-              hostId: firstUser.id
-            },
-            {
-              title: 'Kochi Waterfront Acoustic Jam',
-              location: 'Fort Kochi Beach Promenade, Kochi',
-              date: new Date('2026-11-28T18:00:00Z'),
-              image: 'https://images.unsplash.com/photo-1540039155733-d7696d4eb98e?w=800&q=80',
-              hostId: firstUser.id
-            },
-            {
-              title: 'Hauz Khas Live Stage Spotlight',
-              location: 'Social Village, Hauz Khas, Delhi NCR',
-              date: new Date('2026-12-05T20:30:00Z'),
-              image: 'https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=800&q=80',
-              hostId: firstUser.id
-            }
-          ]
-        });
-      }
-    }
+
 
     const where: any = {};
     if (city && city !== 'All Cities') {
