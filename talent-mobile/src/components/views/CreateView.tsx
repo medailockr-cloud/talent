@@ -14,6 +14,8 @@ import {
   Animated,
   Alert,
   Modal,
+  BackHandler,
+  Dimensions,
 } from "react-native";
 import {
   CameraView,
@@ -85,6 +87,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useThemeStore } from "../../store/themeStore";
 import { useDraftsStore, CreateDraft } from "../../store/draftsStore";
+import { InstagramCameraScreen } from "../create";
 
 // --- Types & Filter Configurations ---
 export interface TalentFilter {
@@ -671,20 +674,134 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   const [duration, setDuration] = useState(1);
   const [sliderWidth, setSliderWidth] = useState(0);
 
+  // --- Trim & Crop State ---
+  const [trimStart, setTrimStart] = useState<number>(0);
+  const [trimEnd, setTrimEnd] = useState<number>(0);
+  const [isTrimming, setIsTrimming] = useState<"start" | "end" | "scrub" | null>(null);
+
+  const trimStartRef = useRef<number>(0);
+  trimStartRef.current = trimStart;
+  const trimEndRef = useRef<number>(0);
+  trimEndRef.current = trimEnd;
+  const durationRef = useRef<number>(1);
+  durationRef.current = duration > 0 ? duration : 1;
+  const isTrimmingRef = useRef<"start" | "end" | "scrub" | null>(null);
+  isTrimmingRef.current = isTrimming;
+  const sliderWidthRef = useRef<number>(0);
+  sliderWidthRef.current = sliderWidth;
+  const [trimSliderWidth, setTrimSliderWidth] = useState<number>(
+    Dimensions.get("window").width - 48
+  );
+  const trimSliderWidthRef = useRef<number>(
+    Dimensions.get("window").width - 48
+  );
+  trimSliderWidthRef.current = trimSliderWidth;
+  const startDragOriginRef = useRef<number>(0);
+  const endDragOriginRef = useRef<number>(0);
+  const timelineTrackRef = useRef<View>(null);
+  const trackPageXRef = useRef<number>(24);
+
+  // Throttling and state refs to prevent ExoPlayer seek storms and infinite loops
+  const lastLoopSeekTimeRef = useRef<number>(0);
+  const lastDragSeekTimeRef = useRef<number>(0);
+  const lastReplacedUriRef = useRef<string | null>(null);
+
+  // Safe helper utilities for video player, haptics, and layout
+  const safeSeek = (player: any, timeSec: number) => {
+    if (!player || typeof timeSec !== "number" || isNaN(timeSec) || !isFinite(timeSec)) return;
+    try {
+      player.currentTime = Math.max(0, timeSec);
+    } catch (e) {}
+  };
+
+  const safePlay = (player: any) => {
+    if (!player) return;
+    try {
+      player.play();
+    } catch (e) {}
+  };
+
+  const safePause = (player: any) => {
+    if (!player) return;
+    try {
+      player.pause();
+    } catch (e) {}
+  };
+
+  const safeHaptic = (type: "light" | "selection" = "light") => {
+    if (Platform.OS === "web") return;
+    try {
+      if (type === "selection") {
+        Haptics.selectionAsync().catch(() => {});
+      } else {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      }
+    } catch (e) {}
+  };
+
+  const safePercent = (val: number, total: number): number => {
+    if (typeof val !== "number" || isNaN(val) || !isFinite(val)) return 0;
+    if (typeof total !== "number" || isNaN(total) || !isFinite(total) || total <= 0) return 0;
+    return Math.max(0, Math.min(100, (val / total) * 100));
+  };
+
   const previewPlayer = useVideoPlayer(
     mediaType === "video" ? recordedVideoUri : null,
     (player) => {
-      player.loop = true;
-      player.muted = true; // Auto-play requires muted on web
-      player.play();
+      try {
+        player.loop = true;
+        player.muted = Platform.OS === "web";
+        player.play();
+      } catch (e) {}
     },
   );
 
   useEffect(() => {
     const interval = setInterval(() => {
       if (previewPlayer && mediaType === "video") {
-        setCurrentTime(previewPlayer.currentTime);
-        setDuration(previewPlayer.duration || 1);
+        try {
+          const t = previewPlayer.currentTime ?? 0;
+          const d = previewPlayer.duration ?? 0;
+
+          if (typeof t === "number" && !isNaN(t) && isFinite(t)) {
+            // Only update currentTime from player if user is not actively scrubbing
+            if (!isTrimmingRef.current) {
+              setCurrentTime(t);
+            }
+          }
+
+          if (typeof d === "number" && !isNaN(d) && isFinite(d) && d > 0.1) {
+            if (Math.abs(d - durationRef.current) > 0.2 || durationRef.current <= 1) {
+              setDuration(d);
+              durationRef.current = d;
+              if (trimEndRef.current === 0 || trimEndRef.current > d) {
+                setTrimEnd(d);
+                trimEndRef.current = d;
+              }
+            }
+          }
+
+          // Loop constraint logic for trimmed region (only when trimming is active)
+          if (!isTrimmingRef.current) {
+            const curDur = durationRef.current > 1 ? durationRef.current : (d > 1 ? d : 9999);
+            const curStart = Math.max(0, trimStartRef.current);
+            const curEnd = trimEndRef.current > 0 ? Math.min(curDur, trimEndRef.current) : curDur;
+
+            const isTrimmed = curStart > 0.05 || curEnd < curDur - 0.1;
+            if (isTrimmed && curEnd > curStart + 0.2) {
+              const now = Date.now();
+              if (t >= curEnd && now - lastLoopSeekTimeRef.current > 500) {
+                lastLoopSeekTimeRef.current = now;
+                safeSeek(previewPlayer, curStart);
+                setCurrentTime(curStart);
+              } else if (t < curStart - 0.4 && now - lastLoopSeekTimeRef.current > 600) {
+                lastLoopSeekTimeRef.current = now;
+                safeSeek(previewPlayer, curStart);
+                setCurrentTime(curStart);
+              }
+            }
+          }
+        } catch (e) {}
       }
     }, 100);
     return () => clearInterval(interval);
@@ -692,11 +809,15 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
   useEffect(() => {
     if (previewPlayer && mediaType === "video" && recordedVideoUri) {
-      try {
-        previewPlayer.replace(recordedVideoUri);
-        previewPlayer.play();
-      } catch (err) {
-        // Player already running or preparing source
+      if (lastReplacedUriRef.current !== recordedVideoUri) {
+        lastReplacedUriRef.current = recordedVideoUri;
+        try {
+          previewPlayer.replace(recordedVideoUri);
+          previewPlayer.play();
+          setIsPlaying(true);
+        } catch (err) {
+          // Player already running or preparing source
+        }
       }
     }
   }, [previewPlayer, recordedVideoUri, mediaType]);
@@ -726,32 +847,364 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       .join(" ");
   };
 
+  // Mini progress scrubber responder (respects trim bounds)
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (evt) => {
-        if (sliderWidth > 0 && duration > 0) {
-          const locX = evt.nativeEvent.locationX;
-          const newTime = (locX / sliderWidth) * duration;
-          if (previewPlayer) {
-            previewPlayer.currentTime = newTime;
+        const sw = sliderWidthRef.current || sliderWidth;
+        const dur = durationRef.current > 0 ? durationRef.current : (previewPlayer?.duration || 1);
+        if (
+          sw > 0 &&
+          dur > 0 &&
+          typeof evt?.nativeEvent?.locationX === "number" &&
+          !isNaN(evt.nativeEvent.locationX) &&
+          isFinite(evt.nativeEvent.locationX)
+        ) {
+          const locX = Math.max(0, Math.min(sw, evt.nativeEvent.locationX));
+          const rawTime = (locX / sw) * dur;
+          if (isFinite(rawTime) && !isNaN(rawTime)) {
+            const curEnd = trimEndRef.current > 0 ? trimEndRef.current : dur;
+            const curStart = Math.max(0, trimStartRef.current);
+            const clampedTime = Math.max(curStart, Math.min(curEnd, rawTime));
+            safeSeek(previewPlayer, clampedTime);
+            setCurrentTime(clampedTime);
           }
         }
       },
       onPanResponderMove: (evt) => {
-        if (sliderWidth > 0 && duration > 0) {
-          let newX = evt.nativeEvent.locationX;
-          if (newX < 0) newX = 0;
-          if (newX > sliderWidth) newX = sliderWidth;
-          const newTime = (newX / sliderWidth) * duration;
-          if (previewPlayer) {
-            previewPlayer.currentTime = newTime;
+        const sw = sliderWidthRef.current || sliderWidth;
+        const dur = durationRef.current > 0 ? durationRef.current : (previewPlayer?.duration || 1);
+        if (
+          sw > 0 &&
+          dur > 0 &&
+          typeof evt?.nativeEvent?.locationX === "number" &&
+          !isNaN(evt.nativeEvent.locationX) &&
+          isFinite(evt.nativeEvent.locationX)
+        ) {
+          let locX = evt.nativeEvent.locationX;
+          if (locX < 0) locX = 0;
+          if (locX > sw) locX = sw;
+          const rawTime = (locX / sw) * dur;
+          if (isFinite(rawTime) && !isNaN(rawTime)) {
+            const curEnd = trimEndRef.current > 0 ? trimEndRef.current : dur;
+            const curStart = Math.max(0, trimStartRef.current);
+            const clampedTime = Math.max(curStart, Math.min(curEnd, rawTime));
+            safeSeek(previewPlayer, clampedTime);
+            setCurrentTime(clampedTime);
           }
         }
       },
     }),
   ).current;
+
+  // Direct Timeline Tap / Click Handler
+  const handleTimelinePress = (locX: number) => {
+    if (typeof locX !== "number" || isNaN(locX) || !isFinite(locX)) return;
+    const sw = trimSliderWidthRef.current || trimSliderWidth || (Dimensions.get("window").width - 48);
+    const dur = durationRef.current > 0 ? durationRef.current : (previewPlayer?.duration || 1);
+    if (sw <= 0 || dur <= 0) return;
+
+    const clampedLocX = Math.max(0, Math.min(sw, locX));
+    const tappedTime = Math.max(0, Math.min(dur, (clampedLocX / sw) * dur));
+    if (isNaN(tappedTime) || !isFinite(tappedTime)) return;
+
+    const currentStart = Math.max(0, trimStartRef.current);
+    const currentEnd = trimEndRef.current > 0 ? trimEndRef.current : dur;
+
+    // If tapped to the left of trimStart -> adjust trimStart
+    if (tappedTime < currentStart) {
+      const rounded = Math.round(tappedTime * 10) / 10;
+      setTrimStart(rounded);
+      trimStartRef.current = rounded;
+      safeSeek(previewPlayer, rounded);
+      setCurrentTime(rounded);
+      safeHaptic("light");
+    }
+    // If tapped to the right of trimEnd -> adjust trimEnd
+    else if (tappedTime > currentEnd) {
+      const rounded = Math.round(tappedTime * 10) / 10;
+      setTrimEnd(rounded);
+      trimEndRef.current = rounded;
+      safeSeek(previewPlayer, rounded);
+      setCurrentTime(rounded);
+      safeHaptic("light");
+    }
+    // If tapped inside active trimmed region -> scrub playhead
+    else {
+      const rounded = Math.round(tappedTime * 10) / 10;
+      safeSeek(previewPlayer, rounded);
+      setCurrentTime(rounded);
+    }
+  };
+
+  // Trim Start Handle PanResponder
+  const trimStartPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => false,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => {
+        setIsTrimming("start");
+        isTrimmingRef.current = "start";
+        startDragOriginRef.current = Math.max(0, trimStartRef.current);
+        safePause(previewPlayer);
+        safeHaptic("light");
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const sw = trimSliderWidthRef.current || trimSliderWidth || (Dimensions.get("window").width - 48);
+        const dur = durationRef.current > 0 ? durationRef.current : (previewPlayer?.duration || 1);
+        if (
+          sw > 0 &&
+          dur > 0 &&
+          gestureState &&
+          typeof gestureState.dx === "number" &&
+          isFinite(gestureState.dx) &&
+          !isNaN(gestureState.dx)
+        ) {
+          const deltaSec = (gestureState.dx / sw) * dur;
+          const curEnd = trimEndRef.current > 0 ? trimEndRef.current : dur;
+          const maxStart = Math.max(0, curEnd - 0.5);
+          const origin = startDragOriginRef.current;
+          const newStart = Math.max(0, Math.min(maxStart, origin + deltaSec));
+          if (isFinite(newStart) && !isNaN(newStart)) {
+            const rounded = Math.round(newStart * 10) / 10;
+            setTrimStart(rounded);
+            trimStartRef.current = rounded;
+            const now = Date.now();
+            if (now - lastDragSeekTimeRef.current > 60) {
+              lastDragSeekTimeRef.current = now;
+              safeSeek(previewPlayer, rounded);
+            }
+            setCurrentTime(rounded);
+          }
+        }
+      },
+      onPanResponderRelease: () => {
+        setIsTrimming(null);
+        isTrimmingRef.current = null;
+        const start = Math.max(0, trimStartRef.current);
+        safeSeek(previewPlayer, start);
+        safePlay(previewPlayer);
+        setIsPlaying(true);
+        safeHaptic("selection");
+      },
+      onPanResponderTerminate: () => {
+        setIsTrimming(null);
+        isTrimmingRef.current = null;
+      },
+    }),
+  ).current;
+
+  // Trim End Handle PanResponder
+  const trimEndPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => false,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => {
+        setIsTrimming("end");
+        isTrimmingRef.current = "end";
+        const dur = durationRef.current > 0 ? durationRef.current : (previewPlayer?.duration || 1);
+        endDragOriginRef.current = trimEndRef.current > 0 ? trimEndRef.current : dur;
+        safePause(previewPlayer);
+        safeHaptic("light");
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const sw = trimSliderWidthRef.current || trimSliderWidth || (Dimensions.get("window").width - 48);
+        const dur = durationRef.current > 0 ? durationRef.current : (previewPlayer?.duration || 1);
+        if (
+          sw > 0 &&
+          dur > 0 &&
+          gestureState &&
+          typeof gestureState.dx === "number" &&
+          isFinite(gestureState.dx) &&
+          !isNaN(gestureState.dx)
+        ) {
+          const deltaSec = (gestureState.dx / sw) * dur;
+          const curStart = Math.max(0, trimStartRef.current);
+          const minEnd = curStart + 0.5;
+          const origin = endDragOriginRef.current;
+          const newEnd = Math.max(minEnd, Math.min(dur, origin + deltaSec));
+          if (isFinite(newEnd) && !isNaN(newEnd)) {
+            const rounded = Math.round(newEnd * 10) / 10;
+            setTrimEnd(rounded);
+            trimEndRef.current = rounded;
+            const now = Date.now();
+            if (now - lastDragSeekTimeRef.current > 60) {
+              lastDragSeekTimeRef.current = now;
+              safeSeek(previewPlayer, rounded);
+            }
+            setCurrentTime(rounded);
+          }
+        }
+      },
+      onPanResponderRelease: () => {
+        setIsTrimming(null);
+        isTrimmingRef.current = null;
+        const start = Math.max(0, trimStartRef.current);
+        safeSeek(previewPlayer, start);
+        safePlay(previewPlayer);
+        setIsPlaying(true);
+        safeHaptic("selection");
+      },
+      onPanResponderTerminate: () => {
+        setIsTrimming(null);
+        isTrimmingRef.current = null;
+      },
+    }),
+  ).current;
+
+  // Scrubber PanResponder within timeline track
+  const scrubberPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 2;
+      },
+      onMoveShouldSetPanResponderCapture: () => false,
+      onPanResponderTerminationRequest: () => true,
+      onPanResponderGrant: (evt, gestureState) => {
+        let locX: number | null = null;
+        if (
+          typeof evt?.nativeEvent?.locationX === "number" &&
+          !isNaN(evt.nativeEvent.locationX) &&
+          isFinite(evt.nativeEvent.locationX) &&
+          evt.nativeEvent.locationX >= 0
+        ) {
+          locX = evt.nativeEvent.locationX;
+        } else if (
+          gestureState &&
+          typeof gestureState.x0 === "number" &&
+          !isNaN(gestureState.x0) &&
+          isFinite(gestureState.x0)
+        ) {
+          locX = Math.max(0, gestureState.x0 - trackPageXRef.current);
+        } else if (evt?.nativeEvent?.touches?.[0]?.pageX) {
+          locX = Math.max(0, evt.nativeEvent.touches[0].pageX - trackPageXRef.current);
+        }
+
+        if (locX !== null && isFinite(locX) && !isNaN(locX)) {
+          handleTimelinePress(locX);
+        }
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        const sw = trimSliderWidthRef.current || trimSliderWidth || (Dimensions.get("window").width - 48);
+        const dur = durationRef.current > 0 ? durationRef.current : (previewPlayer?.duration || 1);
+        if (sw <= 0 || dur <= 0) return;
+
+        let locX: number | null = null;
+        if (
+          gestureState &&
+          typeof gestureState.moveX === "number" &&
+          !isNaN(gestureState.moveX) &&
+          isFinite(gestureState.moveX) &&
+          gestureState.moveX > 0
+        ) {
+          locX = Math.max(0, Math.min(sw, gestureState.moveX - trackPageXRef.current));
+        } else if (
+          typeof evt?.nativeEvent?.locationX === "number" &&
+          !isNaN(evt.nativeEvent.locationX) &&
+          isFinite(evt.nativeEvent.locationX)
+        ) {
+          locX = Math.max(0, Math.min(sw, evt.nativeEvent.locationX));
+        }
+
+        if (locX !== null && isFinite(locX) && !isNaN(locX)) {
+          const rawTime = (locX / sw) * dur;
+          if (isFinite(rawTime) && !isNaN(rawTime)) {
+            const curStart = Math.max(0, trimStartRef.current);
+            const curEnd = trimEndRef.current > 0 ? trimEndRef.current : dur;
+            const clamped = Math.max(curStart, Math.min(curEnd, rawTime));
+            const rounded = Math.round(clamped * 10) / 10;
+            const now = Date.now();
+            if (now - lastDragSeekTimeRef.current > 60) {
+              lastDragSeekTimeRef.current = now;
+              safeSeek(previewPlayer, rounded);
+            }
+            setCurrentTime(rounded);
+          }
+        }
+      },
+      onPanResponderRelease: () => {
+        safeSeek(previewPlayer, currentTime);
+      },
+    }),
+  ).current;
+
+  // Fine-tuning helpers for Trim
+  const adjustTrimStart = (delta: number) => {
+    safeHaptic("light");
+    const dur = durationRef.current > 0 ? durationRef.current : (previewPlayer?.duration || 1);
+    const curEnd =
+      trimEndRef.current > 0 && isFinite(trimEndRef.current)
+        ? trimEndRef.current
+        : dur;
+    const maxStart = Math.max(0, curEnd - 0.5);
+    const curStart = Math.max(0, trimStartRef.current);
+    const next = Math.max(
+      0,
+      Math.min(maxStart, Math.round((curStart + delta) * 10) / 10)
+    );
+    if (!isNaN(next) && isFinite(next)) {
+      setTrimStart(next);
+      trimStartRef.current = next;
+      safeSeek(previewPlayer, next);
+      setCurrentTime(next);
+    }
+  };
+
+  const adjustTrimEnd = (delta: number) => {
+    safeHaptic("light");
+    const dur = durationRef.current > 0 ? durationRef.current : (previewPlayer?.duration || 1);
+    const curStart = Math.max(0, trimStartRef.current);
+    const minEnd = curStart + 0.5;
+    const curEnd =
+      trimEndRef.current > 0 && isFinite(trimEndRef.current)
+        ? trimEndRef.current
+        : dur;
+    const next = Math.max(
+      minEnd,
+      Math.min(dur, Math.round((curEnd + delta) * 10) / 10)
+    );
+    if (!isNaN(next) && isFinite(next)) {
+      setTrimEnd(next);
+      trimEndRef.current = next;
+      safeSeek(previewPlayer, next);
+      setCurrentTime(next);
+    }
+  };
+
+  const applyPresetTrim = (lengthSeconds: number | null) => {
+    safeHaptic("selection");
+    const dur = durationRef.current > 0 ? durationRef.current : (previewPlayer?.duration || 1);
+    if (lengthSeconds === null || lengthSeconds >= dur) {
+      setTrimStart(0);
+      trimStartRef.current = 0;
+      setTrimEnd(dur);
+      trimEndRef.current = dur;
+      safeSeek(previewPlayer, 0);
+      safePlay(previewPlayer);
+      setIsPlaying(true);
+      setCurrentTime(0);
+    } else {
+      setTrimStart(0);
+      trimStartRef.current = 0;
+      const rounded = Math.round(lengthSeconds * 10) / 10;
+      setTrimEnd(rounded);
+      trimEndRef.current = rounded;
+      safeSeek(previewPlayer, 0);
+      safePlay(previewPlayer);
+      setIsPlaying(true);
+      setCurrentTime(0);
+    }
+  };
 
   const [intensitySliderWidth, setIntensitySliderWidth] = useState(0);
   const intensitySliderWidthRef = useRef(0);
@@ -762,7 +1215,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (evt) => {
         const width = intensitySliderWidthRef.current;
-        if (width > 0) {
+        if (width > 0 && typeof evt?.nativeEvent?.locationX === "number" && !isNaN(evt.nativeEvent.locationX) && isFinite(evt.nativeEvent.locationX)) {
           const x = Math.max(0, Math.min(width, evt.nativeEvent.locationX));
           const val = Math.round((x / width) * 100) / 100;
           setFilterIntensity(val);
@@ -770,7 +1223,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       },
       onPanResponderMove: (evt) => {
         const width = intensitySliderWidthRef.current;
-        if (width > 0) {
+        if (width > 0 && typeof evt?.nativeEvent?.locationX === "number" && !isNaN(evt.nativeEvent.locationX) && isFinite(evt.nativeEvent.locationX)) {
           const x = Math.max(0, Math.min(width, evt.nativeEvent.locationX));
           const val = Math.round((x / width) * 100) / 100;
           setFilterIntensity(val);
@@ -796,7 +1249,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (evt) => {
         const width = fineTuneSliderWidthRef.current;
-        if (width > 0) {
+        if (width > 0 && typeof evt?.nativeEvent?.locationX === "number" && !isNaN(evt.nativeEvent.locationX) && isFinite(evt.nativeEvent.locationX)) {
           const x = Math.max(0, Math.min(width, evt.nativeEvent.locationX));
           const pct = x / width;
           const val = Math.round(pct * 100 - 50);
@@ -808,7 +1261,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       },
       onPanResponderMove: (evt) => {
         const width = fineTuneSliderWidthRef.current;
-        if (width > 0) {
+        if (width > 0 && typeof evt?.nativeEvent?.locationX === "number" && !isNaN(evt.nativeEvent.locationX) && isFinite(evt.nativeEvent.locationX)) {
           const x = Math.max(0, Math.min(width, evt.nativeEvent.locationX));
           const pct = x / width;
           const val = Math.round(pct * 100 - 50);
@@ -1006,6 +1459,14 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
+  const formatTimeWithTenths = (time: number) => {
+    if (isNaN(time) || !isFinite(time)) return "00:00.0";
+    const m = Math.floor(time / 60);
+    const s = Math.floor(time % 60);
+    const tenths = Math.floor((Math.max(0, time) % 1) * 10);
+    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${tenths}`;
+  };
+
   // --- Actions ---
   const toggleCameraFacing = () => {
     setFacing((current) => (current === "back" ? "front" : "back"));
@@ -1041,6 +1502,13 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         if (video && video.uri) {
           setRecordedVideoUri(video.uri);
           setMediaType("video");
+          setTrimStart(0);
+          trimStartRef.current = 0;
+          setTrimEnd(0);
+          trimEndRef.current = 0;
+          setDuration(1);
+          durationRef.current = 1;
+          lastReplacedUriRef.current = null;
           setStep("PREVIEW");
         }
       } catch (error) {
@@ -1105,6 +1573,14 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       formData.append("location", location);
       formData.append("allowJudging", String(allowJudging));
       formData.append("filter", activeFilter);
+      if (mediaType === "video") {
+        if (trimStart > 0) {
+          formData.append("trimStart", String(trimStart));
+        }
+        if (trimEnd > 0 && duration > 0 && trimEnd < duration) {
+          formData.append("trimEnd", String(trimEnd));
+        }
+      }
 
       const isImg = mediaType === "image";
       const filename = isImg ? "photo.jpg" : "video.mp4";
@@ -1141,8 +1617,18 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setRecordedVideoUri(result.assets[0].uri);
+        const asset = result.assets[0];
+        setRecordedVideoUri(asset.uri);
         setMediaType("video");
+        setTrimStart(0);
+        trimStartRef.current = 0;
+        const rawDur = asset.duration ? Math.round(asset.duration / 100) / 10 : 0;
+        const durSec = rawDur > 0.5 ? rawDur : 1;
+        setDuration(durSec);
+        durationRef.current = durSec;
+        setTrimEnd(rawDur > 0.5 ? rawDur : 0);
+        trimEndRef.current = rawDur > 0.5 ? rawDur : 0;
+        lastReplacedUriRef.current = null;
         setStep("PREVIEW");
       }
     } catch (error) {
@@ -1161,6 +1647,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setRecordedVideoUri(result.assets[0].uri);
         setMediaType("image");
+        lastReplacedUriRef.current = null;
         setStep("PREVIEW");
       }
     } catch (error) {
@@ -1184,6 +1671,15 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           asset.mimeType?.startsWith("image/") ||
           /\.(jpg|jpeg|png|webp|gif)$/i.test(asset.uri);
         setMediaType(isImg ? "image" : "video");
+        setTrimStart(0);
+        trimStartRef.current = 0;
+        const rawDur = (!isImg && asset.duration) ? Math.round(asset.duration / 100) / 10 : 0;
+        const durSec = rawDur > 0.5 ? rawDur : 1;
+        setDuration(durSec);
+        durationRef.current = durSec;
+        setTrimEnd(rawDur > 0.5 ? rawDur : 0);
+        trimEndRef.current = rawDur > 0.5 ? rawDur : 0;
+        lastReplacedUriRef.current = null;
         setStep("PREVIEW");
       }
     } catch (error) {
@@ -1236,6 +1732,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         showCaptions,
         coverImageUri,
         duration,
+        trimStart,
+        trimEnd,
       });
       setActiveDraftId(saved.id);
       if (Platform.OS !== "web") {
@@ -1289,6 +1787,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     if (draft.duration) {
       setDuration(draft.duration);
     }
+    setTrimStart(draft.trimStart || 0);
+    setTrimEnd(draft.trimEnd !== undefined ? draft.trimEnd : (draft.duration || 0));
     if (draft.mediaType === "video" && previewPlayer) {
       try {
         previewPlayer.replace(draft.mediaUri);
@@ -1300,31 +1800,211 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     setStep("PREVIEW");
   };
 
+  const handleHomeExit = () => {
+    if (onClose) {
+      onClose();
+    } else {
+      router.replace("/(tabs)");
+    }
+  };
+
+  const resetPerformanceState = () => {
+    setRecordedVideoUri(null);
+    setMediaType("video");
+    setCameraMode("video");
+    setIsRecording(false);
+    setActiveDraftId(null);
+    setCategory("Dance");
+    setSubCategory("Contemporary");
+    setPurpose("Get Discovered");
+    setTitle("Midnight Movement");
+    setLocation("Bengaluru, India");
+    setAllowJudging(true);
+    setAllowComments(true);
+    setVisibility("Public");
+    setEditMode("none");
+    setActiveFilter("Original");
+    setFilterIntensity(0.85);
+    setAdjustments({ brightness: 0, contrast: 0, saturation: 0, warmth: 0 });
+    setSelectedSoundTrack("none");
+    setOriginalAudioVolume(100);
+    setMusicVolume(80);
+    setIsOriginalMuted(false);
+    setCaptionText("Step into the spotlight ✨");
+    setCaptionStyle("neon");
+    setShowCaptions(false);
+    captionPan.setValue({ x: 0, y: 0 });
+    // @ts-ignore
+    if (captionPan.setOffset) {
+      // @ts-ignore
+      captionPan.setOffset({ x: 0, y: 0 });
+    }
+    setCoverImageUri(null);
+    setTrimStart(0);
+    setTrimEnd(0);
+    setUploadProgress(0);
+    setStep("HOME");
+    try {
+      if (previewPlayer) {
+        previewPlayer.pause();
+      }
+    } catch (e) {
+      // Player pause error ignored
+    }
+  };
+
+  const handlePreviewBack = () => {
+    if (editMode !== "none") {
+      setEditMode("none");
+    } else {
+      setConfirmModal({
+        title: "Save as Draft?",
+        message: "Do you want to save this performance take as a draft before leaving the studio?",
+        confirmText: "Save & Exit",
+        confirmStyle: "primary",
+        onConfirm: async () => {
+          await handleSaveCurrentDraft(false);
+          resetPerformanceState();
+          handleHomeExit();
+        },
+        secondaryText: "Discard Changes",
+        secondaryStyle: "destructive",
+        onSecondary: () => {
+          if (Platform.OS !== "web") {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          }
+          resetPerformanceState();
+          handleHomeExit();
+        },
+        cancelText: "Cancel",
+      });
+    }
+  };
+
+  const handleGoBack = (): boolean => {
+    // 1. If an in-app confirm modal is open, dismiss it
+    if (confirmModal) {
+      setConfirmModal(null);
+      return true;
+    }
+
+    // 2. Step-by-step back navigation for every section
+    switch (step) {
+      case "SUCCESS":
+        resetPerformanceState();
+        handleHomeExit();
+        return true;
+
+      case "UPLOADING":
+        setConfirmModal({
+          title: "Cancel Upload?",
+          message: "Are you sure you want to cancel publishing this performance?",
+          confirmText: "Cancel Upload",
+          confirmStyle: "destructive",
+          onConfirm: () => {
+            setUploadProgress(0);
+            setStep("SUMMARY");
+          },
+          cancelText: "Keep Uploading",
+        });
+        return true;
+
+      case "SUMMARY":
+        setStep("DETAILS");
+        return true;
+
+      case "DETAILS":
+        setStep("SET_PURPOSE");
+        return true;
+
+      case "SET_PURPOSE":
+        setStep("CHOOSE_TALENT");
+        return true;
+
+      case "CHOOSE_TALENT":
+        setStep("PREVIEW");
+        return true;
+
+      case "PREVIEW":
+        handlePreviewBack();
+        return true;
+
+      case "RECORD":
+        setStep("HOME");
+        return true;
+
+      case "UPLOAD":
+        setStep("HOME");
+        return true;
+
+      case "DRAFTS":
+        setStep("HOME");
+        return true;
+
+      case "HOME":
+        if (onClose) {
+          onClose();
+          return true;
+        }
+        router.replace("/(tabs)");
+        return true;
+
+      default:
+        return false;
+    }
+  };
+
+  const handleGoBackRef = useRef(handleGoBack);
+  useEffect(() => {
+    handleGoBackRef.current = handleGoBack;
+  });
+
+  useEffect(() => {
+    const onHardwareBack = () => {
+      return handleGoBackRef.current();
+    };
+
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      onHardwareBack
+    );
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   // --- Render Helpers ---
   const TopNav = ({
     title,
     onBack,
     rightEl,
+    textColor,
   }: {
     title?: string;
     onBack: () => void;
     rightEl?: React.ReactNode;
-  }) => (
-    <View className="flex-row items-center justify-between px-5 mb-5">
-      <TouchableOpacity
-        onPress={onBack}
-        className="p-1.5 -ml-1.5 rounded-full"
-        hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
-        activeOpacity={0.7}
-      >
-        <ChevronLeft color={theme.text} size={28} />
-      </TouchableOpacity>
-      {title && (
-        <Text className="font-semibold text-lg" style={{ color: theme.text }}>{title}</Text>
-      )}
-      <View className="min-w-[28px] items-end">{rightEl}</View>
-    </View>
-  );
+    textColor?: string;
+  }) => {
+    const resolvedColor = textColor || theme.text;
+    return (
+      <View className="flex-row items-center justify-between px-5 mb-5">
+        <TouchableOpacity
+          onPress={onBack}
+          className="p-1.5 -ml-1.5 rounded-full"
+          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+          activeOpacity={0.7}
+          accessibilityLabel="Go back"
+        >
+          <ChevronLeft color={resolvedColor} size={28} />
+        </TouchableOpacity>
+        {title && (
+          <Text className="font-semibold text-lg" style={{ color: resolvedColor }}>{title}</Text>
+        )}
+        <View className="min-w-[28px] items-end">{rightEl}</View>
+      </View>
+    );
+  };
 
   // --- Screens ---
 
@@ -1336,6 +2016,16 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       showsVerticalScrollIndicator={false}
     >
       <View className="flex-row justify-between items-center mb-8">
+        <TouchableOpacity
+          onPress={handleHomeExit}
+          className="p-2 -ml-2 rounded-full"
+          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+          activeOpacity={0.7}
+          accessibilityLabel="Back to home"
+        >
+          <ChevronLeft color={theme.text} size={28} />
+        </TouchableOpacity>
+
         <View className="flex-row items-baseline">
           <Text className="font-bold text-[32px] tracking-tight leading-none font-serif" style={{ color: theme.text }}>
             talent
@@ -1344,11 +2034,16 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             .
           </Text>
         </View>
-        {onClose && (
-          <TouchableOpacity onPress={onClose} className="p-1">
-            <X color={theme.text} size={24} />
-          </TouchableOpacity>
-        )}
+
+        <TouchableOpacity
+          onPress={handleHomeExit}
+          className="p-2 -mr-2 rounded-full"
+          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+          activeOpacity={0.7}
+          accessibilityLabel="Close"
+        >
+          <X color={theme.text} size={24} />
+        </TouchableOpacity>
       </View>
 
       <Text className="text-4xl font-serif mt-4 mb-2" style={{ color: theme.text }}>Create</Text>
@@ -1670,133 +2365,42 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   );
 
   const renderRecord = () => {
-    if (!camPermission || !camPermission.granted) {
-      return (
-        <View className="flex-1 bg-black items-center justify-center">
-          <Text className="text-white">Camera permission is required.</Text>
-          <TouchableOpacity
-            onPress={requestCamPermission}
-            className="mt-4 bg-[#E91E76] px-4 py-2 rounded"
-          >
-            <Text className="text-white">Grant Permission</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
     return (
-      <View className="flex-1 bg-black">
-        <CameraView
-          ref={cameraRef}
-          className="flex-1 w-full h-full"
-          facing={facing}
-          mode="video"
-        >
-          <View className="pt-14 px-5 flex-row justify-between items-start z-10">
-            <TouchableOpacity onPress={() => setStep("HOME")}>
-              <X color="#fff" size={28} />
-            </TouchableOpacity>
-
-            <View className="flex-row gap-4 items-center">
-              <TouchableOpacity>
-                <Flashlight color="#fff" size={24} />
-              </TouchableOpacity>
-              <TouchableOpacity className="flex-row items-center gap-2">
-                <Music color="#fff" size={24} />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View className="absolute right-4 top-40 items-center gap-6 z-10">
-            <TouchableOpacity
-              onPress={toggleCameraFacing}
-              className="items-center"
-            >
-              <Repeat color="#fff" size={22} />
-              <Text className="text-white text-[10px] mt-1 font-medium">
-                Flip
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity className="items-center">
-              <Zap color="#fff" size={22} />
-              <Text className="text-white text-[10px] mt-1 font-medium">
-                Speed
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity className="items-center">
-              <Clock color="#fff" size={22} />
-              <Text className="text-white text-[10px] mt-1 font-medium">
-                Timer
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity className="items-center">
-              <Settings2 color="#fff" size={22} />
-              <Text className="text-white text-[10px] mt-1 font-medium">
-                Filters
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <View className="absolute bottom-0 inset-x-0 pb-12 pt-20 bg-gradient-to-t from-black via-black/50 to-transparent">
-            {/* Camera Mode Toggle */}
-            <View className="flex-row justify-center items-center gap-8 mb-6">
-              <TouchableOpacity
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setCameraMode("video");
-                }}
-                className="py-1"
-              >
-                <Text
-                  className={`font-bold text-[14px] tracking-wider uppercase ${cameraMode === "video" ? "text-[#E91E76] border-b-2 border-[#E91E76] pb-0.5" : "text-white/60"}`}
-                >
-                  Video
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setCameraMode("photo");
-                }}
-                className="py-1"
-              >
-                <Text
-                  className={`font-bold text-[14px] tracking-wider uppercase ${cameraMode === "photo" ? "text-[#E91E76] border-b-2 border-[#E91E76] pb-0.5" : "text-white/60"}`}
-                >
-                  Photo
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View className="flex-row items-center justify-center">
-              <TouchableOpacity
-                onPress={toggleRecord}
-                className="items-center justify-center"
-              >
-                <View
-                  className={`rounded-full border-[4px] items-center justify-center transition-all ${
-                    cameraMode === "photo"
-                      ? "border-white/80 w-[80px] h-[80px]"
-                      : isRecording
-                        ? "border-[#E91E76] w-[88px] h-[88px]"
-                        : "border-white/50 w-[80px] h-[80px]"
-                  }`}
-                >
-                  <View
-                    className={`rounded-full ${
-                      cameraMode === "photo"
-                        ? "bg-white w-[64px] h-[64px]"
-                        : isRecording
-                          ? "bg-[#E91E76] w-[36px] h-[36px] rounded-md"
-                          : "bg-[#E91E76] w-[64px] h-[64px]"
-                    }`}
-                  />
-                </View>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </CameraView>
-      </View>
+      <InstagramCameraScreen
+        onClose={() => {
+          if (Platform.OS !== "web") {
+            Haptics.selectionAsync();
+          }
+          setStep("HOME");
+        }}
+        onMediaCaptured={({ uri, mediaType: capturedType, sound }) => {
+          setRecordedVideoUri(uri);
+          setMediaType(capturedType);
+          setCameraMode(capturedType === "image" ? "photo" : "video");
+          setTrimStart(0);
+          trimStartRef.current = 0;
+          setTrimEnd(0);
+          trimEndRef.current = 0;
+          setDuration(0);
+          durationRef.current = 0;
+          if (sound) {
+            setUserSoundTracks((prev) => [
+              ...prev.filter((t) => t.id !== sound.id),
+              {
+                id: sound.id,
+                name: sound.title,
+                artist: sound.artist,
+                genre: sound.category || "Trending",
+                duration: `${Math.floor(sound.duration / 60)}:${(sound.duration % 60).toString().padStart(2, "0")}`,
+                accent: "#38BDF8",
+                uri: sound.audioUrl,
+              },
+            ]);
+            setSelectedSoundTrack(sound.id);
+          }
+          setStep("PREVIEW");
+        }}
+      />
     );
   };
 
@@ -1904,6 +2508,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   const renderPreview = () => (
     <View className="flex-1 bg-[#050608] pt-14">
       <TopNav
+        textColor="#FFFFFF"
         title={
           editMode === "none"
             ? "Preview & Edit"
@@ -1917,81 +2522,66 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     ? "Audio & Sound"
                     : "Captions & Text"
         }
-        onBack={() => {
-          if (editMode !== "none") {
-            setEditMode("none");
-          } else {
-            setConfirmModal({
-              title: "Save as Draft?",
-              message: "Do you want to save this performance take as a draft before leaving the studio?",
-              confirmText: "Save & Exit",
-              confirmStyle: "primary",
-              onConfirm: async () => {
-                await handleSaveCurrentDraft(false);
-                setRecordedVideoUri(null);
-                const hadDraft = !!activeDraftId;
-                setActiveDraftId(null);
-                setStep(hadDraft ? "DRAFTS" : "HOME");
-              },
-              secondaryText: "Discard Changes",
-              secondaryStyle: "destructive",
-              onSecondary: () => {
-                if (Platform.OS !== "web") {
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                }
-                setRecordedVideoUri(null);
-                const hadDraft = !!activeDraftId;
-                setActiveDraftId(null);
-                setStep(hadDraft ? "DRAFTS" : "HOME");
-              },
-              cancelText: "Cancel",
-            });
-          }
-        }}
+        onBack={handlePreviewBack}
         rightEl={
-          <View className="flex-row items-center gap-2">
+          editMode !== "none" ? (
             <TouchableOpacity
-              onPress={async () => {
-                await handleSaveCurrentDraft(true);
+              onPress={() => {
+                if (Platform.OS !== "web") {
+                  Haptics.selectionAsync();
+                }
+                setEditMode("none");
               }}
-              className="px-3 py-1.5 rounded-full border flex-row items-center gap-1.5"
-              style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+              className="bg-[#E91E76] px-4 py-1.5 rounded-full flex-row items-center"
+              activeOpacity={0.8}
             >
-              <Folder color={theme.text} size={13} />
-              <Text className="text-xs font-semibold" style={{ color: theme.text }}>
-                Save Draft
-              </Text>
+              <Text className="text-white font-bold text-sm">Done</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setStep("CHOOSE_TALENT")}
-              className="bg-[#E91E76] px-4 py-1.5 rounded-full flex-row items-center gap-1"
-            >
-              <Text className="text-white font-bold text-sm">Next</Text>
-              <ChevronRight color="#fff" size={16} />
-            </TouchableOpacity>
-          </View>
+          ) : (
+            <View className="flex-row items-center gap-2">
+              <TouchableOpacity
+                onPress={async () => {
+                  await handleSaveCurrentDraft(true);
+                }}
+                className="px-3 py-1.5 rounded-full border flex-row items-center gap-1.5"
+                style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+              >
+                <Folder color={theme.text} size={13} />
+                <Text className="text-xs font-semibold" style={{ color: theme.text }}>
+                  Save Draft
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setStep("CHOOSE_TALENT")}
+                className="bg-[#E91E76] px-4 py-1.5 rounded-full flex-row items-center gap-1"
+              >
+                <Text className="text-white font-bold text-sm">Next</Text>
+                <ChevronRight color="#fff" size={16} />
+              </TouchableOpacity>
+            </View>
+          )
         }
       />
 
       <View className="flex-1 px-5 pb-2">
         {/* Pinned Media Preview Viewport (Always visible at the top) */}
-        <TouchableOpacity
-          activeOpacity={0.95}
-          onPress={() => {
-            if (mediaType === "video") {
-              if (isPlaying) {
-                previewPlayer.pause();
-                setIsPlaying(false);
-              } else {
-                previewPlayer.play();
-                setIsPlaying(true);
+        <View className="w-full h-[320px] max-h-[44vh] rounded-3xl overflow-hidden bg-black mb-3 border border-white/10 relative justify-center items-center shrink-0">
+          {/* Main Video Tap-to-play Surface */}
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => {
+              if (mediaType === "video") {
+                if (isPlaying) {
+                  safePause(previewPlayer);
+                  setIsPlaying(false);
+                } else {
+                  safePlay(previewPlayer);
+                  setIsPlaying(true);
+                }
               }
-            }
-          }}
-          className="w-full h-[320px] max-h-[44vh] rounded-3xl overflow-hidden bg-black mb-3 border border-white/10 relative justify-center items-center shrink-0"
-        >
-          {/* Main Content with Filter Applied */}
-          <View className="absolute inset-0 w-full h-full justify-center items-center overflow-hidden">
+            }}
+            className="absolute inset-0 w-full h-full justify-center items-center overflow-hidden"
+          >
             {mediaType === "video" && recordedVideoUri ? (
               <VideoView
                 player={previewPlayer}
@@ -2059,7 +2649,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                 ]}
               />
             )}
-          </View>
+          </TouchableOpacity>
 
           {/* Floating Filter Badge Top Left */}
           <View className="absolute top-4 left-4 bg-black/60 px-3 py-1.5 rounded-full flex-row items-center gap-1.5 border border-white/15 backdrop-blur-md z-20">
@@ -2211,18 +2801,22 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
           {/* Custom Video Progress Bar */}
           {mediaType === "video" && editMode !== "trim" && (
-            <View className="absolute bottom-3 right-4 left-24 flex-row items-center gap-2 z-10">
+            <View className="absolute bottom-3 right-4 left-24 flex-row items-center gap-2 z-30">
               <View
-                className="flex-1 h-5 justify-center relative"
-                onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
+                className="flex-1 h-6 justify-center relative cursor-pointer"
+                onLayout={(e) => {
+                  const w = e.nativeEvent.layout.width;
+                  setSliderWidth(w);
+                  sliderWidthRef.current = w;
+                }}
                 {...panResponder.panHandlers}
               >
-                <View className="w-full h-1 bg-white/25 rounded-full flex-row items-center pointer-events-none">
+                <View className="w-full h-1.5 bg-white/25 rounded-full flex-row items-center pointer-events-none overflow-visible">
                   <View
-                    style={{ width: `${(currentTime / duration) * 100}%` }}
+                    style={{ width: `${safePercent(currentTime, duration)}%` }}
                     className="h-full bg-[#E91E76] rounded-l-full"
                   />
-                  <View className="w-3 h-3 bg-white rounded-full -ml-1 shadow-md pointer-events-none" />
+                  <View className="w-3.5 h-3.5 bg-white rounded-full -ml-1.5 shadow-md pointer-events-none" />
                 </View>
               </View>
               <Text className="text-white text-[10px] font-mono opacity-80">
@@ -2230,7 +2824,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
               </Text>
             </View>
           )}
-        </TouchableOpacity>
+        </View>
 
         {/* Scrollable Controls & Options Section (Scroll up to reveal more options) */}
         <ScrollView
@@ -2238,6 +2832,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 28 }}
           nestedScrollEnabled={true}
+          scrollEnabled={isTrimming === null}
         >
           {/* Main 5 Editor Navigation Buttons */}
           <View className="flex-row justify-between mb-3">
@@ -2941,63 +3536,369 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             </View>
           </View>
         ) : editMode === "trim" ? (
-          <View className="w-full h-24 mb-4">
-            <View className="flex-row justify-between items-center mb-4">
-              <Text className="text-white font-medium">
-                {formatTime(currentTime)}
-              </Text>
-              <View className="flex-row items-center gap-4">
-                <TouchableOpacity
-                  onPress={() => {
-                    if (isPlaying) {
-                      previewPlayer.pause();
-                      setIsPlaying(false);
-                    } else {
-                      previewPlayer.play();
-                      setIsPlaying(true);
-                    }
-                  }}
-                >
-                  {isPlaying ? (
-                    <Pause color="#fff" size={24} />
-                  ) : (
-                    <Play color="#fff" size={24} />
-                  )}
-                </TouchableOpacity>
+          <View className="w-full bg-[#12141A] rounded-2xl p-4 border border-white/10 mb-3 gap-3">
+            {/* 1. Header with Trim Status and Reset */}
+            <View className="flex-row justify-between items-center">
+              <View className="flex-row items-center gap-2">
+                <View className="w-7 h-7 rounded-full bg-[#E91E76]/20 items-center justify-center">
+                  <Scissors color="#E91E76" size={14} />
+                </View>
+                <View>
+                  <Text className="text-white font-bold text-sm">
+                    Trim & Crop Timeline
+                  </Text>
+                  <Text className="text-[#9CA3AF] text-[11px]">
+                    Drag handles or choose a clip length
+                  </Text>
+                </View>
               </View>
-              <Text className="text-white font-medium">
-                {formatTime(duration)}
-              </Text>
+
+              <View className="flex-row items-center gap-2">
+                {/* Duration Badge */}
+                <View className="bg-[#E91E76]/15 px-2.5 py-1 rounded-full border border-[#E91E76]/30">
+                  <Text className="text-[#E91E76] text-[11px] font-bold">
+                    {(Math.max(0.5, (trimEnd > 0 ? trimEnd : duration) - trimStart)).toFixed(1)}s Clip
+                  </Text>
+                </View>
+
+                {/* Reset Button */}
+                {(trimStart > 0 || (trimEnd > 0 && duration > 0 && trimEnd < duration - 0.2)) && (
+                  <TouchableOpacity
+                    onPress={() => applyPresetTrim(null)}
+                    className="p-1.5 rounded-full bg-white/10"
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <RotateCcw color="#fff" size={14} />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
 
-            {/* Timeline Editor Scrubber */}
-            <View
-              className="h-14 w-full relative justify-center"
-              onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
-              {...panResponder.panHandlers}
-            >
-              <View className="absolute inset-0 flex-row overflow-hidden rounded-lg border-2 border-white/20 opacity-50 pointer-events-none">
-                {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <View
-                    key={i}
-                    className="flex-1 h-full bg-[#2A2D34] border-r border-black"
-                  />
-                ))}
+            {/* 2. Quick Preset Buttons */}
+            <View className="flex-row items-center gap-2 pt-1">
+              {[
+                { label: "Full Video", secs: null },
+                { label: "15s Clip", secs: 15 },
+                { label: "30s Clip", secs: 30 },
+                { label: "60s Clip", secs: 60 },
+              ].map((preset) => {
+                const isFull =
+                  preset.secs === null &&
+                  trimStart === 0 &&
+                  (trimEnd === 0 || Math.abs(trimEnd - duration) < 0.3);
+                const isPresetMatch =
+                  preset.secs !== null &&
+                  trimStart === 0 &&
+                  Math.abs(trimEnd - preset.secs) < 0.4;
+                const isActive = isFull || isPresetMatch;
+                if (preset.secs !== null && duration > 0 && duration < preset.secs) return null;
+                return (
+                  <TouchableOpacity
+                    key={preset.label}
+                    onPress={() => applyPresetTrim(preset.secs)}
+                    className={`px-3 py-1 rounded-full border ${
+                      isActive
+                        ? "bg-[#E91E76] border-[#E91E76]"
+                        : "bg-white/5 border-white/15"
+                    }`}
+                  >
+                    <Text
+                      className={`text-[11px] font-semibold ${
+                        isActive ? "text-white" : "text-[#9CA3AF]"
+                      }`}
+                    >
+                      {preset.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* 3. Interactive Multi-layer Timeline Track */}
+            <View className="w-full mt-2">
+              {/* Time Stamps Row */}
+              <View className="flex-row justify-between items-center mb-1.5 px-1">
+                <Text className="text-[#E91E76] font-bold text-xs">
+                  Start: {formatTimeWithTenths(trimStart)}
+                </Text>
+                <Text className="text-white font-medium text-xs">
+                  {formatTimeWithTenths(currentTime)}
+                </Text>
+                <Text className="text-[#E91E76] font-bold text-xs">
+                  End: {formatTimeWithTenths(trimEnd > 0 ? trimEnd : duration)}
+                </Text>
               </View>
 
-              <View className="absolute left-[10%] right-[20%] h-full border-4 border-[#E91E76] rounded-lg bg-transparent pointer-events-none">
-                <View className="absolute -left-3 top-0 bottom-0 w-3 bg-[#E91E76] rounded-l-md justify-center items-center">
-                  <View className="w-1 h-4 bg-white rounded-full" />
-                </View>
-                <View className="absolute -right-3 top-0 bottom-0 w-3 bg-[#E91E76] rounded-r-md justify-center items-center">
-                  <View className="w-1 h-4 bg-white rounded-full" />
-                </View>
-              </View>
-
+              {/* The Timeline Track Viewport */}
               <View
-                style={{ left: `${(currentTime / duration) * 100}%` }}
-                className="absolute top-[-8px] bottom-[-8px] w-1 bg-white rounded-full z-10 shadow-lg pointer-events-none"
-              />
+                ref={timelineTrackRef}
+                className="h-16 w-full rounded-xl overflow-hidden relative justify-center border border-white/20 bg-[#1A1D24]"
+                onLayout={(e) => {
+                  const w = e.nativeEvent.layout.width;
+                  if (w > 0) {
+                    setTrimSliderWidth(w);
+                    trimSliderWidthRef.current = w;
+                  }
+                  if (timelineTrackRef.current) {
+                    timelineTrackRef.current.measure((_x, _y, width, _height, pageX) => {
+                      if (typeof pageX === "number" && isFinite(pageX) && !isNaN(pageX)) {
+                        trackPageXRef.current = pageX;
+                      }
+                      if (typeof width === "number" && isFinite(width) && width > 0) {
+                        setTrimSliderWidth(width);
+                        trimSliderWidthRef.current = width;
+                      }
+                    });
+                  }
+                }}
+              >
+                {/* Visual Filmstrip Frames */}
+                <View
+                  pointerEvents="none"
+                  className="absolute inset-0 flex-row overflow-hidden opacity-40"
+                >
+                  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
+                    <View
+                      key={i}
+                      className="flex-1 h-full bg-[#242731] border-r border-black/80 items-center justify-between py-1"
+                    >
+                      <View className="w-1.5 h-1 bg-white/20 rounded-full" />
+                      <View className="w-2 h-2 rounded-sm bg-white/10" />
+                      <View className="w-1.5 h-1 bg-white/20 rounded-full" />
+                    </View>
+                  ))}
+                </View>
+
+                {/* Scrubber Tap / Drag Area (middle) */}
+                <View
+                  className="absolute inset-0 w-full h-full"
+                  style={{ zIndex: 10 }}
+                  {...scrubberPanResponder.panHandlers}
+                />
+
+                {/* Dimmed Left Overlay (Cut Out) */}
+                <View
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: `${safePercent(trimStart, duration)}%`,
+                    backgroundColor: "rgba(0,0,0,0.72)",
+                  }}
+                  pointerEvents="none"
+                />
+
+                {/* Dimmed Right Overlay (Cut Out) */}
+                <View
+                  style={{
+                    position: "absolute",
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: `${safePercent(
+                      duration - (trimEnd > 0 ? trimEnd : duration),
+                      duration
+                    )}%`,
+                    backgroundColor: "rgba(0,0,0,0.72)",
+                  }}
+                  pointerEvents="none"
+                />
+
+                {/* Active Trimmed Bounding Box */}
+                <View
+                  style={{
+                    position: "absolute",
+                    left: `${safePercent(trimStart, duration)}%`,
+                    right: `${safePercent(
+                      duration - (trimEnd > 0 ? trimEnd : duration),
+                      duration
+                    )}%`,
+                    top: 0,
+                    bottom: 0,
+                    borderColor: "#E91E76",
+                    borderTopWidth: 3,
+                    borderBottomWidth: 3,
+                    backgroundColor: "rgba(233, 30, 118, 0.08)",
+                  }}
+                  pointerEvents="none"
+                />
+
+                {/* Playhead Needle Indicator */}
+                <View
+                  style={{
+                    position: "absolute",
+                    left: `${safePercent(currentTime, duration)}%`,
+                    top: -2,
+                    bottom: -2,
+                    width: 2.5,
+                    backgroundColor: "#FFFFFF",
+                    zIndex: 25,
+                    shadowColor: "#000",
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.8,
+                    shadowRadius: 3,
+                  }}
+                  pointerEvents="none"
+                >
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: -4,
+                      width: 10,
+                      height: 10,
+                      borderRadius: 5,
+                      backgroundColor: "#FFFFFF",
+                    }}
+                  />
+                </View>
+
+                {/* Left Grab Handle (Trim Start) */}
+                <View
+                  style={{
+                    position: "absolute",
+                    left: `${safePercent(trimStart, duration)}%`,
+                    marginLeft: -16,
+                    top: 0,
+                    bottom: 0,
+                    width: 44,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 60,
+                    elevation: 12,
+                  }}
+                  {...trimStartPanResponder.panHandlers}
+                >
+                  <View
+                    style={{
+                      width: 22,
+                      height: "100%",
+                      backgroundColor: "#E91E76",
+                      borderTopLeftRadius: 6,
+                      borderBottomLeftRadius: 6,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 2,
+                      shadowColor: "#000",
+                      shadowOffset: { width: -2, height: 0 },
+                      shadowOpacity: 0.5,
+                      shadowRadius: 3,
+                      elevation: 6,
+                    }}
+                  >
+                    <View style={{ width: 2, height: 16, backgroundColor: "#fff", borderRadius: 1 }} />
+                    <View style={{ width: 2, height: 16, backgroundColor: "#fff", borderRadius: 1 }} />
+                  </View>
+                </View>
+
+                {/* Right Grab Handle (Trim End) */}
+                <View
+                  style={{
+                    position: "absolute",
+                    right: `${safePercent(
+                      duration - (trimEnd > 0 ? trimEnd : duration),
+                      duration
+                    )}%`,
+                    marginRight: -16,
+                    top: 0,
+                    bottom: 0,
+                    width: 44,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 60,
+                    elevation: 12,
+                  }}
+                  {...trimEndPanResponder.panHandlers}
+                >
+                  <View
+                    style={{
+                      width: 22,
+                      height: "100%",
+                      backgroundColor: "#E91E76",
+                      borderTopRightRadius: 6,
+                      borderBottomRightRadius: 6,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 2,
+                      shadowColor: "#000",
+                      shadowOffset: { width: 2, height: 0 },
+                      shadowOpacity: 0.5,
+                      shadowRadius: 3,
+                      elevation: 6,
+                    }}
+                  >
+                    <View style={{ width: 2, height: 16, backgroundColor: "#fff", borderRadius: 1 }} />
+                    <View style={{ width: 2, height: 16, backgroundColor: "#fff", borderRadius: 1 }} />
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* 4. Fine-Tune Nudge Controls (-0.5s / +0.5s) & Play/Pause */}
+            <View className="flex-row justify-between items-center pt-2 border-t border-white/10">
+              {/* Start Nudge */}
+              <View className="flex-row items-center gap-1.5">
+                <Text className="text-[#9CA3AF] text-[11px] font-semibold mr-1">Start</Text>
+                <TouchableOpacity
+                  onPress={() => adjustTrimStart(-0.5)}
+                  className="w-7 h-7 rounded-lg bg-white/10 items-center justify-center"
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Text className="text-white text-xs font-bold">-</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => adjustTrimStart(0.5)}
+                  className="w-7 h-7 rounded-lg bg-white/10 items-center justify-center"
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Text className="text-white text-xs font-bold">+</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Play / Pause Preview Loop */}
+              <TouchableOpacity
+                onPress={() => {
+                  if (isPlaying) {
+                    safePause(previewPlayer);
+                    setIsPlaying(false);
+                  } else {
+                    const curEnd = trimEnd > 0 && isFinite(trimEnd) ? trimEnd : duration;
+                    if (currentTime >= curEnd || currentTime < trimStart) {
+                      safeSeek(previewPlayer, trimStart);
+                      setCurrentTime(trimStart);
+                    }
+                    safePlay(previewPlayer);
+                    setIsPlaying(true);
+                  }
+                }}
+                className="w-10 h-10 rounded-full bg-[#E91E76] items-center justify-center shadow-md"
+              >
+                {isPlaying ? (
+                  <Pause color="#fff" size={18} />
+                ) : (
+                  <Play color="#fff" size={18} style={{ marginLeft: 2 }} />
+                )}
+              </TouchableOpacity>
+
+              {/* End Nudge */}
+              <View className="flex-row items-center gap-1.5">
+                <TouchableOpacity
+                  onPress={() => adjustTrimEnd(-0.5)}
+                  className="w-7 h-7 rounded-lg bg-white/10 items-center justify-center"
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Text className="text-white text-xs font-bold">-</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => adjustTrimEnd(0.5)}
+                  className="w-7 h-7 rounded-lg bg-white/10 items-center justify-center"
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Text className="text-white text-xs font-bold">+</Text>
+                </TouchableOpacity>
+                <Text className="text-[#9CA3AF] text-[11px] font-semibold ml-1">End</Text>
+              </View>
             </View>
           </View>
         ) : editMode === "sound" ? (
@@ -3541,7 +4442,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       }}
       showsVerticalScrollIndicator={false}
     >
-      <TopNav onBack={() => setStep("PREVIEW")} />
+      <TopNav title="Category" onBack={() => setStep("PREVIEW")} />
       <Text className="text-[28px] font-bold px-5 mb-2" style={{ color: theme.text }}>
         What are you showing?
       </Text>
@@ -3648,7 +4549,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       }}
       showsVerticalScrollIndicator={false}
     >
-      <TopNav onBack={() => setStep("CHOOSE_TALENT")} />
+      <TopNav title="Goal & Purpose" onBack={() => setStep("CHOOSE_TALENT")} />
       <Text className="text-[28px] font-bold px-5 mb-2" style={{ color: theme.text }}>
         What do you want from this performance?
       </Text>
@@ -3740,7 +4641,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     >
       <ScrollView className="flex-1">
         <View className="pt-14">
-          <TopNav onBack={() => setStep("SET_PURPOSE")} />
+          <TopNav title="Details" onBack={() => setStep("SET_PURPOSE")} />
           <Text className="text-[28px] font-bold px-5 mb-2" style={{ color: theme.text }}>
             Performance Details
           </Text>
@@ -3875,7 +4776,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       }}
       showsVerticalScrollIndicator={false}
     >
-      <TopNav onBack={() => setStep("DETAILS")} />
+      <TopNav title="Ready to Publish" onBack={() => setStep("DETAILS")} />
       <Text className="text-[28px] font-bold px-5 mb-2" style={{ color: theme.text }}>
         Ready to Publish?
       </Text>
@@ -4004,9 +4905,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
               "Draft Saved",
               "You can resume and publish this performance anytime from Studio Drafts."
             );
-            setRecordedVideoUri(null);
-            setActiveDraftId(null);
-            setStep("HOME");
+            resetPerformanceState();
+            handleHomeExit();
           }}
         >
           <Folder color={theme.text} size={18} />
@@ -4019,7 +4919,26 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   );
 
   const renderUploading = () => (
-    <View className="flex-1 items-center justify-center px-8" style={{ backgroundColor: theme.bg }}>
+    <View className="flex-1 items-center justify-center px-8 relative" style={{ backgroundColor: theme.bg }}>
+      <View style={{ position: "absolute", top: Math.max(insets.top, 20), left: 0, right: 0, zIndex: 10 }}>
+        <TopNav
+          title="Publishing"
+          onBack={() => {
+            setConfirmModal({
+              title: "Cancel Upload?",
+              message: "Are you sure you want to cancel publishing this performance?",
+              confirmText: "Cancel Upload",
+              confirmStyle: "destructive",
+              onConfirm: () => {
+                setUploadProgress(0);
+                setStep("SUMMARY");
+              },
+              cancelText: "Keep Uploading",
+            });
+          }}
+        />
+      </View>
+
       <Cloud color={theme.primary} size={80} className="mb-8" opacity={0.8} />
 
       <Text className="text-2xl font-bold text-center mb-2" style={{ color: theme.text }}>
@@ -4100,7 +5019,17 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   );
 
   const renderSuccess = () => (
-    <View className="flex-1 items-center justify-center px-6" style={{ backgroundColor: theme.bg }}>
+    <View className="flex-1 items-center justify-center px-6 relative" style={{ backgroundColor: theme.bg }}>
+      <View style={{ position: "absolute", top: Math.max(insets.top, 20), left: 0, right: 0, zIndex: 10 }}>
+        <TopNav
+          title="Published"
+          onBack={() => {
+            resetPerformanceState();
+            handleHomeExit();
+          }}
+        />
+      </View>
+
       <View 
         className="w-24 h-24 rounded-full items-center justify-center mb-8 relative"
         style={{ backgroundColor: theme.primary }}
@@ -4130,11 +5059,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
       <TouchableOpacity
         onPress={() => {
-          onClose?.();
-          setStep("HOME");
-          setRecordedVideoUri(null);
-          setTitle("");
-          setActiveDraftId(null);
+          resetPerformanceState();
+          handleHomeExit();
           router.replace("/(tabs)/you");
         }}
         className="w-full py-4 rounded-full items-center justify-center mb-4"
@@ -4147,10 +5073,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
       <TouchableOpacity
         onPress={() => {
-          setStep("HOME");
-          setRecordedVideoUri(null);
-          setTitle("");
-          setActiveDraftId(null);
+          resetPerformanceState();
         }}
       >
         <Text className="text-[#9CA3AF] font-medium py-3">Create Another</Text>

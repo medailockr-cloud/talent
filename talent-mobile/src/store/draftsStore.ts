@@ -29,6 +29,8 @@ export interface CreateDraft {
   };
   coverImageUri?: string | null;
   duration?: number;
+  trimStart?: number;
+  trimEnd?: number;
   
   // Audio & Soundtrack
   selectedSoundTrack: string;

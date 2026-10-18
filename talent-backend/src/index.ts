@@ -14,7 +14,7 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerJsDoc from 'swagger-jsdoc';
 import { cacheFeed, getCachedFeed } from './utils/redis';
 import { cloudUpload } from './utils/cloudinary';
-import { convertToHLS } from './utils/ffmpeg';
+import { convertToHLS, trimVideoFile } from './utils/ffmpeg';
 import { sendPushNotification } from './utils/notifications';
 import { videoQueue } from './utils/queue';
 import * as Sentry from '@sentry/node';
@@ -273,7 +273,7 @@ const uploadMiddleware = cloudUpload ? cloudUpload.fields(uploadFields) : upload
 
 app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
   try {
-    const { title, description, category, subCategory, purpose, location, allowJudging } = req.body;
+    const { title, description, category, subCategory, purpose, location, allowJudging, trimStart, trimEnd } = req.body;
     
     // Resolve valid authorId
     let authorId = req.userId!;
@@ -297,6 +297,36 @@ app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
     
     if (!uploadedFile) {
       return res.status(400).json({ error: 'No media file provided' });
+    }
+
+    // Apply trimming if requested on local video upload
+    const isImageFile = uploadedFile.mimetype?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(uploadedFile.filename || '');
+    const startSec = trimStart ? parseFloat(trimStart) : 0;
+    const endSec = trimEnd ? parseFloat(trimEnd) : 0;
+
+    if (!cloudUpload && uploadedFile.path && !isImageFile && (startSec > 0 || (endSec > 0 && endSec > startSec))) {
+      try {
+        const trimmedPath = `${uploadedFile.path}_trimmed.mp4`;
+        await trimVideoFile(uploadedFile.path, trimmedPath, startSec, endSec);
+        if (fs.existsSync(trimmedPath)) {
+          let unlinked = false;
+          for (let attempt = 0; attempt < 5; attempt++) {
+            try {
+              fs.unlinkSync(uploadedFile.path);
+              unlinked = true;
+              break;
+            } catch (unlinkErr) {
+              await new Promise(res => setTimeout(res, 120));
+            }
+          }
+          if (unlinked) {
+            fs.renameSync(trimmedPath, uploadedFile.path);
+            console.log(`[Upload] Successfully applied trim (${startSec}s - ${endSec}s) to ${uploadedFile.path}`);
+          }
+        }
+      } catch (trimErr) {
+        console.warn('[Upload] Trim failed, proceeding with original file:', trimErr);
+      }
     }
 
     // If cloudUpload is active, the URL is provided by Cloudinary via req.file.path
@@ -330,7 +360,6 @@ app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
     });
     
     // Trigger HLS Transcoding via BullMQ Background Worker if it's a local video upload (skip images)
-    const isImageFile = uploadedFile.mimetype?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(uploadedFile.filename || '');
     if (!cloudUpload && uploadedFile.path && !isImageFile) {
       try {
         videoQueue.add('transcode', { inputPath: uploadedFile.path, videoId: video.id }).catch((err: any) => {
@@ -933,6 +962,122 @@ app.get('/api/leaderboard', async (req: any, res: any) => {
   } catch (error) {
     console.error('Error fetching leaderboard:', error);
     res.status(500).json({ error: 'Failed to fetch leaderboard' });
+  }
+});
+
+// Instagram Sounds / Music API
+app.get('/api/sounds', async (req, res) => {
+  try {
+    const query = ((req.query.q as string) || '').toLowerCase().trim();
+    const category = ((req.query.category as string) || '').trim();
+
+    const sounds = [
+      {
+        id: "sound_1",
+        title: "Golden Hour Glow",
+        artist: "JVKE & Talent Records",
+        category: "Trending",
+        duration: 45,
+        usesCount: 1420000,
+        coverUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200&h=200&fit=crop",
+        audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+        waveform: [20, 35, 55, 80, 95, 70, 60, 85, 100, 90, 75, 45, 60, 80, 95, 70, 50, 40, 65, 85, 90, 70, 45, 30],
+      },
+      {
+        id: "sound_2",
+        title: "Midnight Tokyo Drift",
+        artist: "Synthwave Collective",
+        category: "Viral",
+        duration: 30,
+        usesCount: 890000,
+        coverUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=200&h=200&fit=crop",
+        audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+        waveform: [40, 60, 70, 90, 85, 60, 45, 80, 95, 100, 85, 65, 50, 75, 90, 80, 60, 70, 85, 95, 75, 50, 35, 20],
+      },
+      {
+        id: "sound_3",
+        title: "Acoustic Sunset Breeze",
+        artist: "Maya Chen",
+        category: "Acoustic",
+        duration: 60,
+        usesCount: 540000,
+        coverUrl: "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=200&h=200&fit=crop",
+        audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+        waveform: [15, 25, 40, 55, 65, 50, 40, 60, 75, 70, 60, 45, 35, 50, 65, 60, 45, 35, 55, 70, 65, 45, 30, 20],
+      },
+      {
+        id: "sound_4",
+        title: "Electric Pulse (Bass Boost)",
+        artist: "Talent Beatmakers",
+        category: "EDM",
+        duration: 30,
+        usesCount: 2150000,
+        coverUrl: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=200&h=200&fit=crop",
+        audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
+        waveform: [50, 75, 100, 90, 60, 40, 80, 100, 95, 70, 55, 85, 100, 90, 65, 45, 75, 95, 100, 85, 60, 40, 30, 15],
+      },
+      {
+        id: "sound_5",
+        title: "Summer Vibes & Ocean",
+        artist: "Cal Tropical",
+        category: "Pop",
+        duration: 45,
+        usesCount: 970000,
+        coverUrl: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=200&h=200&fit=crop",
+        audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
+        waveform: [30, 50, 65, 80, 75, 60, 50, 70, 85, 90, 80, 65, 55, 70, 85, 75, 60, 50, 70, 80, 75, 55, 40, 25],
+      },
+      {
+        id: "sound_6",
+        title: "Lo-Fi Coffee Rain",
+        artist: "Chillhop Beats",
+        category: "Trending",
+        duration: 60,
+        usesCount: 1680000,
+        coverUrl: "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=200&h=200&fit=crop",
+        audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3",
+        waveform: [25, 40, 50, 65, 60, 45, 35, 55, 70, 65, 55, 40, 30, 45, 60, 55, 40, 30, 50, 65, 60, 40, 25, 15],
+      },
+      {
+        id: "sound_7",
+        title: "Street Freestyle Cypher",
+        artist: "BK Metro",
+        category: "Hip-Hop",
+        duration: 45,
+        usesCount: 780000,
+        coverUrl: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=200&h=200&fit=crop",
+        audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3",
+        waveform: [60, 85, 95, 100, 80, 55, 70, 95, 100, 90, 70, 60, 80, 95, 100, 85, 65, 55, 80, 95, 90, 70, 50, 30],
+      },
+      {
+        id: "sound_8",
+        title: "Original Stage Audio",
+        artist: "Live Performance",
+        category: "Original",
+        duration: 60,
+        usesCount: 310000,
+        coverUrl: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=200&h=200&fit=crop",
+        audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3",
+        waveform: [30, 45, 60, 75, 70, 55, 40, 65, 80, 85, 70, 55, 45, 60, 75, 70, 55, 40, 60, 75, 70, 50, 35, 20],
+      }
+    ];
+
+    let filtered = sounds;
+    if (category && category !== "All" && category !== "For You") {
+      filtered = filtered.filter(s => s.category.toLowerCase() === category.toLowerCase());
+    }
+    if (query) {
+      filtered = filtered.filter(s =>
+        s.title.toLowerCase().includes(query) ||
+        s.artist.toLowerCase().includes(query) ||
+        s.category.toLowerCase().includes(query)
+      );
+    }
+
+    res.json({ sounds: filtered, total: filtered.length });
+  } catch (error) {
+    console.error('Error fetching sounds:', error);
+    res.status(500).json({ error: 'Failed to fetch sounds' });
   }
 });
 
