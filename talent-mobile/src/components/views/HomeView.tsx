@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, Image, Alert, TextInput, Platform, ScrollView, Modal, Dimensions, PanResponder, KeyboardAvoidingView, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, Image, Alert, TextInput, Platform, ScrollView, Modal, Dimensions, PanResponder, KeyboardAvoidingView, ActivityIndicator, Share as RNShare } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, { 
   useSharedValue, 
@@ -9,11 +9,12 @@ import Animated, {
   withTiming,
   runOnJS
 } from 'react-native-reanimated';
-import { Search, EyeOff, Play, Pause, Maximize2, MoreHorizontal, X, Bookmark, MessageCircle, Send, ChevronDown, ChevronRight, Gauge, MapPin, Flag, UserX, User, Bell, Volume2, VolumeX, Trophy, Eye, Mic } from 'lucide-react-native';
+import { Search, EyeOff, Play, Pause, Maximize2, MoreHorizontal, X, Bookmark, MessageCircle, Send, ChevronDown, ChevronRight, Gauge, MapPin, Flag, UserX, User, Bell, Volume2, VolumeX, Trophy, Eye, Mic, Sparkles, Share2 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useFeed } from '../../hooks/useFeed';
 import { api, resolveMediaUrl } from '../../utils/api';
 import { useThemeStore } from '../../store/themeStore';
+import { useKeptStore } from '../../store/keptStore';
 import { AppVideoPlayer } from '../ui/AppVideoPlayer';
 import { LeaderboardModal } from '../ui/LeaderboardModal';
 
@@ -36,7 +37,8 @@ function FeedVideoCard({
   setIsMuted,
   onVisible,
   onManualToggle,
-  isBlindMode
+  isBlindMode,
+  onToggleKeep
 }: { 
   video: any; 
   playingVideoId: string | null; 
@@ -47,6 +49,7 @@ function FeedVideoCard({
   onVisible?: (id: string) => void;
   onManualToggle?: (id: string, willPlay: boolean) => void;
   isBlindMode?: boolean;
+  onToggleKeep?: (id: string, isSaved: boolean) => void;
 }) {
   const router = useRouter();
   const { theme } = useThemeStore();
@@ -55,8 +58,15 @@ function FeedVideoCard({
   
   // Interactive States
   const [isRevealed, setIsRevealed] = useState(false);
-  const [isKept, setIsKept] = useState(video.isLiked || false);
-  const [keptText, setKeptText] = useState(video.isLiked ? 'KEPT ✓' : 'KEEP');
+  const isKept = useKeptStore(state => Boolean(state.keptRecord[String(video.id)]));
+  const [justKeptToast, setJustKeptToast] = useState(false);
+  const [isCopiedToast, setIsCopiedToast] = useState(false);
+  const keptText = justKeptToast ? 'KEPT ✓' : isKept ? 'KEPT' : 'KEEP';
+
+  const authorName = typeof video.author === 'object' && video.author !== null
+    ? (video.author.name || video.author.username || 'Artist')
+    : (typeof video.author === 'string' && video.author ? video.author : 'Artist');
+  const authorAvatar = video.avatar || video.authorAvatar || (typeof video.author === 'object' ? video.author?.avatarUrl : null) || `https://ui-avatars.com/api/?name=${encodeURIComponent(authorName)}&background=E91E76&color=fff`;
   
   const [isCommenting, setIsCommenting] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -285,22 +295,56 @@ function FeedVideoCard({
     }
   } : {};
 
-  const handleKeepToggle = () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        const willKeep = !isKept;
-        setIsKept(willKeep);
-        if (willKeep) {
-          setKeptText('KEPT ✓');
-          setTimeout(() => setKeptText('KEPT'), 1500);
+  const handleKeepToggle = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const willKeep = await useKeptStore.getState().toggleKeep(video);
+    if (willKeep) {
+      setJustKeptToast(true);
+      setTimeout(() => setJustKeptToast(false), 1500);
+    }
+    onToggleKeep?.(String(video.id), willKeep);
+  };
+
+  const handleShare = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Track share count in backend
+    api.post(`/videos/${video.id}/share`).catch(() => {});
+
+    const videoTitle = video.title || 'Performance';
+    const artistName = authorName;
+    const shareUrl = typeof window !== 'undefined' && window.location 
+      ? `${window.location.origin}/video/${video.id}`
+      : `https://talent.app/video/${video.id}`;
+    const shareMessage = `Watch "${videoTitle}" by ${artistName} on Talent!\n${shareUrl}`;
+
+    try {
+      if (Platform.OS === 'web') {
+        if (typeof navigator !== 'undefined' && navigator.share) {
+          await navigator.share({
+            title: videoTitle,
+            text: `Watch "${videoTitle}" by ${artistName} on Talent!`,
+            url: shareUrl,
+          });
+        } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+          await navigator.clipboard.writeText(shareUrl);
+          setIsCopiedToast(true);
+          setTimeout(() => setIsCopiedToast(false), 2000);
         } else {
-          setKeptText('KEEP');
+          Alert.alert("Share Performance", shareUrl);
         }
-        
-        api.post(`/videos/${video.id}/like`).catch(err => {
-          console.error("Like err:", err);
-          setIsKept(!willKeep); // revert on error
+      } else {
+        await RNShare.share({
+          message: shareMessage,
+          title: videoTitle,
+          url: shareUrl,
         });
-      };
+      }
+    } catch (e: any) {
+      if (e?.name !== 'AbortError') {
+        console.error("Share error:", e);
+      }
+    }
+  };
 
   const handlePostComment = () => {
         if (!commentText.trim()) return;
@@ -516,12 +560,12 @@ function FeedVideoCard({
             {isBlind ? (
               <EyeOff color={theme.primary} size={20} />
             ) : (
-              <Image source={{ uri: video.avatar || video.authorAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(video.author || 'User')}&background=E91E76&color=fff` }} className="w-full h-full" />
+              <Image source={{ uri: authorAvatar }} className="w-full h-full" />
             )}
           </View>
           <View className="flex-1">
             <Text style={{ color: theme.text }} className="text-[15px] font-bold mb-0.5" numberOfLines={1}>
-              {isBlind ? "Blind Audition Contestant" : video.author}
+              {isBlind ? "Blind Audition Contestant" : authorName}
             </Text>
             <View className="flex-row items-center gap-1.5 mb-1">
               <Text style={{ color: theme.textSecondary }} className="text-[11px]">
@@ -566,9 +610,11 @@ function FeedVideoCard({
             <MessageCircle color={theme.text} size={22} strokeWidth={1.7} />
             <Text style={{ color: theme.textSecondary }} className="text-[9px] font-bold tracking-widest uppercase">TALK</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPass(); }} activeOpacity={0.7} className="items-center gap-1 min-w-[38px]">
-            <Send color={theme.text} size={21} strokeWidth={1.7} style={{ transform: [{ rotate: '45deg' }], marginLeft: -3, marginBottom: 1 }} />
-            <Text style={{ color: theme.textSecondary }} className="text-[9px] font-bold tracking-widest uppercase">PASS</Text>
+          <TouchableOpacity onPress={handleShare} activeOpacity={0.7} className="items-center gap-1 min-w-[38px]">
+            <Share2 color={isCopiedToast ? theme.primary : theme.text} size={21} strokeWidth={1.7} />
+            <Text style={{ color: isCopiedToast ? theme.primary : theme.textSecondary }} className="text-[9px] font-bold tracking-widest uppercase">
+              {isCopiedToast ? 'COPIED!' : 'SHARE'}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -674,7 +720,7 @@ function FeedVideoCard({
               >
                 <View>
                   <Text style={{ color: theme.text }} className="text-[16px] font-bold tracking-wider">TALK</Text>
-                  <Text style={{ color: theme.textSecondary }} className="text-[12px] mt-0.5">{video.author}</Text>
+                  <Text style={{ color: theme.textSecondary }} className="text-[12px] mt-0.5">{authorName}</Text>
                 </View>
                 <TouchableOpacity 
                   onPress={() => setIsCommenting(false)} 
@@ -877,18 +923,41 @@ export function HomeView({ user }: { user?: any }) {
         observer.disconnect();
       };
     }
-  }, [allFeedItems.length]);
+  }, [allFeedItems.length, hasMore, isLoadingMore]);
   
+  const keptVideos = useKeptStore(state => state.keptVideos);
+  const isLoadingSaved = useKeptStore(state => state.isLoading);
+
+  // Sync kept store with feed items whenever feed loads
+  useEffect(() => {
+    if (allFeedItems && allFeedItems.length > 0) {
+      useKeptStore.getState().initializeFromFeed(allFeedItems);
+    }
+  }, [allFeedItems]);
+
+  // Fetch saved/kept videos whenever 'Kept' tab is selected
+  useEffect(() => {
+    if (activeFeedTab === 'Kept') {
+      useKeptStore.getState().fetchKept();
+    }
+  }, [activeFeedTab]);
+
+  const handleToggleKeep = useCallback((id: string, isSaved: boolean) => {
+    // Handled centrally in useKeptStore
+  }, []);
+
   // Filter Logic based on Tabs and Search (strictly exclude images)
-  const filteredData = allFeedItems.filter(v => {
-    if (isMediaImage(v.url || v.videoUrl)) return false;
-    let matchesTab = true;
-    if (activeFeedTab === 'Rising') matchesTab = v.isRising;
-    if (activeFeedTab === 'Nearby') matchesTab = v.isNearby;
-    if (activeFeedTab === 'Blind Audition') matchesTab = true;
-    
-    return matchesTab;
-  });
+  const filteredData = activeFeedTab === 'Kept'
+    ? keptVideos.filter(v => !isMediaImage(v.url || v.videoUrl))
+    : allFeedItems.filter(v => {
+        if (isMediaImage(v.url || v.videoUrl)) return false;
+        let matchesTab = true;
+        if (activeFeedTab === 'Rising') matchesTab = v.isRising;
+        if (activeFeedTab === 'Nearby') matchesTab = v.isNearby;
+        if (activeFeedTab === 'Blind Audition') matchesTab = true;
+        
+        return matchesTab;
+      });
 
   // Switch tabs auto-play first card of new tab
   useEffect(() => {
@@ -985,7 +1054,17 @@ export function HomeView({ user }: { user?: any }) {
             <Text className="font-bold text-[32px] tracking-tight leading-none font-serif" style={{ color: theme.text }}>talent</Text>
             <Text className="font-bold text-[32px] leading-none ml-[1px] font-serif" style={{ color: theme.primary }}>.</Text>
           </View>
-          <View className="flex-row items-center gap-5">
+          <View className="flex-row items-center gap-4">
+            <TouchableOpacity 
+              activeOpacity={0.7} 
+              onPress={() => { 
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); 
+                setActiveFeedTab('Kept'); 
+                scrollRef.current?.scrollTo({ y: 0, animated: true });
+              }}
+            >
+              <Bookmark color={activeFeedTab === 'Kept' ? theme.primary : theme.text} fill={activeFeedTab === 'Kept' ? theme.primary : 'transparent'} size={22} strokeWidth={activeFeedTab === 'Kept' ? 2.2 : 2} />
+            </TouchableOpacity>
             <TouchableOpacity activeOpacity={0.7} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setIsLeaderboardOpen(true); }}>
               <Trophy color="#F59E0B" size={23} strokeWidth={2.2} />
             </TouchableOpacity>
@@ -1002,7 +1081,7 @@ export function HomeView({ user }: { user?: any }) {
         </View>
         
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 10 }}>
-          {['For You', 'Rising', 'Blind Audition', 'Nearby', 'All Genres'].map((tab) => {
+          {['For You', 'Rising', 'Kept', 'Blind Audition', 'Nearby', 'All Genres'].map((tab) => {
             const isActive = activeFeedTab === tab;
             return (
               <TouchableOpacity activeOpacity={0.7}
@@ -1022,6 +1101,9 @@ export function HomeView({ user }: { user?: any }) {
                 >
                   {tab}
                 </Text>
+                {tab === 'Kept' && (
+                  <Bookmark color={isActive ? theme.primary : theme.textSecondary} size={13} fill={isActive ? theme.primary : "transparent"} style={{ marginLeft: 6 }} />
+                )}
                 {tab === 'Blind Audition' && (
                   <EyeOff color={isActive ? theme.primary : theme.textSecondary} size={13} style={{ marginLeft: 6 }} />
                 )}
@@ -1044,31 +1126,48 @@ export function HomeView({ user }: { user?: any }) {
         onScrollEndDrag={handleScroll}
         scrollEventThrottle={16}
       >
-        {filteredData.length === 0 ? (
+        {activeFeedTab === 'Kept' && isLoadingSaved && filteredData.length === 0 ? (
+          <View className="items-center justify-center py-24 px-6">
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={{ color: theme.textSecondary }} className="font-medium text-[13px] mt-4">
+              Loading your kept performances...
+            </Text>
+          </View>
+        ) : filteredData.length === 0 ? (
           <View className="items-center justify-center py-20 px-6">
             <View 
               style={{ backgroundColor: `${theme.primary}15`, borderColor: `${theme.primary}30` }}
               className="w-16 h-16 rounded-full border items-center justify-center mb-4"
             >
-              <Mic color={theme.primary} size={28} />
+              {activeFeedTab === 'Kept' ? (
+                <Bookmark color={theme.primary} size={28} />
+              ) : (
+                <Mic color={theme.primary} size={28} />
+              )}
             </View>
             <Text style={{ color: theme.text }} className="text-[17px] font-bold mb-1 text-center">
-              No Video Performances Yet
+              {activeFeedTab === 'Kept' ? "No Kept Performances Yet" : "No Video Performances Yet"}
             </Text>
             <Text style={{ color: theme.textSecondary }} className="text-[13px] text-center max-w-[280px] leading-5 mb-5">
-              The homepage is dedicated strictly to video performances. Upload a video take to be featured!
+              {activeFeedTab === 'Kept' 
+                ? "Performances you bookmark with KEEP will appear here for fast replay, scoring, and sharing."
+                : "The homepage is dedicated strictly to video performances. Upload a video take to be featured!"}
             </Text>
             <TouchableOpacity
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push('/create');
+                if (activeFeedTab === 'Kept') {
+                  setActiveFeedTab('For You');
+                } else {
+                  router.push('/create');
+                }
               }}
               style={{ backgroundColor: theme.primary }}
               className="px-6 py-2.5 rounded-full flex-row items-center gap-2 shadow-lg"
             >
               <Play color="#fff" size={14} fill="#fff" />
               <Text className="text-white font-bold text-xs uppercase tracking-wider">
-                Upload Video Take
+                {activeFeedTab === 'Kept' ? "Explore Performances" : "Upload Video Take"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1086,21 +1185,36 @@ export function HomeView({ user }: { user?: any }) {
                 onVisible={handleCardVisible}
                 onManualToggle={handleManualToggle}
                 isBlindMode={activeFeedTab === 'Blind Audition'}
+                onToggleKeep={handleToggleKeep}
               />
             ))}
 
             {/* Seamless Automated Infinite Scroll Loading Indicator */}
-            <View ref={sentinelRef} className="py-10 items-center justify-center">
-              <View 
-                style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
-                className="border px-5 py-2.5 rounded-full flex-row items-center gap-3"
-              >
-                <ActivityIndicator size="small" color={theme.primary} />
-                <Text style={{ color: theme.textSecondary }} className="font-medium text-[13px] tracking-wide">
-                  {isLoadingMore ? "Fetching fresh performances..." : "Loading more fresh performances..."}
-                </Text>
+            {hasMore ? (
+              <View ref={sentinelRef} className="py-10 items-center justify-center">
+                <View 
+                  style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+                  className="border px-5 py-2.5 rounded-full flex-row items-center gap-3"
+                >
+                  <ActivityIndicator size="small" color={theme.primary} />
+                  <Text style={{ color: theme.textSecondary }} className="font-medium text-[13px] tracking-wide">
+                    {isLoadingMore ? "Fetching fresh performances..." : "Loading more fresh performances..."}
+                  </Text>
+                </View>
               </View>
-            </View>
+            ) : filteredData.length > 0 ? (
+              <View className="py-10 items-center justify-center">
+                <View 
+                  style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+                  className="border px-5 py-2.5 rounded-full flex-row items-center gap-2"
+                >
+                  <Sparkles color={theme.primary} size={15} />
+                  <Text style={{ color: theme.textSecondary }} className="font-medium text-[13px] tracking-wide">
+                    You're all caught up on performances ✨
+                  </Text>
+                </View>
+              </View>
+            ) : null}
           </>
         )}
       </Animated.ScrollView>

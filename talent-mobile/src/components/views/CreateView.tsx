@@ -669,6 +669,9 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   });
   const [coverImageUri, setCoverImageUri] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(true);
+  const [originalAudioVolume, setOriginalAudioVolume] = useState<number>(100);
+  const [musicVolume, setMusicVolume] = useState<number>(80);
+  const [isOriginalMuted, setIsOriginalMuted] = useState<boolean>(false);
 
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(1);
@@ -677,7 +680,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   // --- Trim & Crop State ---
   const [trimStart, setTrimStart] = useState<number>(0);
   const [trimEnd, setTrimEnd] = useState<number>(0);
-  const [isTrimming, setIsTrimming] = useState<"start" | "end" | "scrub" | null>(null);
+  const [isTrimming, setIsTrimming] = useState<"start" | "end" | "scrub" | "timeline" | null>(null);
 
   const trimStartRef = useRef<number>(0);
   trimStartRef.current = trimStart;
@@ -685,8 +688,9 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   trimEndRef.current = trimEnd;
   const durationRef = useRef<number>(1);
   durationRef.current = duration > 0 ? duration : 1;
-  const isTrimmingRef = useRef<"start" | "end" | "scrub" | null>(null);
+  const isTrimmingRef = useRef<"start" | "end" | "scrub" | "timeline" | null>(null);
   isTrimmingRef.current = isTrimming;
+  const startScrubTimeRef = useRef<number>(0);
   const sliderWidthRef = useRef<number>(0);
   sliderWidthRef.current = sliderWidth;
   const [trimSliderWidth, setTrimSliderWidth] = useState<number>(
@@ -706,25 +710,39 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   const lastDragSeekTimeRef = useRef<number>(0);
   const lastReplacedUriRef = useRef<string | null>(null);
 
+  const previewPlayerRef = useRef<any>(null);
+  const currentTimeRef = useRef<number>(0);
+  currentTimeRef.current = currentTime;
+
   // Safe helper utilities for video player, haptics, and layout
-  const safeSeek = (player: any, timeSec: number) => {
-    if (!player || typeof timeSec !== "number" || isNaN(timeSec) || !isFinite(timeSec)) return;
+  const safeSeek = (playerOrSec?: any, maybeSec?: number) => {
+    let targetPlayer = previewPlayerRef.current;
+    let targetSec = 0;
+    if (typeof playerOrSec === "number") {
+      targetSec = playerOrSec;
+    } else {
+      targetPlayer = playerOrSec || previewPlayerRef.current;
+      targetSec = maybeSec ?? 0;
+    }
+    if (!targetPlayer || typeof targetSec !== "number" || isNaN(targetSec) || !isFinite(targetSec)) return;
     try {
-      player.currentTime = Math.max(0, timeSec);
+      targetPlayer.currentTime = Math.max(0, targetSec);
     } catch (e) {}
   };
 
-  const safePlay = (player: any) => {
-    if (!player) return;
+  const safePlay = (player?: any) => {
+    const p = player || previewPlayerRef.current;
+    if (!p) return;
     try {
-      player.play();
+      p.play();
     } catch (e) {}
   };
 
-  const safePause = (player: any) => {
-    if (!player) return;
+  const safePause = (player?: any) => {
+    const p = player || previewPlayerRef.current;
+    if (!p) return;
     try {
-      player.pause();
+      p.pause();
     } catch (e) {}
   };
 
@@ -746,58 +764,164 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   };
 
   const previewPlayer = useVideoPlayer(
-    mediaType === "video" ? recordedVideoUri : null,
+    mediaType === "video" && recordedVideoUri ? recordedVideoUri : null,
     (player) => {
       try {
         player.loop = true;
         player.muted = Platform.OS === "web";
+        player.timeUpdateEventInterval = 0.05;
         player.play();
       } catch (e) {}
     },
   );
 
+  previewPlayerRef.current = previewPlayer;
+
+  // Ensure playback starts whenever entering PREVIEW step
+  useEffect(() => {
+    if (step === "PREVIEW" && previewPlayer && mediaType === "video" && recordedVideoUri) {
+      try {
+        previewPlayer.play();
+        setIsPlaying(true);
+      } catch (e) {}
+    } else if (step !== "PREVIEW" && previewPlayer) {
+      try {
+        previewPlayer.pause();
+      } catch (e) {}
+    }
+  }, [step, previewPlayer, mediaType, recordedVideoUri]);
+
+  // Event-driven player sync for metadata, duration, playback, and status
+  useEffect(() => {
+    if (!previewPlayer || mediaType !== "video" || !recordedVideoUri) return;
+
+    previewPlayerRef.current = previewPlayer;
+
+    try {
+      previewPlayer.loop = true;
+      previewPlayer.muted = Platform.OS === "web" ? true : isOriginalMuted;
+      previewPlayer.volume = isOriginalMuted ? 0 : Math.max(0, Math.min(1, originalAudioVolume / 100));
+      previewPlayer.timeUpdateEventInterval = 0.05;
+      previewPlayer.play();
+      setIsPlaying(true);
+    } catch (e) {}
+
+    const syncDuration = () => {
+      try {
+        const d = previewPlayer.duration;
+        if (typeof d === "number" && !isNaN(d) && isFinite(d) && d > 0.1) {
+          if (durationRef.current <= 1 || Math.abs(d - durationRef.current) > 0.2) {
+            setDuration(d);
+            durationRef.current = d;
+            // If trimEnd has not been manually trimmed (it was 0 or tracking full length), keep it tracking full length
+            if (trimEndRef.current === 0 || trimEndRef.current <= 1 || trimEndRef.current >= durationRef.current - 0.3) {
+              setTrimEnd(d);
+              trimEndRef.current = d;
+            }
+          }
+        }
+      } catch (e) {}
+    };
+
+    if (previewPlayer.status === "readyToPlay") {
+      syncDuration();
+      try {
+        previewPlayer.play();
+        setIsPlaying(true);
+      } catch (e) {}
+    }
+
+    const subStatus = (previewPlayer as any).addListener?.("statusChange", (payload: any) => {
+      if (payload?.status === "readyToPlay") {
+        syncDuration();
+        try {
+          previewPlayer.play();
+          setIsPlaying(true);
+        } catch (e) {}
+      }
+    });
+
+    const subSourceLoad = (previewPlayer as any).addListener?.("sourceLoad", () => {
+      syncDuration();
+      try {
+        previewPlayer.play();
+        setIsPlaying(true);
+      } catch (e) {}
+    });
+
+    const subTime = (previewPlayer as any).addListener?.("timeUpdate", (payload: any) => {
+      const t = typeof payload?.currentTime === "number" ? payload.currentTime : (previewPlayer.currentTime ?? 0);
+      if (!isTrimmingRef.current && typeof t === "number" && !isNaN(t) && isFinite(t)) {
+        setCurrentTime(t);
+        currentTimeRef.current = t;
+      }
+      syncDuration();
+    });
+
+    const subPlaying = (previewPlayer as any).addListener?.("playingChange", (payload: any) => {
+      if (typeof payload?.isPlaying === "boolean") {
+        setIsPlaying(payload.isPlaying);
+      }
+    });
+
+    return () => {
+      try {
+        subStatus?.remove?.();
+        subSourceLoad?.remove?.();
+        subTime?.remove?.();
+        subPlaying?.remove?.();
+      } catch (e) {}
+    };
+  }, [previewPlayer, recordedVideoUri, mediaType, isOriginalMuted, originalAudioVolume]);
+
+  // Polling fallback and loop boundary enforcer
   useEffect(() => {
     const interval = setInterval(() => {
-      if (previewPlayer && mediaType === "video") {
+      const player = previewPlayerRef.current;
+      if (player && mediaType === "video" && recordedVideoUri) {
         try {
-          const t = previewPlayer.currentTime ?? 0;
-          const d = previewPlayer.duration ?? 0;
+          const t = player.currentTime ?? 0;
+          const d = player.duration ?? 0;
 
           if (typeof t === "number" && !isNaN(t) && isFinite(t)) {
             // Only update currentTime from player if user is not actively scrubbing
             if (!isTrimmingRef.current) {
               setCurrentTime(t);
+              currentTimeRef.current = t;
             }
           }
 
           if (typeof d === "number" && !isNaN(d) && isFinite(d) && d > 0.1) {
-            if (Math.abs(d - durationRef.current) > 0.2 || durationRef.current <= 1) {
+            if (durationRef.current <= 1 || Math.abs(d - durationRef.current) > 0.2) {
               setDuration(d);
               durationRef.current = d;
-              if (trimEndRef.current === 0 || trimEndRef.current > d) {
+              if (trimEndRef.current === 0 || trimEndRef.current <= 1 || trimEndRef.current >= durationRef.current - 0.3) {
                 setTrimEnd(d);
                 trimEndRef.current = d;
               }
             }
           }
 
-          // Loop constraint logic for trimmed region (only when trimming is active)
+          // Loop constraint logic for trimmed region (only when actually trimmed)
           if (!isTrimmingRef.current) {
-            const curDur = durationRef.current > 1 ? durationRef.current : (d > 1 ? d : 9999);
+            const curDur = durationRef.current > 0.5 ? durationRef.current : (d > 0.5 ? d : 9999);
             const curStart = Math.max(0, trimStartRef.current);
-            const curEnd = trimEndRef.current > 0 ? Math.min(curDur, trimEndRef.current) : curDur;
+            const isEndTrimmed = trimEndRef.current > 0 && trimEndRef.current < curDur - 0.25;
+            const curEnd = isEndTrimmed ? trimEndRef.current : curDur;
 
-            const isTrimmed = curStart > 0.05 || curEnd < curDur - 0.1;
+            const isTrimmed = curStart > 0.08 || isEndTrimmed;
             if (isTrimmed && curEnd > curStart + 0.2) {
               const now = Date.now();
-              if (t >= curEnd && now - lastLoopSeekTimeRef.current > 500) {
+              if (t >= curEnd && now - lastLoopSeekTimeRef.current > 400) {
                 lastLoopSeekTimeRef.current = now;
-                safeSeek(previewPlayer, curStart);
+                safeSeek(player, curStart);
                 setCurrentTime(curStart);
-              } else if (t < curStart - 0.4 && now - lastLoopSeekTimeRef.current > 600) {
+                currentTimeRef.current = curStart;
+              } else if (t < curStart - 0.4 && now - lastLoopSeekTimeRef.current > 400) {
                 lastLoopSeekTimeRef.current = now;
-                safeSeek(previewPlayer, curStart);
+                safeSeek(player, curStart);
                 setCurrentTime(curStart);
+                currentTimeRef.current = curStart;
               }
             }
           }
@@ -805,22 +929,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       }
     }, 100);
     return () => clearInterval(interval);
-  }, [previewPlayer, mediaType]);
-
-  useEffect(() => {
-    if (previewPlayer && mediaType === "video" && recordedVideoUri) {
-      if (lastReplacedUriRef.current !== recordedVideoUri) {
-        lastReplacedUriRef.current = recordedVideoUri;
-        try {
-          previewPlayer.replace(recordedVideoUri);
-          previewPlayer.play();
-          setIsPlaying(true);
-        } catch (err) {
-          // Player already running or preparing source
-        }
-      }
-    }
-  }, [previewPlayer, recordedVideoUri, mediaType]);
+  }, [mediaType, recordedVideoUri]);
 
   const activeFilterConfig =
     TALENT_FILTERS.find((f) => f.name === activeFilter) || TALENT_FILTERS[0];
@@ -851,50 +960,71 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => false,
       onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => false,
+      onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: (evt) => {
-        const sw = sliderWidthRef.current || sliderWidth;
-        const dur = durationRef.current > 0 ? durationRef.current : (previewPlayer?.duration || 1);
-        if (
-          sw > 0 &&
-          dur > 0 &&
-          typeof evt?.nativeEvent?.locationX === "number" &&
-          !isNaN(evt.nativeEvent.locationX) &&
-          isFinite(evt.nativeEvent.locationX)
-        ) {
-          const locX = Math.max(0, Math.min(sw, evt.nativeEvent.locationX));
-          const rawTime = (locX / sw) * dur;
-          if (isFinite(rawTime) && !isNaN(rawTime)) {
-            const curEnd = trimEndRef.current > 0 ? trimEndRef.current : dur;
+        setIsTrimming("scrub");
+        isTrimmingRef.current = "scrub";
+        safePause(previewPlayerRef.current);
+        setIsPlaying(false);
+        const sw = sliderWidthRef.current || (Dimensions.get("window").width - 120);
+        const dur = durationRef.current > 0 ? durationRef.current : (previewPlayerRef.current?.duration || 1);
+        if (sw > 0 && dur > 0) {
+          let locX = evt?.nativeEvent?.locationX;
+          if (typeof locX === "number" && !isNaN(locX) && isFinite(locX) && locX >= 0) {
+            locX = Math.max(0, Math.min(sw, locX));
+            const rawTime = (locX / sw) * dur;
+            const curEnd = (trimEndRef.current > 0 && trimEndRef.current <= dur) ? trimEndRef.current : dur;
             const curStart = Math.max(0, trimStartRef.current);
-            const clampedTime = Math.max(curStart, Math.min(curEnd, rawTime));
-            safeSeek(previewPlayer, clampedTime);
-            setCurrentTime(clampedTime);
+            const clamped = Math.max(curStart, Math.min(curEnd, rawTime));
+            startScrubTimeRef.current = clamped;
+            safeSeek(previewPlayerRef.current, clamped);
+            setCurrentTime(clamped);
+            currentTimeRef.current = clamped;
+          } else {
+            startScrubTimeRef.current = currentTimeRef.current;
           }
         }
       },
-      onPanResponderMove: (evt) => {
-        const sw = sliderWidthRef.current || sliderWidth;
-        const dur = durationRef.current > 0 ? durationRef.current : (previewPlayer?.duration || 1);
+      onPanResponderMove: (_, gestureState) => {
+        const sw = sliderWidthRef.current || (Dimensions.get("window").width - 120);
+        const dur = durationRef.current > 0 ? durationRef.current : (previewPlayerRef.current?.duration || 1);
         if (
           sw > 0 &&
           dur > 0 &&
-          typeof evt?.nativeEvent?.locationX === "number" &&
-          !isNaN(evt.nativeEvent.locationX) &&
-          isFinite(evt.nativeEvent.locationX)
+          gestureState &&
+          typeof gestureState.dx === "number" &&
+          isFinite(gestureState.dx)
         ) {
-          let locX = evt.nativeEvent.locationX;
-          if (locX < 0) locX = 0;
-          if (locX > sw) locX = sw;
-          const rawTime = (locX / sw) * dur;
-          if (isFinite(rawTime) && !isNaN(rawTime)) {
-            const curEnd = trimEndRef.current > 0 ? trimEndRef.current : dur;
-            const curStart = Math.max(0, trimStartRef.current);
-            const clampedTime = Math.max(curStart, Math.min(curEnd, rawTime));
-            safeSeek(previewPlayer, clampedTime);
-            setCurrentTime(clampedTime);
+          const deltaSec = (gestureState.dx / sw) * dur;
+          const curEnd = (trimEndRef.current > 0 && trimEndRef.current <= dur) ? trimEndRef.current : dur;
+          const curStart = Math.max(0, trimStartRef.current);
+          const origin = startScrubTimeRef.current;
+          const clamped = Math.max(curStart, Math.min(curEnd, origin + deltaSec));
+          const rounded = Math.round(clamped * 10) / 10;
+          const now = Date.now();
+          if (now - lastDragSeekTimeRef.current > 40) {
+            lastDragSeekTimeRef.current = now;
+            safeSeek(previewPlayerRef.current, rounded);
           }
+          setCurrentTime(rounded);
+          currentTimeRef.current = rounded;
         }
+      },
+      onPanResponderRelease: () => {
+        setIsTrimming(null);
+        isTrimmingRef.current = null;
+        safeSeek(previewPlayerRef.current, currentTimeRef.current);
+        safePlay(previewPlayerRef.current);
+        setIsPlaying(true);
+      },
+      onPanResponderTerminate: () => {
+        setIsTrimming(null);
+        isTrimmingRef.current = null;
+        safePlay(previewPlayerRef.current);
+        setIsPlaying(true);
       },
     }),
   ).current;
@@ -902,8 +1032,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   // Direct Timeline Tap / Click Handler
   const handleTimelinePress = (locX: number) => {
     if (typeof locX !== "number" || isNaN(locX) || !isFinite(locX)) return;
-    const sw = trimSliderWidthRef.current || trimSliderWidth || (Dimensions.get("window").width - 48);
-    const dur = durationRef.current > 0 ? durationRef.current : (previewPlayer?.duration || 1);
+    const sw = trimSliderWidthRef.current || (Dimensions.get("window").width - 48);
+    const dur = durationRef.current > 0 ? durationRef.current : (previewPlayerRef.current?.duration || 1);
     if (sw <= 0 || dur <= 0) return;
 
     const clampedLocX = Math.max(0, Math.min(sw, locX));
@@ -911,15 +1041,16 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     if (isNaN(tappedTime) || !isFinite(tappedTime)) return;
 
     const currentStart = Math.max(0, trimStartRef.current);
-    const currentEnd = trimEndRef.current > 0 ? trimEndRef.current : dur;
+    const currentEnd = (trimEndRef.current > 0 && trimEndRef.current <= dur) ? trimEndRef.current : dur;
 
     // If tapped to the left of trimStart -> adjust trimStart
     if (tappedTime < currentStart) {
       const rounded = Math.round(tappedTime * 10) / 10;
       setTrimStart(rounded);
       trimStartRef.current = rounded;
-      safeSeek(previewPlayer, rounded);
+      safeSeek(previewPlayerRef.current, rounded);
       setCurrentTime(rounded);
+      currentTimeRef.current = rounded;
       safeHaptic("light");
     }
     // If tapped to the right of trimEnd -> adjust trimEnd
@@ -927,17 +1058,22 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       const rounded = Math.round(tappedTime * 10) / 10;
       setTrimEnd(rounded);
       trimEndRef.current = rounded;
-      safeSeek(previewPlayer, rounded);
+      safeSeek(previewPlayerRef.current, rounded);
       setCurrentTime(rounded);
+      currentTimeRef.current = rounded;
       safeHaptic("light");
     }
     // If tapped inside active trimmed region -> scrub playhead
     else {
       const rounded = Math.round(tappedTime * 10) / 10;
-      safeSeek(previewPlayer, rounded);
+      safeSeek(previewPlayerRef.current, rounded);
       setCurrentTime(rounded);
+      currentTimeRef.current = rounded;
     }
   };
+
+  const handleTimelinePressRef = useRef(handleTimelinePress);
+  handleTimelinePressRef.current = handleTimelinePress;
 
   // Trim Start Handle PanResponder
   const trimStartPanResponder = useRef(
@@ -951,12 +1087,13 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         setIsTrimming("start");
         isTrimmingRef.current = "start";
         startDragOriginRef.current = Math.max(0, trimStartRef.current);
-        safePause(previewPlayer);
+        safePause(previewPlayerRef.current);
+        setIsPlaying(false);
         safeHaptic("light");
       },
       onPanResponderMove: (_, gestureState) => {
-        const sw = trimSliderWidthRef.current || trimSliderWidth || (Dimensions.get("window").width - 48);
-        const dur = durationRef.current > 0 ? durationRef.current : (previewPlayer?.duration || 1);
+        const sw = trimSliderWidthRef.current || (Dimensions.get("window").width - 48);
+        const dur = durationRef.current > 0 ? durationRef.current : (previewPlayerRef.current?.duration || 1);
         if (
           sw > 0 &&
           dur > 0 &&
@@ -966,7 +1103,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           !isNaN(gestureState.dx)
         ) {
           const deltaSec = (gestureState.dx / sw) * dur;
-          const curEnd = trimEndRef.current > 0 ? trimEndRef.current : dur;
+          const curEnd = (trimEndRef.current > 0 && trimEndRef.current <= dur) ? trimEndRef.current : dur;
           const maxStart = Math.max(0, curEnd - 0.5);
           const origin = startDragOriginRef.current;
           const newStart = Math.max(0, Math.min(maxStart, origin + deltaSec));
@@ -975,11 +1112,12 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             setTrimStart(rounded);
             trimStartRef.current = rounded;
             const now = Date.now();
-            if (now - lastDragSeekTimeRef.current > 60) {
+            if (now - lastDragSeekTimeRef.current > 50) {
               lastDragSeekTimeRef.current = now;
-              safeSeek(previewPlayer, rounded);
+              safeSeek(previewPlayerRef.current, rounded);
             }
             setCurrentTime(rounded);
+            currentTimeRef.current = rounded;
           }
         }
       },
@@ -987,14 +1125,16 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         setIsTrimming(null);
         isTrimmingRef.current = null;
         const start = Math.max(0, trimStartRef.current);
-        safeSeek(previewPlayer, start);
-        safePlay(previewPlayer);
+        safeSeek(previewPlayerRef.current, start);
+        safePlay(previewPlayerRef.current);
         setIsPlaying(true);
         safeHaptic("selection");
       },
       onPanResponderTerminate: () => {
         setIsTrimming(null);
         isTrimmingRef.current = null;
+        safePlay(previewPlayerRef.current);
+        setIsPlaying(true);
       },
     }),
   ).current;
@@ -1010,14 +1150,15 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       onPanResponderGrant: () => {
         setIsTrimming("end");
         isTrimmingRef.current = "end";
-        const dur = durationRef.current > 0 ? durationRef.current : (previewPlayer?.duration || 1);
-        endDragOriginRef.current = trimEndRef.current > 0 ? trimEndRef.current : dur;
-        safePause(previewPlayer);
+        const dur = durationRef.current > 0 ? durationRef.current : (previewPlayerRef.current?.duration || 1);
+        endDragOriginRef.current = (trimEndRef.current > 0 && trimEndRef.current <= dur) ? trimEndRef.current : dur;
+        safePause(previewPlayerRef.current);
+        setIsPlaying(false);
         safeHaptic("light");
       },
       onPanResponderMove: (_, gestureState) => {
-        const sw = trimSliderWidthRef.current || trimSliderWidth || (Dimensions.get("window").width - 48);
-        const dur = durationRef.current > 0 ? durationRef.current : (previewPlayer?.duration || 1);
+        const sw = trimSliderWidthRef.current || (Dimensions.get("window").width - 48);
+        const dur = durationRef.current > 0 ? durationRef.current : (previewPlayerRef.current?.duration || 1);
         if (
           sw > 0 &&
           dur > 0 &&
@@ -1036,11 +1177,12 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             setTrimEnd(rounded);
             trimEndRef.current = rounded;
             const now = Date.now();
-            if (now - lastDragSeekTimeRef.current > 60) {
+            if (now - lastDragSeekTimeRef.current > 50) {
               lastDragSeekTimeRef.current = now;
-              safeSeek(previewPlayer, rounded);
+              safeSeek(previewPlayerRef.current, rounded);
             }
             setCurrentTime(rounded);
+            currentTimeRef.current = rounded;
           }
         }
       },
@@ -1048,14 +1190,16 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         setIsTrimming(null);
         isTrimmingRef.current = null;
         const start = Math.max(0, trimStartRef.current);
-        safeSeek(previewPlayer, start);
-        safePlay(previewPlayer);
+        safeSeek(previewPlayerRef.current, start);
+        safePlay(previewPlayerRef.current);
         setIsPlaying(true);
         safeHaptic("selection");
       },
       onPanResponderTerminate: () => {
         setIsTrimming(null);
         isTrimmingRef.current = null;
+        safePlay(previewPlayerRef.current);
+        setIsPlaying(true);
       },
     }),
   ).current;
@@ -1070,70 +1214,64 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       },
       onMoveShouldSetPanResponderCapture: () => false,
       onPanResponderTerminationRequest: () => true,
-      onPanResponderGrant: (evt, gestureState) => {
-        let locX: number | null = null;
-        if (
-          typeof evt?.nativeEvent?.locationX === "number" &&
-          !isNaN(evt.nativeEvent.locationX) &&
-          isFinite(evt.nativeEvent.locationX) &&
-          evt.nativeEvent.locationX >= 0
-        ) {
-          locX = evt.nativeEvent.locationX;
-        } else if (
-          gestureState &&
-          typeof gestureState.x0 === "number" &&
-          !isNaN(gestureState.x0) &&
-          isFinite(gestureState.x0)
-        ) {
-          locX = Math.max(0, gestureState.x0 - trackPageXRef.current);
-        } else if (evt?.nativeEvent?.touches?.[0]?.pageX) {
-          locX = Math.max(0, evt.nativeEvent.touches[0].pageX - trackPageXRef.current);
+      onPanResponderGrant: (evt) => {
+        setIsTrimming("timeline");
+        isTrimmingRef.current = "timeline";
+        safePause(previewPlayerRef.current);
+        setIsPlaying(false);
+        const sw = trimSliderWidthRef.current || (Dimensions.get("window").width - 48);
+        const dur = durationRef.current > 0 ? durationRef.current : (previewPlayerRef.current?.duration || 1);
+        let initialTime = currentTimeRef.current;
+        if (sw > 0 && dur > 0 && typeof evt?.nativeEvent?.locationX === "number" && isFinite(evt.nativeEvent.locationX)) {
+          const locX = Math.max(0, Math.min(sw, evt.nativeEvent.locationX));
+          initialTime = (locX / sw) * dur;
         }
-
-        if (locX !== null && isFinite(locX) && !isNaN(locX)) {
-          handleTimelinePress(locX);
-        }
+        const curStart = Math.max(0, trimStartRef.current);
+        const curEnd = (trimEndRef.current > 0 && trimEndRef.current <= dur) ? trimEndRef.current : dur;
+        const clamped = Math.max(curStart, Math.min(curEnd, initialTime));
+        const rounded = Math.round(clamped * 10) / 10;
+        startScrubTimeRef.current = rounded;
+        safeSeek(previewPlayerRef.current, rounded);
+        setCurrentTime(rounded);
+        currentTimeRef.current = rounded;
       },
-      onPanResponderMove: (evt, gestureState) => {
-        const sw = trimSliderWidthRef.current || trimSliderWidth || (Dimensions.get("window").width - 48);
-        const dur = durationRef.current > 0 ? durationRef.current : (previewPlayer?.duration || 1);
-        if (sw <= 0 || dur <= 0) return;
-
-        let locX: number | null = null;
+      onPanResponderMove: (_, gestureState) => {
+        const sw = trimSliderWidthRef.current || (Dimensions.get("window").width - 48);
+        const dur = durationRef.current > 0 ? durationRef.current : (previewPlayerRef.current?.duration || 1);
         if (
+          sw > 0 &&
+          dur > 0 &&
           gestureState &&
-          typeof gestureState.moveX === "number" &&
-          !isNaN(gestureState.moveX) &&
-          isFinite(gestureState.moveX) &&
-          gestureState.moveX > 0
+          typeof gestureState.dx === "number" &&
+          isFinite(gestureState.dx)
         ) {
-          locX = Math.max(0, Math.min(sw, gestureState.moveX - trackPageXRef.current));
-        } else if (
-          typeof evt?.nativeEvent?.locationX === "number" &&
-          !isNaN(evt.nativeEvent.locationX) &&
-          isFinite(evt.nativeEvent.locationX)
-        ) {
-          locX = Math.max(0, Math.min(sw, evt.nativeEvent.locationX));
-        }
-
-        if (locX !== null && isFinite(locX) && !isNaN(locX)) {
-          const rawTime = (locX / sw) * dur;
-          if (isFinite(rawTime) && !isNaN(rawTime)) {
-            const curStart = Math.max(0, trimStartRef.current);
-            const curEnd = trimEndRef.current > 0 ? trimEndRef.current : dur;
-            const clamped = Math.max(curStart, Math.min(curEnd, rawTime));
-            const rounded = Math.round(clamped * 10) / 10;
-            const now = Date.now();
-            if (now - lastDragSeekTimeRef.current > 60) {
-              lastDragSeekTimeRef.current = now;
-              safeSeek(previewPlayer, rounded);
-            }
-            setCurrentTime(rounded);
+          const deltaSec = (gestureState.dx / sw) * dur;
+          const curStart = Math.max(0, trimStartRef.current);
+          const curEnd = (trimEndRef.current > 0 && trimEndRef.current <= dur) ? trimEndRef.current : dur;
+          const origin = startScrubTimeRef.current;
+          const target = Math.max(curStart, Math.min(curEnd, origin + deltaSec));
+          const rounded = Math.round(target * 10) / 10;
+          const now = Date.now();
+          if (now - lastDragSeekTimeRef.current > 50) {
+            lastDragSeekTimeRef.current = now;
+            safeSeek(previewPlayerRef.current, rounded);
           }
+          setCurrentTime(rounded);
+          currentTimeRef.current = rounded;
         }
       },
       onPanResponderRelease: () => {
-        safeSeek(previewPlayer, currentTime);
+        setIsTrimming(null);
+        isTrimmingRef.current = null;
+        safeSeek(previewPlayerRef.current, currentTimeRef.current);
+        safePlay(previewPlayerRef.current);
+        setIsPlaying(true);
+      },
+      onPanResponderTerminate: () => {
+        setIsTrimming(null);
+        isTrimmingRef.current = null;
+        safePlay(previewPlayerRef.current);
+        setIsPlaying(true);
       },
     }),
   ).current;
@@ -1141,9 +1279,9 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   // Fine-tuning helpers for Trim
   const adjustTrimStart = (delta: number) => {
     safeHaptic("light");
-    const dur = durationRef.current > 0 ? durationRef.current : (previewPlayer?.duration || 1);
+    const dur = durationRef.current > 0 ? durationRef.current : (previewPlayerRef.current?.duration || 1);
     const curEnd =
-      trimEndRef.current > 0 && isFinite(trimEndRef.current)
+      trimEndRef.current > 0 && isFinite(trimEndRef.current) && trimEndRef.current <= dur
         ? trimEndRef.current
         : dur;
     const maxStart = Math.max(0, curEnd - 0.5);
@@ -1155,18 +1293,19 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     if (!isNaN(next) && isFinite(next)) {
       setTrimStart(next);
       trimStartRef.current = next;
-      safeSeek(previewPlayer, next);
+      safeSeek(previewPlayerRef.current, next);
       setCurrentTime(next);
+      currentTimeRef.current = next;
     }
   };
 
   const adjustTrimEnd = (delta: number) => {
     safeHaptic("light");
-    const dur = durationRef.current > 0 ? durationRef.current : (previewPlayer?.duration || 1);
+    const dur = durationRef.current > 0 ? durationRef.current : (previewPlayerRef.current?.duration || 1);
     const curStart = Math.max(0, trimStartRef.current);
     const minEnd = curStart + 0.5;
     const curEnd =
-      trimEndRef.current > 0 && isFinite(trimEndRef.current)
+      trimEndRef.current > 0 && isFinite(trimEndRef.current) && trimEndRef.current <= dur
         ? trimEndRef.current
         : dur;
     const next = Math.max(
@@ -1176,33 +1315,36 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     if (!isNaN(next) && isFinite(next)) {
       setTrimEnd(next);
       trimEndRef.current = next;
-      safeSeek(previewPlayer, next);
+      safeSeek(previewPlayerRef.current, next);
       setCurrentTime(next);
+      currentTimeRef.current = next;
     }
   };
 
   const applyPresetTrim = (lengthSeconds: number | null) => {
     safeHaptic("selection");
-    const dur = durationRef.current > 0 ? durationRef.current : (previewPlayer?.duration || 1);
+    const dur = durationRef.current > 0 ? durationRef.current : (previewPlayerRef.current?.duration || 1);
     if (lengthSeconds === null || lengthSeconds >= dur) {
       setTrimStart(0);
       trimStartRef.current = 0;
       setTrimEnd(dur);
       trimEndRef.current = dur;
-      safeSeek(previewPlayer, 0);
-      safePlay(previewPlayer);
+      safeSeek(previewPlayerRef.current, 0);
+      safePlay(previewPlayerRef.current);
       setIsPlaying(true);
       setCurrentTime(0);
+      currentTimeRef.current = 0;
     } else {
       setTrimStart(0);
       trimStartRef.current = 0;
       const rounded = Math.round(lengthSeconds * 10) / 10;
       setTrimEnd(rounded);
       trimEndRef.current = rounded;
-      safeSeek(previewPlayer, 0);
-      safePlay(previewPlayer);
+      safeSeek(previewPlayerRef.current, 0);
+      safePlay(previewPlayerRef.current);
       setIsPlaying(true);
       setCurrentTime(0);
+      currentTimeRef.current = 0;
     }
   };
 
@@ -1326,9 +1468,6 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     }
   };
 
-  const [originalAudioVolume, setOriginalAudioVolume] = useState<number>(100);
-  const [musicVolume, setMusicVolume] = useState<number>(80);
-  const [isOriginalMuted, setIsOriginalMuted] = useState<boolean>(false);
   const [activeAudioEffects, setActiveAudioEffects] = useState<string[]>([
     "enhance",
   ]);
@@ -1626,8 +1765,10 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         const durSec = rawDur > 0.5 ? rawDur : 1;
         setDuration(durSec);
         durationRef.current = durSec;
-        setTrimEnd(rawDur > 0.5 ? rawDur : 0);
-        trimEndRef.current = rawDur > 0.5 ? rawDur : 0;
+        setTrimEnd(0);
+        trimEndRef.current = 0;
+        setCurrentTime(0);
+        currentTimeRef.current = 0;
         lastReplacedUriRef.current = null;
         setStep("PREVIEW");
       }
@@ -1677,8 +1818,10 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         const durSec = rawDur > 0.5 ? rawDur : 1;
         setDuration(durSec);
         durationRef.current = durSec;
-        setTrimEnd(rawDur > 0.5 ? rawDur : 0);
-        trimEndRef.current = rawDur > 0.5 ? rawDur : 0;
+        setTrimEnd(0);
+        trimEndRef.current = 0;
+        setCurrentTime(0);
+        currentTimeRef.current = 0;
         lastReplacedUriRef.current = null;
         setStep("PREVIEW");
       }
@@ -1786,9 +1929,16 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     setCoverImageUri(draft.coverImageUri || null);
     if (draft.duration) {
       setDuration(draft.duration);
+      durationRef.current = draft.duration;
     }
-    setTrimStart(draft.trimStart || 0);
-    setTrimEnd(draft.trimEnd !== undefined ? draft.trimEnd : (draft.duration || 0));
+    const resumedStart = draft.trimStart || 0;
+    const resumedEnd = draft.trimEnd !== undefined ? draft.trimEnd : (draft.duration || 0);
+    setTrimStart(resumedStart);
+    trimStartRef.current = resumedStart;
+    setTrimEnd(resumedEnd);
+    trimEndRef.current = resumedEnd;
+    setCurrentTime(resumedStart);
+    currentTimeRef.current = resumedStart;
     if (draft.mediaType === "video" && previewPlayer) {
       try {
         previewPlayer.replace(draft.mediaUri);
@@ -2373,16 +2523,20 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           }
           setStep("HOME");
         }}
-        onMediaCaptured={({ uri, mediaType: capturedType, sound }) => {
+        onMediaCaptured={({ uri, mediaType: capturedType, sound, duration: capturedDur }: any) => {
           setRecordedVideoUri(uri);
           setMediaType(capturedType);
           setCameraMode(capturedType === "image" ? "photo" : "video");
           setTrimStart(0);
           trimStartRef.current = 0;
+          const initialDur = typeof capturedDur === "number" && capturedDur > 1 ? capturedDur : 0;
+          setDuration(initialDur > 0 ? initialDur : 1);
+          durationRef.current = initialDur > 0 ? initialDur : 1;
           setTrimEnd(0);
           trimEndRef.current = 0;
-          setDuration(0);
-          durationRef.current = 0;
+          setCurrentTime(0);
+          currentTimeRef.current = 0;
+          lastReplacedUriRef.current = null;
           if (sound) {
             setUserSoundTracks((prev) => [
               ...prev.filter((t) => t.id !== sound.id),
@@ -2566,44 +2720,31 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       <View className="flex-1 px-5 pb-2">
         {/* Pinned Media Preview Viewport (Always visible at the top) */}
         <View className="w-full h-[320px] max-h-[44vh] rounded-3xl overflow-hidden bg-black mb-3 border border-white/10 relative justify-center items-center shrink-0">
-          {/* Main Video Tap-to-play Surface */}
-          <TouchableOpacity
-            activeOpacity={1}
-            onPress={() => {
-              if (mediaType === "video") {
-                if (isPlaying) {
-                  safePause(previewPlayer);
-                  setIsPlaying(false);
-                } else {
-                  safePlay(previewPlayer);
-                  setIsPlaying(true);
-                }
-              }
-            }}
-            className="absolute inset-0 w-full h-full justify-center items-center overflow-hidden"
-          >
+          {/* Main Video & Image Media Layer */}
+          <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
             {mediaType === "video" && recordedVideoUri ? (
               <VideoView
                 player={previewPlayer}
-                className="w-full h-full"
-                contentFit="cover"
-                nativeControls={false}
                 style={[
+                  StyleSheet.absoluteFill,
                   Platform.OS === "web"
                     ? ({ filter: getEffectiveCssFilter() } as any)
                     : {},
                 ]}
+                contentFit="cover"
+                nativeControls={false}
+                surfaceType="textureView"
               />
             ) : recordedVideoUri ? (
               <Image
                 source={{ uri: recordedVideoUri }}
-                className="w-full h-full"
-                resizeMode="cover"
                 style={[
+                  StyleSheet.absoluteFill,
                   Platform.OS === "web"
                     ? ({ filter: getEffectiveCssFilter() } as any)
                     : {},
                 ]}
+                resizeMode="cover"
               />
             ) : null}
 
@@ -2649,7 +2790,24 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                 ]}
               />
             )}
-          </TouchableOpacity>
+          </View>
+
+          {/* Main Media Tap-to-play Transparent Surface */}
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => {
+              if (mediaType === "video") {
+                if (isPlaying) {
+                  safePause(previewPlayerRef.current);
+                  setIsPlaying(false);
+                } else {
+                  safePlay(previewPlayerRef.current);
+                  setIsPlaying(true);
+                }
+              }
+            }}
+            style={StyleSheet.absoluteFill}
+          />
 
           {/* Floating Filter Badge Top Left */}
           <View className="absolute top-4 left-4 bg-black/60 px-3 py-1.5 rounded-full flex-row items-center gap-1.5 border border-white/15 backdrop-blur-md z-20">
@@ -2794,32 +2952,40 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
           {/* Video Paused Play Icon */}
           {mediaType === "video" && !isPlaying && (
-            <View className="w-16 h-16 bg-black/60 rounded-full items-center justify-center backdrop-blur-md z-20 border border-white/20">
+            <View
+              pointerEvents="none"
+              className="w-16 h-16 bg-black/60 rounded-full items-center justify-center backdrop-blur-md z-20 border border-white/20"
+            >
               <Play color="#fff" size={30} fill="#fff" className="ml-1" />
             </View>
           )}
 
           {/* Custom Video Progress Bar */}
           {mediaType === "video" && editMode !== "trim" && (
-            <View className="absolute bottom-3 right-4 left-24 flex-row items-center gap-2 z-30">
+            <View
+              className="absolute bottom-3 right-4 left-24 flex-row items-center gap-2"
+              style={{ zIndex: 50, elevation: 15 }}
+            >
               <View
-                className="flex-1 h-6 justify-center relative cursor-pointer"
+                className="flex-1 h-8 justify-center relative cursor-pointer"
                 onLayout={(e) => {
                   const w = e.nativeEvent.layout.width;
-                  setSliderWidth(w);
-                  sliderWidthRef.current = w;
+                  if (w > 0) {
+                    setSliderWidth(w);
+                    sliderWidthRef.current = w;
+                  }
                 }}
                 {...panResponder.panHandlers}
               >
-                <View className="w-full h-1.5 bg-white/25 rounded-full flex-row items-center pointer-events-none overflow-visible">
+                <View className="w-full h-2 bg-white/25 rounded-full flex-row items-center pointer-events-none overflow-visible">
                   <View
                     style={{ width: `${safePercent(currentTime, duration)}%` }}
                     className="h-full bg-[#E91E76] rounded-l-full"
                   />
-                  <View className="w-3.5 h-3.5 bg-white rounded-full -ml-1.5 shadow-md pointer-events-none" />
+                  <View className="w-4 h-4 bg-white rounded-full -ml-2 shadow-md pointer-events-none border border-black/20" />
                 </View>
               </View>
-              <Text className="text-white text-[10px] font-mono opacity-80">
+              <Text className="text-white text-[10px] font-mono opacity-80 pointer-events-none">
                 {formatTime(currentTime)}
               </Text>
             </View>
@@ -3632,7 +3798,13 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
               {/* The Timeline Track Viewport */}
               <View
                 ref={timelineTrackRef}
-                className="h-16 w-full rounded-xl overflow-hidden relative justify-center border border-white/20 bg-[#1A1D24]"
+                style={{
+                  height: 64,
+                  width: "100%",
+                  position: "relative",
+                  justifyContent: "center",
+                  overflow: "visible",
+                }}
                 onLayout={(e) => {
                   const w = e.nativeEvent.layout.width;
                   if (w > 0) {
@@ -3652,27 +3824,46 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                   }
                 }}
               >
-                {/* Visual Filmstrip Frames */}
+                {/* Visual Filmstrip Frames Container (Clipped to track shape) */}
                 <View
                   pointerEvents="none"
-                  className="absolute inset-0 flex-row overflow-hidden opacity-40"
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    borderRadius: 12,
+                    overflow: "hidden",
+                    borderWidth: 1,
+                    borderColor: "rgba(255, 255, 255, 0.2)",
+                    backgroundColor: "#1A1D24",
+                  }}
                 >
-                  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
-                    <View
-                      key={i}
-                      className="flex-1 h-full bg-[#242731] border-r border-black/80 items-center justify-between py-1"
-                    >
-                      <View className="w-1.5 h-1 bg-white/20 rounded-full" />
-                      <View className="w-2 h-2 rounded-sm bg-white/10" />
-                      <View className="w-1.5 h-1 bg-white/20 rounded-full" />
-                    </View>
-                  ))}
+                  <View className="flex-1 flex-row opacity-40">
+                    {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
+                      <View
+                        key={i}
+                        className="flex-1 h-full bg-[#242731] border-r border-black/80 items-center justify-between py-1"
+                      >
+                        <View className="w-1.5 h-1 bg-white/20 rounded-full" />
+                        <View className="w-2 h-2 rounded-sm bg-white/10" />
+                        <View className="w-1.5 h-1 bg-white/20 rounded-full" />
+                      </View>
+                    ))}
+                  </View>
                 </View>
 
                 {/* Scrubber Tap / Drag Area (middle) */}
                 <View
-                  className="absolute inset-0 w-full h-full"
-                  style={{ zIndex: 10 }}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    zIndex: 20,
+                  }}
                   {...scrubberPanResponder.panHandlers}
                 />
 
@@ -3685,6 +3876,9 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     bottom: 0,
                     width: `${safePercent(trimStart, duration)}%`,
                     backgroundColor: "rgba(0,0,0,0.72)",
+                    borderTopLeftRadius: 12,
+                    borderBottomLeftRadius: 12,
+                    zIndex: 10,
                   }}
                   pointerEvents="none"
                 />
@@ -3701,6 +3895,9 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                       duration
                     )}%`,
                     backgroundColor: "rgba(0,0,0,0.72)",
+                    borderTopRightRadius: 12,
+                    borderBottomRightRadius: 12,
+                    zIndex: 10,
                   }}
                   pointerEvents="none"
                 />
@@ -3720,6 +3917,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     borderTopWidth: 3,
                     borderBottomWidth: 3,
                     backgroundColor: "rgba(233, 30, 118, 0.08)",
+                    zIndex: 15,
                   }}
                   pointerEvents="none"
                 />
@@ -3733,7 +3931,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     bottom: -2,
                     width: 2.5,
                     backgroundColor: "#FFFFFF",
-                    zIndex: 25,
+                    zIndex: 30,
+                    elevation: 10,
                     shadowColor: "#000",
                     shadowOffset: { width: 0, height: 2 },
                     shadowOpacity: 0.8,
@@ -3766,7 +3965,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     alignItems: "center",
                     justifyContent: "center",
                     zIndex: 60,
-                    elevation: 12,
+                    elevation: 15,
                   }}
                   {...trimStartPanResponder.panHandlers}
                 >
@@ -3807,7 +4006,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                     alignItems: "center",
                     justifyContent: "center",
                     zIndex: 60,
-                    elevation: 12,
+                    elevation: 15,
                   }}
                   {...trimEndPanResponder.panHandlers}
                 >
@@ -3860,15 +4059,18 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
               <TouchableOpacity
                 onPress={() => {
                   if (isPlaying) {
-                    safePause(previewPlayer);
+                    safePause(previewPlayerRef.current);
                     setIsPlaying(false);
                   } else {
-                    const curEnd = trimEnd > 0 && isFinite(trimEnd) ? trimEnd : duration;
-                    if (currentTime >= curEnd || currentTime < trimStart) {
-                      safeSeek(previewPlayer, trimStart);
-                      setCurrentTime(trimStart);
+                    const dur = durationRef.current > 0 ? durationRef.current : (previewPlayerRef.current?.duration || 1);
+                    const curEnd = (trimEndRef.current > 0 && trimEndRef.current <= dur) ? trimEndRef.current : dur;
+                    const curStart = Math.max(0, trimStartRef.current);
+                    if (currentTimeRef.current >= curEnd || currentTimeRef.current < curStart) {
+                      safeSeek(previewPlayerRef.current, curStart);
+                      setCurrentTime(curStart);
+                      currentTimeRef.current = curStart;
                     }
-                    safePlay(previewPlayer);
+                    safePlay(previewPlayerRef.current);
                     setIsPlaying(true);
                   }
                 }}
@@ -4452,35 +4654,73 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
       <View className="flex-row flex-wrap px-3 mb-4">
         {[
-          "Dance",
-          "Voice",
-          "Music",
-          "Acting",
-          "Comedy",
-          "Film",
-          "Art",
-          "Other",
+          {
+            name: "Dance",
+            img: "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?auto=format&fit=crop&w=400&q=80",
+          },
+          {
+            name: "Voice",
+            img: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=400&q=80",
+          },
+          {
+            name: "Music",
+            img: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=400&q=80",
+          },
+          {
+            name: "Acting",
+            img: "https://images.unsplash.com/photo-1460723237483-7a6dc9d0b212?auto=format&fit=crop&w=400&q=80",
+          },
+          {
+            name: "Comedy",
+            img: "https://images.unsplash.com/photo-1585699324551-f6c309eedeca?auto=format&fit=crop&w=400&q=80",
+          },
+          {
+            name: "Film",
+            img: "https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=400&q=80",
+          },
+          {
+            name: "Art",
+            img: "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=400&q=80",
+          },
+          {
+            name: "Other",
+            img: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=400&q=80",
+          },
         ].map((cat) => (
           <TouchableOpacity
-            key={cat}
-            onPress={() => setCategory(cat)}
+            key={cat.name}
+            onPress={() => setCategory(cat.name)}
             style={{
-              backgroundColor: category === cat ? theme.primary + "15" : theme.cardBg,
-              borderColor: category === cat ? theme.primary : theme.border,
+              backgroundColor: category === cat.name ? theme.primary + "15" : theme.cardBg,
+              borderColor: category === cat.name ? theme.primary : theme.border,
             }}
             className="w-[22%] aspect-square m-[1.5%] rounded-2xl items-center justify-center border-2"
           >
             <View
               style={{
-                backgroundColor: category === cat ? theme.primary + "25" : theme.surfaceBg,
+                backgroundColor: category === cat.name ? theme.primary : theme.surfaceBg,
               }}
-              className="w-8 h-8 rounded-full mb-2"
-            />
+              className="w-8 h-8 rounded-full mb-2 overflow-hidden items-center justify-center relative"
+            >
+              <Image
+                source={{ uri: cat.img }}
+                style={{ width: "100%", height: "100%" }}
+                resizeMode="cover"
+              />
+              {category === cat.name && (
+                <View
+                  style={{ backgroundColor: theme.primary }}
+                  className="absolute inset-0 items-center justify-center"
+                >
+                  <Check size={16} color="#FFFFFF" strokeWidth={3} />
+                </View>
+              )}
+            </View>
             <Text
-              style={{ color: category === cat ? theme.primary : theme.text }}
+              style={{ color: category === cat.name ? theme.primary : theme.text }}
               className="text-[11px] font-medium"
             >
-              {cat}
+              {cat.name}
             </Text>
           </TouchableOpacity>
         ))}
@@ -4655,8 +4895,10 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                 {recordedVideoUri && (
                   <VideoView
                     player={previewPlayer}
-                    className="flex-1 w-full h-full"
+                    style={StyleSheet.absoluteFill}
                     contentFit="cover"
+                    nativeControls={false}
+                    surfaceType="textureView"
                   />
                 )}
                 <View className="absolute bottom-0 w-full bg-black/60 py-1">
@@ -4791,8 +5033,10 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             {recordedVideoUri && (
               <VideoView
                 player={previewPlayer}
-                className="flex-1 w-full h-full"
+                style={StyleSheet.absoluteFill}
                 contentFit="cover"
+                nativeControls={false}
+                surfaceType="textureView"
               />
             )}
             <View className="absolute inset-0 items-center justify-center bg-black/20">

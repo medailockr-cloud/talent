@@ -51,6 +51,7 @@ interface InstagramCameraScreenProps {
     mediaType: "video" | "image";
     isBoomerang?: boolean;
     sound?: InstagramSound | null;
+    duration?: number;
   }) => void;
 }
 
@@ -332,6 +333,7 @@ export function InstagramCameraScreen({
                 mediaType: "video",
                 isBoomerang,
                 sound: activeSound,
+                duration: recordingSeconds > 0 ? recordingSeconds : undefined,
               });
             }
           })
@@ -346,6 +348,7 @@ export function InstagramCameraScreen({
               mediaType: "video",
               isBoomerang,
               sound: activeSound,
+              duration: recordingSeconds > 0 ? recordingSeconds : 15,
             });
           });
       } catch (e) {
@@ -359,6 +362,7 @@ export function InstagramCameraScreen({
           mediaType: "video",
           isBoomerang,
           sound: activeSound,
+          duration: recordingSeconds > 0 ? recordingSeconds : 15,
         });
       }
     }
@@ -415,10 +419,12 @@ export function InstagramCameraScreen({
       });
       if (!res.canceled && res.assets && res.assets.length > 0) {
         const asset = res.assets[0];
+        const rawDur = (asset.duration && asset.duration > 0) ? Math.round(asset.duration / 100) / 10 : undefined;
         onMediaCaptured({
           uri: asset.uri,
           mediaType: asset.type === "video" ? "video" : "image",
           sound: activeSound,
+          duration: rawDur,
         });
       }
     } catch (e) {

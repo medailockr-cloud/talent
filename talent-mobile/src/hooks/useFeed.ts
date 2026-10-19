@@ -28,13 +28,14 @@ export function useFeed(userId?: number) {
     setError(null);
 
     try {
-      const url = userId ? `/feed?userId=${userId}&limit=10` : '/feed?limit=10';
+      const url = userId ? `/feed?userId=${userId}&limit=10&offset=0` : '/feed?limit=10&offset=0';
       const res = await api.get(url);
       const rawIncoming = Array.isArray(res.data?.videos) ? res.data.videos : [];
       // Homepage feed is only for videos, no images (images can be seen on users' profiles)
       const incoming = rawIncoming.filter((v: any) => !isMediaImage(v.url || v.videoUrl));
       setVideos(incoming);
-      setHasMore(incoming.length >= 10);
+      const serverHasMore = res.data?.hasMore !== undefined ? res.data.hasMore : incoming.length >= 10;
+      setHasMore(serverHasMore);
     } catch (err) {
       console.error('Failed to load feed videos:', err);
       setError(err instanceof Error ? err : new Error('Failed to load feed'));
@@ -53,9 +54,10 @@ export function useFeed(userId?: number) {
     try {
       const lastVideo = videos[videos.length - 1];
       const cursor = lastVideo?.id;
+      const offset = videos.length;
       const url = userId 
-        ? `/feed?userId=${userId}&limit=10&cursor=${cursor}` 
-        : `/feed?limit=10&cursor=${cursor}`;
+        ? `/feed?userId=${userId}&limit=10&offset=${offset}&cursor=${cursor}` 
+        : `/feed?limit=10&offset=${offset}&cursor=${cursor}`;
 
       const res = await api.get(url);
       const rawIncoming = Array.isArray(res.data?.videos) ? res.data.videos : [];
@@ -65,13 +67,19 @@ export function useFeed(userId?: number) {
         setHasMore(false);
       } else {
         // Filter out any duplicates
+        let newCount = 0;
         setVideos((prev) => {
           const existingIds = new Set(prev.map((v) => v.id));
           const fresh = incoming.filter((v: any) => !existingIds.has(v.id));
-          if (fresh.length === 0) setHasMore(false);
+          newCount = fresh.length;
+          if (fresh.length === 0) {
+            setHasMore(false);
+            return prev;
+          }
           return [...prev, ...fresh];
         });
-        setHasMore(incoming.length >= 10);
+        const serverHasMore = res.data?.hasMore !== undefined ? res.data.hasMore : incoming.length >= 10;
+        setHasMore(serverHasMore && newCount > 0);
       }
     } catch (err) {
       console.warn('Failed to load more feed videos:', err);

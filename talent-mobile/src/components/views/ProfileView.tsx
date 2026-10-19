@@ -71,6 +71,7 @@ import { Switch } from "react-native";
 import { api, resolveMediaUrl, BACKEND_URL } from "../../utils/api";
 import { useAuthStore } from "../../store/authStore";
 import { useThemeStore, THEMES, ThemeId, ORDERED_THEME_IDS } from "../../store/themeStore";
+import { useKeptStore } from "../../store/keptStore";
 import { FollowersModal } from "../ui/FollowersModal";
 import io from "socket.io-client";
 
@@ -477,7 +478,8 @@ function ProfileFeedVideoCard({
   onOptions?: (video: any) => void;
 }) {
   const isPlaying = String(playingVideoId) === String(video.id);
-  const [isKept, setIsKept] = useState(false);
+  const isKept = useKeptStore(state => Boolean(state.keptRecord[String(video.id)]));
+
   const [judgeScore, setJudgeScore] = useState<number | null>(video.userRating || null);
   const [isJudgingActive, setIsJudgingActive] = useState(false);
   const [tempScore, setTempScore] = useState<number>(video.userRating || 5.0);
@@ -652,17 +654,27 @@ function ProfileFeedVideoCard({
 
       <View className="flex-row items-center justify-between mb-3">
         <View className="flex-row items-center gap-3 flex-1 mr-2">
-          <View className="w-[42px] h-[42px] rounded-full overflow-hidden border border-white/10">
-            <Image source={{ uri: video.avatar }} className="w-full h-full" />
-          </View>
-          <View className="flex-1">
-            <Text className="text-white text-[16px] font-bold mb-0.5" numberOfLines={1}>
-              {video.author}
-            </Text>
-            <View className="flex-row items-center gap-1.5">
-              <Text className="text-[#9CA3AF] text-[11px]">{video.role}</Text>
-            </View>
-          </View>
+          {(() => {
+            const authorName = typeof video.author === 'object' && video.author !== null
+              ? (video.author.name || video.author.username || 'Artist')
+              : (typeof video.author === 'string' && video.author ? video.author : 'Artist');
+            const authorAvatar = video.avatar || video.authorAvatar || (typeof video.author === 'object' ? video.author?.avatarUrl : null) || `https://ui-avatars.com/api/?name=${encodeURIComponent(authorName)}&background=E91E76&color=fff`;
+            return (
+              <>
+                <View className="w-[42px] h-[42px] rounded-full overflow-hidden border border-white/10">
+                  <Image source={{ uri: authorAvatar }} className="w-full h-full" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-white text-[16px] font-bold mb-0.5" numberOfLines={1}>
+                    {authorName}
+                  </Text>
+                  <View className="flex-row items-center gap-1.5">
+                    <Text className="text-[#9CA3AF] text-[11px]">{video.role || 'Artist'}</Text>
+                  </View>
+                </View>
+              </>
+            );
+          })()}
         </View>
 
         {onOptions && (
@@ -690,9 +702,9 @@ function ProfileFeedVideoCard({
       <View className="flex-row items-center justify-between px-1">
         <View className="flex-row items-center gap-5">
           <TouchableOpacity
-            onPress={() => {
+            onPress={async () => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setIsKept(!isKept);
+              await useKeptStore.getState().toggleKeep(video);
             }}
             activeOpacity={0.7}
             className="items-center gap-1.5 min-w-[36px]"
@@ -720,6 +732,32 @@ function ProfileFeedVideoCard({
             <MessageCircle color="#fff" size={22} strokeWidth={1.5} />
             <Text className="text-[#9CA3AF] text-[9px] font-bold tracking-widest uppercase">
               TALK
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={async () => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              api.post(`/videos/${video.id}/share`).catch(() => {});
+              const shareUrl = typeof window !== 'undefined' && window.location 
+                ? `${window.location.origin}/video/${video.id}`
+                : `https://talent.app/video/${video.id}`;
+              if (Platform.OS === 'web') {
+                if (typeof navigator !== 'undefined' && navigator.share) {
+                  await navigator.share({ title: video.title || 'Performance', url: shareUrl });
+                } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                  await navigator.clipboard.writeText(shareUrl);
+                  Alert.alert("Copied", "Link copied to clipboard!");
+                }
+              } else {
+                await RNShare.share({ message: `Watch "${video.title || 'Performance'}" on Talent!\n${shareUrl}`, url: shareUrl });
+              }
+            }}
+            activeOpacity={0.7}
+            className="items-center gap-1.5 min-w-[36px]"
+          >
+            <Share2 color="#fff" size={21} strokeWidth={1.5} />
+            <Text className="text-[#9CA3AF] text-[9px] font-bold tracking-widest uppercase">
+              SHARE
             </Text>
           </TouchableOpacity>
         </View>
@@ -875,8 +913,16 @@ export function ProfileView({
 
   // App State
   const [activeTab, setActiveTab] = useState<
-    "Performances" | "Shows" | "About"
+    "Performances" | "Kept" | "Shows" | "About"
   >("Performances");
+  const savedPerformances = useKeptStore(state => state.keptVideos);
+  const isLoadingSaved = useKeptStore(state => state.isLoading);
+
+  useEffect(() => {
+    if (activeTab === "Kept") {
+      useKeptStore.getState().fetchKept();
+    }
+  }, [activeTab]);
   const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null);
   const [activeShowModal, setActiveShowModal] = useState<any | null>(null);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -1870,6 +1916,30 @@ export function ProfileView({
           <TouchableOpacity
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setActiveTab("Kept");
+            }}
+            className={`flex-1 items-center pb-3 flex-row justify-center gap-2 ${activeTab !== "Kept" ? "opacity-60" : ""}`}
+          >
+            <View 
+              className="flex-row items-center gap-2 pb-1"
+              style={activeTab === "Kept" ? { borderBottomWidth: 3, borderBottomColor: theme.primary } : undefined}
+            >
+              <Bookmark
+                color={activeTab === "Kept" ? theme.primary : theme.textSecondary}
+                fill={activeTab === "Kept" ? theme.primary : "transparent"}
+                size={14}
+              />
+              <Text
+                className="font-semibold text-[13px]"
+                style={{ color: activeTab === "Kept" ? theme.primary : theme.textSecondary }}
+              >
+                Kept
+              </Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               setActiveTab("Shows");
             }}
             className={`flex-1 items-center pb-3 flex-row justify-center gap-2 ${activeTab !== "Shows" ? "opacity-60" : ""}`}
@@ -2443,6 +2513,138 @@ export function ProfileView({
               ))}
               </ScrollView>
             </View>
+          </View>
+        )}
+
+        {activeTab === "Kept" && (
+          <View className="mb-8">
+            <View className="px-5 flex-row justify-between items-center mb-4">
+              <View className="flex-row items-center gap-2">
+                <Text className="text-[18px] font-bold" style={{ color: theme.text }}>
+                  Kept Performances
+                </Text>
+                <Text className="text-[14px]" style={{ color: theme.textSecondary }}>
+                  ({savedPerformances.length})
+                </Text>
+              </View>
+            </View>
+
+            {isLoadingSaved && savedPerformances.length === 0 ? (
+              <View className="py-16 items-center justify-center">
+                <ActivityIndicator size="large" color={theme.primary} />
+                <Text style={{ color: theme.textSecondary }} className="font-medium text-[13px] mt-4">
+                  Loading kept performances...
+                </Text>
+              </View>
+            ) : savedPerformances.length === 0 ? (
+              <View
+                style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}
+                className="mx-5 rounded-[24px] items-center justify-center border p-8"
+              >
+                <View 
+                  style={{ backgroundColor: `${theme.primary}15`, borderColor: `${theme.primary}30` }}
+                  className="w-14 h-14 rounded-full border items-center justify-center mb-3"
+                >
+                  <Bookmark color={theme.primary} size={26} />
+                </View>
+                <Text className="font-bold text-[16px] mb-1" style={{ color: theme.text }}>
+                  No Kept Performances
+                </Text>
+                <Text className="text-[12px] text-center max-w-[260px] leading-4" style={{ color: theme.textSecondary }}>
+                  Performances you bookmark with KEEP on the feed will appear here for fast replay.
+                </Text>
+              </View>
+            ) : (
+              <View className="px-5 gap-4">
+                {savedPerformances.map((perf: any) => {
+                  const perfUrl = resolveMediaUrl(perf.url || perf.videoUrl);
+                  const isImg = isMediaImage(perf.url || perf.videoUrl);
+                  return (
+                    <TouchableOpacity
+                      key={perf.id}
+                      activeOpacity={0.85}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setActiveVideoUrl(perfUrl);
+                      }}
+                      style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+                      className="rounded-[20px] p-3 border shadow-md flex-row items-center gap-3"
+                    >
+                      {/* Video Thumbnail */}
+                      <View className="w-24 h-28 rounded-[14px] bg-black overflow-hidden relative border border-white/10 items-center justify-center">
+                        {isImg ? (
+                          <Image source={{ uri: perfUrl }} className="w-full h-full" resizeMode="cover" />
+                        ) : (
+                          <>
+                            {perf.videoThumb || perf.thumbnailUrl ? (
+                              <Image source={{ uri: perf.videoThumb || perf.thumbnailUrl }} className="w-full h-full" resizeMode="cover" />
+                            ) : (
+                              <View className="flex-1 w-full bg-neutral-900 items-center justify-center" />
+                            )}
+                            <View className="absolute inset-0 bg-black/30 items-center justify-center">
+                              <View className="w-8 h-8 rounded-full bg-black/60 backdrop-blur-md items-center justify-center border border-white/30">
+                                <Play color="#fff" fill="#fff" size={14} style={{ marginLeft: 2 }} />
+                              </View>
+                            </View>
+                          </>
+                        )}
+                      </View>
+
+                      {/* Video Info */}
+                      <View className="flex-1 justify-between h-28 py-1">
+                        <View>
+                          <View className="flex-row items-center gap-1.5 mb-1">
+                            <Text style={{ color: theme.primary }} className="text-[10px] font-bold uppercase tracking-wider">
+                              KEPT
+                            </Text>
+                            {perf.views ? (
+                              <>
+                                <Text style={{ color: theme.textSecondary }} className="text-[10px]">•</Text>
+                                <Text style={{ color: theme.textSecondary }} className="text-[10px]">{perf.views} views</Text>
+                              </>
+                            ) : null}
+                          </View>
+                          <Text style={{ color: theme.text }} className="text-[15px] font-bold leading-tight" numberOfLines={2}>
+                            {perf.title || 'Performance'}
+                          </Text>
+                          {(() => {
+                            const authorName = typeof perf.author === 'object' && perf.author !== null
+                              ? (perf.author.name || perf.author.username || 'Artist')
+                              : (typeof perf.author === 'string' && perf.author ? perf.author : 'Artist');
+                            return (
+                              <Text style={{ color: theme.textSecondary }} className="text-[12px] mt-1" numberOfLines={1}>
+                                By {authorName}
+                              </Text>
+                            );
+                          })()}
+                        </View>
+
+                        <View className="flex-row items-center justify-between">
+                          <View className="flex-row items-center gap-1">
+                            <Star color="#F59E0B" fill="#F59E0B" size={12} />
+                            <Text style={{ color: theme.text }} className="text-[11px] font-bold">
+                              {perf.averageRating ? perf.averageRating.toFixed(1) : '5.0'}
+                            </Text>
+                          </View>
+
+                          <TouchableOpacity
+                            onPress={async (e: any) => {
+                              e.stopPropagation?.();
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              await useKeptStore.getState().toggleKeep(perf);
+                            }}
+                            className="px-2.5 py-1 rounded-full bg-white/10 flex-row items-center gap-1"
+                          >
+                            <Bookmark color={theme.primary} fill={theme.primary} size={11} />
+                            <Text style={{ color: theme.primary }} className="text-[10px] font-bold">Kept</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
           </View>
         )}
 
