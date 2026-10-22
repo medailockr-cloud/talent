@@ -77,7 +77,7 @@ export function InstagramCameraScreen({
   const [facing, setFacing] = useState<"front" | "back">(
     Platform.OS === "web" ? "front" : "back"
   );
-  const [mode, setMode] = useState<InstagramMode>("REEL");
+  const [mode, setMode] = useState<InstagramMode>("VIDEO");
   const [flashMode, setFlashMode] = useState<InstagramFlashMode>("off");
   const [aspectRatio, setAspectRatio] = useState<InstagramAspectRatio>("9:16");
   const [showGrid, setShowGrid] = useState(false);
@@ -107,7 +107,7 @@ export function InstagramCameraScreen({
   // Recording State
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const maxDuration = mode === "STORY" ? 15 : mode === "REEL" ? 60 : 30;
+  const maxDuration = 60;
 
   // Tap-to-focus animation
   const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null);
@@ -490,7 +490,7 @@ export function InstagramCameraScreen({
             enableTorch={flashMode === "on"}
             flash={flashMode}
             zoom={zoom}
-            mode={mode === "POST" || (mode === "STORY" && !isRecording) ? "picture" : "video"}
+            mode={mode === "PHOTO" || mode === "POST" ? "picture" : "video"}
           >
             {/* Composition Grid Overlay */}
             {showGrid && (

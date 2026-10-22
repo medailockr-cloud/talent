@@ -2629,11 +2629,16 @@ export function ProfileView({
 
                           <TouchableOpacity
                             onPress={async (e: any) => {
-                              e.stopPropagation?.();
+                              if (e) {
+                                if (typeof e.stopPropagation === 'function') e.stopPropagation();
+                                if (e.nativeEvent && typeof e.nativeEvent.stopPropagation === 'function') {
+                                  e.nativeEvent.stopPropagation();
+                                }
+                              }
                               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                               await useKeptStore.getState().toggleKeep(perf);
                             }}
-                            className="px-2.5 py-1 rounded-full bg-white/10 flex-row items-center gap-1"
+                            className="px-2.5 py-1 rounded-full bg-white/10 flex-row items-center gap-1 active:opacity-60"
                           >
                             <Bookmark color={theme.primary} fill={theme.primary} size={11} />
                             <Text style={{ color: theme.primary }} className="text-[10px] font-bold">Kept</Text>

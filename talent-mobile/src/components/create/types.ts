@@ -1,4 +1,4 @@
-export type InstagramMode = "POST" | "STORY" | "REEL";
+export type InstagramMode = "PHOTO" | "VIDEO" | "POST" | "STORY" | "REEL";
 
 export type InstagramFlashMode = "off" | "on" | "auto";
 

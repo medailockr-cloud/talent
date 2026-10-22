@@ -943,8 +943,15 @@ export function HomeView({ user }: { user?: any }) {
   }, [activeFeedTab]);
 
   const handleToggleKeep = useCallback((id: string, isSaved: boolean) => {
-    // Handled centrally in useKeptStore
-  }, []);
+    if (feedData && Array.isArray(feedData)) {
+      feedData.forEach((v) => {
+        if (String(v.id) === id) {
+          v.isSaved = isSaved;
+          v.isKept = isSaved;
+        }
+      });
+    }
+  }, [feedData]);
 
   // Filter Logic based on Tabs and Search (strictly exclude images)
   const filteredData = activeFeedTab === 'Kept'

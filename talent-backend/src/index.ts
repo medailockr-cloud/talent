@@ -1858,6 +1858,10 @@ app.get('/api/analytics/me', requireAuth, async (req, res) => {
 app.post('/api/videos/:id/save', async (req, res) => {
   try {
     const videoId = parseInt(req.params.id as string);
+    if (isNaN(videoId)) {
+      return res.status(400).json({ error: 'Invalid video ID' });
+    }
+
     let userId: number | null = null;
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -1882,9 +1886,25 @@ app.post('/api/videos/:id/save', async (req, res) => {
       }
     }
     
+    const action = req.body?.action; // 'save' | 'unsave' | undefined (toggle)
+
     const existing = await prisma.savedVideo.findUnique({
       where: { userId_videoId: { userId, videoId } }
     });
+
+    if (action === 'unsave') {
+      if (existing) {
+        await prisma.savedVideo.delete({ where: { id: existing.id } });
+      }
+      return res.json({ saved: false });
+    }
+
+    if (action === 'save') {
+      if (!existing) {
+        await prisma.savedVideo.create({ data: { userId, videoId } });
+      }
+      return res.json({ saved: true });
+    }
     
     if (existing) {
       await prisma.savedVideo.delete({ where: { id: existing.id } });

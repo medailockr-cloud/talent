@@ -16,6 +16,8 @@ import {
   Lock,
   Square,
   Plus,
+  Camera,
+  Video,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { InstagramMode } from "./types";
@@ -198,11 +200,11 @@ export function InstagramShutter({
             if (Platform.OS !== "web") {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             }
-            if (currentModeRef.current === "REEL") {
-              // In REEL mode, quick tap starts video recording
+            if (currentModeRef.current === "VIDEO" || currentModeRef.current === "REEL") {
+              // In VIDEO mode, quick tap starts video recording
               onStartRecordingRef.current();
             } else {
-              // In POST or STORY mode, quick tap takes photo
+              // In PHOTO mode, quick tap takes photo
               onPressCaptureRef.current();
             }
           }
@@ -234,7 +236,8 @@ export function InstagramShutter({
   const progressRatio = Math.min(recordingSeconds / maxDuration, 1);
   const strokeDashoffset = circumference - progressRatio * circumference;
 
-  const MODES: InstagramMode[] = ["POST", "STORY", "REEL"];
+  const isPhotoMode = currentMode === "PHOTO" || currentMode === "POST";
+  const isVideoMode = !isPhotoMode;
 
   return (
     <View style={styles.container}>
@@ -341,6 +344,7 @@ export function InstagramShutter({
             <View
               style={[
                 styles.innerCircle,
+                isVideoMode && styles.innerCircleVideo,
                 isPressed && styles.innerCirclePressed,
               ]}
             />
@@ -363,37 +367,72 @@ export function InstagramShutter({
         </TouchableOpacity>
       </View>
 
-      {/* Bottom Mode Carousel: POST | STORY | REEL */}
-      <View style={styles.modeCarouselContainer}>
-        <View style={styles.modeTrack}>
-          {MODES.map((mode) => {
-            const isActive = currentMode === mode;
-            return (
-              <TouchableOpacity
-                key={mode}
-                style={styles.modeItem}
-                onPress={() => {
+      {/* Switcher Button: PHOTO <-> VIDEO */}
+      {!isRecording && (
+        <View style={styles.modeSwitchContainer}>
+          <View style={styles.modeSwitchPill}>
+            <TouchableOpacity
+              style={[
+                styles.modeOption,
+                isPhotoMode && styles.modeOptionActive,
+              ]}
+              onPress={() => {
+                if (!isPhotoMode) {
                   if (Platform.OS !== "web") {
                     Haptics.selectionAsync();
                   }
-                  onSelectMode(mode);
-                }}
-                activeOpacity={0.7}
+                  onSelectMode("PHOTO");
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Camera
+                color={isPhotoMode ? "#fff" : "rgba(255, 255, 255, 0.45)"}
+                size={14}
+                style={{ marginRight: 6 }}
+              />
+              <Text
+                style={[
+                  styles.modeText,
+                  isPhotoMode && styles.activeModeText,
+                ]}
               >
-                <Text
-                  style={[
-                    styles.modeText,
-                    isActive && styles.activeModeText,
-                  ]}
-                >
-                  {mode}
-                </Text>
-                {isActive && <View style={styles.activeModeDot} />}
-              </TouchableOpacity>
-            );
-          })}
+                PHOTO
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.modeOption,
+                isVideoMode && styles.modeOptionActiveVideo,
+              ]}
+              onPress={() => {
+                if (!isVideoMode) {
+                  if (Platform.OS !== "web") {
+                    Haptics.selectionAsync();
+                  }
+                  onSelectMode("VIDEO");
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Video
+                color={isVideoMode ? "#FF3040" : "rgba(255, 255, 255, 0.45)"}
+                size={14}
+                style={{ marginRight: 6 }}
+              />
+              <Text
+                style={[
+                  styles.modeText,
+                  isVideoMode && styles.activeModeTextVideo,
+                ]}
+              >
+                VIDEO
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      )}
     </View>
   );
 }
@@ -472,6 +511,9 @@ const styles = StyleSheet.create({
     borderRadius: 34,
     backgroundColor: "#fff",
   },
+  innerCircleVideo: {
+    backgroundColor: "#FF3040",
+  },
   innerCirclePressed: {
     transform: [{ scale: 0.88 }],
   },
@@ -513,34 +555,44 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  modeCarouselContainer: {
+  modeSwitchContainer: {
     alignItems: "center",
     justifyContent: "center",
   },
-  modeTrack: {
+  modeSwitchPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 28,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    borderRadius: 24,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.15)",
   },
-  modeItem: {
+  modeOption: {
+    flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 4,
+    paddingVertical: 7,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+  },
+  modeOptionActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.22)",
+  },
+  modeOptionActiveVideo: {
+    backgroundColor: "rgba(255, 48, 64, 0.25)",
   },
   modeText: {
     color: "rgba(255, 255, 255, 0.5)",
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
-    letterSpacing: 1.5,
+    letterSpacing: 1.2,
   },
   activeModeText: {
     color: "#fff",
-    fontWeight: "900",
+    fontWeight: "800",
   },
-  activeModeDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#fff",
-    marginTop: 4,
+  activeModeTextVideo: {
+    color: "#fff",
+    fontWeight: "800",
   },
 });
