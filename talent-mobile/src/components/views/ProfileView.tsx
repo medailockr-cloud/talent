@@ -47,6 +47,7 @@ import {
   Gauge,
   Bookmark,
   MessageCircle,
+  MessageCircleOff,
   Pause,
   Maximize2,
   Flag,
@@ -88,6 +89,20 @@ const avatarImg = "https://ui-avatars.com/api/?name=User&background=E91E76&color
 const isMediaImage = (url?: string) => {
   if (!url) return false;
   return /\.(jpg|jpeg|png|webp|gif|bmp|heic)(\?.*)?$/i.test(url);
+};
+
+const isCommentsAllowed = (val: any): boolean => {
+  if (val === false || val === 'false' || val === 0 || val === '0' || val === 'off' || val === 'disabled') {
+    return false;
+  }
+  return true;
+};
+
+const isJudgingAllowed = (val: any): boolean => {
+  if (val === false || val === 'false' || val === 0 || val === '0' || val === 'off' || val === 'disabled') {
+    return false;
+  }
+  return true;
 };
 
 function VideoPlayerModal({
@@ -484,6 +499,17 @@ function ProfileFeedVideoCard({
   const isPlaying = String(playingVideoId) === String(video.id);
   const isKept = useKeptStore(state => Boolean(state.keptRecord[String(video.id)]));
 
+  const [currentAllowJudging, setCurrentAllowJudging] = useState(isJudgingAllowed(video.allowJudging));
+  const [currentAllowComments, setCurrentAllowComments] = useState(isCommentsAllowed(video.allowComments));
+
+  useEffect(() => {
+    setCurrentAllowJudging(isJudgingAllowed(video.allowJudging));
+  }, [video.allowJudging]);
+
+  useEffect(() => {
+    setCurrentAllowComments(isCommentsAllowed(video.allowComments));
+  }, [video.allowComments]);
+
   const [judgeScore, setJudgeScore] = useState<number | null>(video.userRating || null);
   const [isJudgingActive, setIsJudgingActive] = useState(false);
   const [tempScore, setTempScore] = useState<number>(video.userRating || 5.0);
@@ -500,7 +526,7 @@ function ProfileFeedVideoCard({
   }, [judgeScore]);
 
   const saveScore = (score: number) => {
-    if (video.allowJudging === false) return;
+    if (!currentAllowJudging) return;
     const finalScore = parseFloat(Math.max(1.0, Math.min(10.0, score)).toFixed(1));
     setJudgeScore(finalScore);
     judgeScoreRef.current = finalScore;
@@ -515,7 +541,7 @@ function ProfileFeedVideoCard({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 4,
       onPanResponderGrant: () => {
-        if (video.allowJudging === false) return;
+        if (!currentAllowJudging) return;
         isDraggingRef.current = false;
         const initial = judgeScoreRef.current ?? 5.0;
         startScoreRef.current = initial;
@@ -727,21 +753,25 @@ function ProfileFeedVideoCard({
               {isKept ? "KEPT ✓" : "KEEP"}
             </Text>
           </TouchableOpacity>
-          {video.allowComments !== false && (
-            <TouchableOpacity
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                if (onTalk) onTalk();
-              }}
-              activeOpacity={0.7}
-              className="items-center gap-1.5 min-w-[36px]"
-            >
+          <TouchableOpacity
+            disabled={!currentAllowComments}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              if (onTalk) onTalk();
+            }}
+            activeOpacity={currentAllowComments ? 0.7 : 1}
+            className="items-center gap-1.5 min-w-[36px]"
+            style={{ opacity: currentAllowComments ? 1 : 0.5 }}
+          >
+            {currentAllowComments ? (
               <MessageCircle color="#fff" size={22} strokeWidth={1.5} />
-              <Text className="text-[#9CA3AF] text-[9px] font-bold tracking-widest uppercase">
-                TALK
-              </Text>
-            </TouchableOpacity>
-          )}
+            ) : (
+              <MessageCircleOff color="#9CA3AF" size={22} strokeWidth={1.5} />
+            )}
+            <Text className="text-[#9CA3AF] text-[9px] font-bold tracking-widest uppercase">
+              {currentAllowComments ? "TALK" : "DISABLED"}
+            </Text>
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={async () => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -771,7 +801,7 @@ function ProfileFeedVideoCard({
         </View>
 
         <View className="flex-col items-end pt-1">
-          {video.allowJudging !== false && (
+          {currentAllowJudging && (
             <View {...panResponder.panHandlers}>
               <View
                 className={`rounded-full h-[32px] px-3.5 flex-row items-center gap-1.5 mb-2 cursor-pointer ${judgeScore !== null ? "bg-[#E91E76]/15 border border-[#E91E76]" : "bg-[#E91E76]"}`}
@@ -790,7 +820,7 @@ function ProfileFeedVideoCard({
       <View className="w-full h-[1px] bg-white/5 mt-5" />
 
       {/* Interactive Judging Sheet / Modal */}
-      {showJudgeModal && (
+      {showJudgeModal && currentAllowJudging && (
         <Modal visible={true} transparent={true} animationType="fade" onRequestClose={() => setShowJudgeModal(false)}>
           <TouchableOpacity activeOpacity={1} onPress={() => setShowJudgeModal(false)} className="flex-1 bg-black/75 justify-end items-center">
             <TouchableOpacity activeOpacity={1} onPress={(e: any) => e.stopPropagation?.()} className="bg-[#171922] w-full max-w-md rounded-t-3xl pb-10 pt-5 px-6 border-t border-white/10">
@@ -1515,6 +1545,8 @@ export function ProfileView({
                     duration: video.duration || "0:58",
                     videoUrl: video.url || "",
                     userRating: video.userRating,
+                    allowJudging: video.allowJudging,
+                    allowComments: video.allowComments,
                   }}
                   playingVideoId={playingVideoId}
                   setPlayingVideoId={setPlayingVideoId}
@@ -1533,6 +1565,8 @@ export function ProfileView({
                       img: videoThumb,
                       time: video.duration || "0:58",
                       isImg: isMediaImage(video.url),
+                      allowJudging: video.allowJudging,
+                      allowComments: video.allowComments,
                     })
                   }
                 />
@@ -2200,6 +2234,8 @@ export function ProfileView({
                           time: isImg ? "Photo" : "02:40",
                           isImg,
                           isFeatured: true,
+                          allowJudging: featuredVideo?.allowJudging,
+                          allowComments: featuredVideo?.allowComments,
                         });
                       }}
                       className="absolute top-4 right-4 w-9 h-9 rounded-full bg-black/60 backdrop-blur-md border border-white/20 items-center justify-center z-20 shadow-md"
@@ -2291,6 +2327,8 @@ export function ProfileView({
                               : (v.thumbnailUrl || ""),
                             videoUrl: v.url,
                             isImg,
+                            allowJudging: v.allowJudging,
+                            allowComments: v.allowComments,
                           };
                         })
                       : [];
@@ -2408,6 +2446,8 @@ export function ProfileView({
                                 img: perf.img,
                                 time: perf.time,
                                 isImg: perf.isImg,
+                                allowJudging: perf.allowJudging,
+                                allowComments: perf.allowComments,
                               });
                             }}
                             className="w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/20 items-center justify-center shadow-sm"
@@ -3929,8 +3969,8 @@ export function ProfileView({
                       onPress={() => {
                         setIsPostOptionsModalVisible(false);
                         setEditPostTitle(editedTitles[selectedPostForOptions.id] || selectedPostForOptions.title || "");
-                        setEditAllowJudging(selectedPostForOptions.allowJudging !== false);
-                        setEditAllowComments(selectedPostForOptions.allowComments !== false);
+                        setEditAllowJudging(isJudgingAllowed(selectedPostForOptions.allowJudging));
+                        setEditAllowComments(isCommentsAllowed(selectedPostForOptions.allowComments));
                         setIsEditCaptionModalVisible(true);
                       }}
                       className="flex-row items-center justify-between p-3.5 rounded-2xl active:opacity-70"

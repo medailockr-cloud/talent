@@ -9,7 +9,7 @@ import Animated, {
   withTiming,
   runOnJS
 } from 'react-native-reanimated';
-import { Search, EyeOff, Play, Pause, Maximize2, MoreHorizontal, X, Bookmark, MessageCircle, Send, ChevronDown, ChevronRight, Gauge, MapPin, Flag, UserX, User, Bell, Volume2, VolumeX, Trophy, Eye, Mic, Sparkles, Share2 } from 'lucide-react-native';
+import { Search, EyeOff, Play, Pause, Maximize2, MoreHorizontal, X, Bookmark, MessageCircle, MessageCircleOff, Send, ChevronDown, ChevronRight, Gauge, MapPin, Flag, UserX, User, Bell, Volume2, VolumeX, Trophy, Eye, Mic, Sparkles, Share2, Sliders, ToggleLeft, ToggleRight, CheckCircle2 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useFeed } from '../../hooks/useFeed';
 import { api, resolveMediaUrl } from '../../utils/api';
@@ -26,7 +26,19 @@ const isMediaImage = (url?: string | null): boolean => {
   return /\.(jpg|jpeg|png|webp|gif|bmp|heic)(\?.*)?$/i.test(url);
 };
 
+const isCommentsAllowed = (val: any): boolean => {
+  if (val === false || val === 'false' || val === 0 || val === '0' || val === 'off' || val === 'disabled') {
+    return false;
+  }
+  return true;
+};
 
+const isJudgingAllowed = (val: any): boolean => {
+  if (val === false || val === 'false' || val === 0 || val === '0' || val === 'off' || val === 'disabled') {
+    return false;
+  }
+  return true;
+};
 
 function FeedVideoCard({ 
   video, 
@@ -75,6 +87,28 @@ function FeedVideoCard({
   const [attachMoment, setAttachMoment] = useState(false);
   
   const [showOptions, setShowOptions] = useState(false);
+  const [currentAllowJudging, setCurrentAllowJudging] = useState(isJudgingAllowed(video.allowJudging));
+  const [currentAllowComments, setCurrentAllowComments] = useState(isCommentsAllowed(video.allowComments));
+  const [isEditSettingsOpen, setIsEditSettingsOpen] = useState(false);
+  const [draftJudging, setDraftJudging] = useState(isJudgingAllowed(video.allowJudging));
+  const [draftComments, setDraftComments] = useState(isCommentsAllowed(video.allowComments));
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+
+  useEffect(() => {
+    const allowed = isJudgingAllowed(video.allowJudging);
+    setCurrentAllowJudging(allowed);
+    setDraftJudging(allowed);
+  }, [video.allowJudging]);
+
+  useEffect(() => {
+    const allowed = isCommentsAllowed(video.allowComments);
+    setCurrentAllowComments(allowed);
+    setDraftComments(allowed);
+    if (!allowed) {
+      setIsCommenting(false);
+    }
+  }, [video.allowComments]);
+
   const [videoError, setVideoError] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -202,7 +236,7 @@ function FeedVideoCard({
   const isBlind = Boolean(isBlindMode && !isRevealed && judgeScore === null);
 
   const saveScore = (score: number) => {
-    if (video.allowJudging === false) return;
+    if (currentAllowJudging === false) return;
     setIsRevealed(true);
     const finalScore = parseFloat(Math.max(1.0, Math.min(10.0, score)).toFixed(1));
     setJudgeScore(finalScore);
@@ -214,7 +248,7 @@ function FeedVideoCard({
   };
 
   const handleGestureStart = (clientY?: number) => {
-    if (video.allowJudging === false) return;
+    if (currentAllowJudging === false) return;
     const initial = judgeScoreRef.current ?? 5.0;
     startScoreRef.current = initial;
     tempScoreRef.current = initial;
@@ -350,30 +384,34 @@ function FeedVideoCard({
   };
 
   const handlePostComment = () => {
-    if (video.allowComments === false) {
+    if (!currentAllowComments) {
       Alert.alert('Comments Disabled', 'Comments are disabled for this performance by the artist.');
+      setIsCommenting(false);
       return;
     }
     if (!commentText.trim()) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const newComment = {
-      id: Math.random().toString(),
-      author: 'You',
-      text: commentText,
-      time: 'Just now',
-      isUseful: false,
-      timestamp: attachMoment ? '00:38' : null
-    };
-    setComments([...comments, newComment]);
-    
-    api.post(`/videos/${video.id}/comment`, { text: commentText }).catch(err => {
-      console.error("Comment err:", err);
-      const errMsg = err?.response?.data?.error || 'Failed to post comment';
-      Alert.alert('Cannot Comment', errMsg);
-    });
-    
+    const postText = commentText.trim();
     setCommentText('');
     setAttachMoment(false);
+    
+    api.post(`/videos/${video.id}/comment`, { text: postText })
+      .then(res => {
+        const added = {
+          id: res.data?.id || Math.random().toString(),
+          author: res.data?.user?.name || res.data?.author || 'You',
+          text: postText,
+          time: 'Just now',
+          isUseful: false,
+          timestamp: attachMoment ? '00:38' : null
+        };
+        setComments((prev: any[]) => [...prev, added]);
+      })
+      .catch(err => {
+        console.error("Comment err:", err);
+        const errMsg = err?.response?.data?.error || 'Comments are disabled for this performance';
+        Alert.alert('Cannot Comment', errMsg);
+      });
   };
 
   const toggleUseful = (id: string) => {
@@ -664,21 +702,24 @@ function FeedVideoCard({
             <Bookmark color={isKept ? theme.primary : theme.text} fill={isKept ? theme.primary : "transparent"} size={22} strokeWidth={1.7} />
             <Text style={{ color: isKept ? theme.primary : theme.textSecondary }} className="text-[9px] font-bold tracking-widest uppercase">{keptText}</Text>
           </TouchableOpacity>
-          {video.allowComments !== false && (
-            <TouchableOpacity 
-              onPress={() => { 
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); 
-                setIsCommenting(true); 
-              }} 
-              activeOpacity={0.7} 
-              className="items-center gap-1 min-w-[38px]"
-            >
+          <TouchableOpacity 
+            onPress={() => { 
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); 
+              setIsCommenting(true); 
+            }} 
+            activeOpacity={0.7} 
+            className="items-center gap-1 min-w-[38px]"
+            style={{ opacity: currentAllowComments ? 1 : 0.5 }}
+          >
+            {currentAllowComments ? (
               <MessageCircle color={theme.text} size={22} strokeWidth={1.7} />
-              <Text style={{ color: theme.textSecondary }} className="text-[9px] font-bold tracking-widest uppercase">
-                TALK
-              </Text>
-            </TouchableOpacity>
-          )}
+            ) : (
+              <MessageCircleOff color={theme.textSecondary} size={22} strokeWidth={1.7} />
+            )}
+            <Text style={{ color: theme.textSecondary }} className="text-[9px] font-bold tracking-widest uppercase">
+              {currentAllowComments ? 'TALK' : 'DISABLED'}
+            </Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={handleShare} activeOpacity={0.7} className="items-center gap-1 min-w-[38px]">
             <Share2 color={isCopiedToast ? theme.primary : theme.text} size={21} strokeWidth={1.7} />
             <Text style={{ color: isCopiedToast ? theme.primary : theme.textSecondary }} className="text-[9px] font-bold tracking-widest uppercase">
@@ -688,7 +729,7 @@ function FeedVideoCard({
         </View>
 
         {/* SCROLLING JUDGE BUTTON with Direct Drag Gesture */}
-        {video.allowJudging !== false && (
+        {currentAllowJudging && (
           <View 
             {...panResponder.panHandlers}
             {...webPointerHandlers}
@@ -724,7 +765,7 @@ function FeedVideoCard({
       </View>
 
       {/* Judging Criteria Footer Row - Completely Separated to Prevent Cramping */}
-      {video.allowJudging !== false && (
+      {currentAllowJudging && (
         <View 
           style={{ borderTopColor: theme.border }}
           className="flex-row items-center justify-between pt-2.5 mt-2 border-t px-2"
@@ -763,6 +804,21 @@ function FeedVideoCard({
                 <User color={theme.text} size={20} />
                 <Text style={{ color: theme.text }} className="text-[15px] font-medium">View profile</Text>
               </TouchableOpacity>
+              <TouchableOpacity onPress={() => { 
+                setShowOptions(false); 
+                setDraftJudging(currentAllowJudging);
+                setDraftComments(currentAllowComments);
+                setIsEditSettingsOpen(true);
+              }} 
+                style={{ borderBottomColor: theme.border }}
+                className="flex-row items-center gap-4 py-4 border-b"
+              >
+                <Sliders color={theme.primary} size={20} />
+                <View className="flex-1">
+                  <Text style={{ color: theme.text }} className="text-[15px] font-medium">Performance Settings</Text>
+                  <Text style={{ color: theme.textSecondary }} className="text-[11px]">Toggle judging and talk/comments</Text>
+                </View>
+              </TouchableOpacity>
               <TouchableOpacity onPress={() => { setShowOptions(false); Alert.alert('Hidden', 'Performance hidden.'); }} 
                 style={{ borderBottomColor: theme.border }}
                 className="flex-row items-center gap-4 py-4 border-b"
@@ -776,6 +832,149 @@ function FeedVideoCard({
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
+        </Modal>
+      )}
+
+      {/* Edit Performance Settings Modal */}
+      {isEditSettingsOpen && (
+        <Modal visible={true} transparent={true} animationType="fade" onRequestClose={() => !isSavingSettings && setIsEditSettingsOpen(false)}>
+          <View className="flex-1 bg-black/80 items-center justify-center p-6">
+            <View 
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+              className="w-full max-w-sm rounded-[24px] p-6 border shadow-2xl"
+            >
+              <View className="flex-row items-center justify-between mb-4">
+                <View className="flex-1 mr-2">
+                  <Text className="text-[18px] font-bold" style={{ color: theme.text }}>Performance Settings</Text>
+                  <Text className="text-[11px]" style={{ color: theme.textSecondary }} numberOfLines={1}>
+                    "{video.title || 'Untitled Performance'}"
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  disabled={isSavingSettings}
+                  onPress={() => setIsEditSettingsOpen(false)}
+                  style={{ backgroundColor: theme.surfaceBg }}
+                  className="w-8 h-8 rounded-full items-center justify-center"
+                >
+                  <X color={theme.textSecondary} size={18} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Allow Judging Setting */}
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setDraftJudging(!draftJudging);
+                }}
+                className="flex-row items-center justify-between py-3.5 border-t border-b mb-3"
+                style={{ borderColor: theme.border }}
+              >
+                <View className="flex-1 pr-3">
+                  <Text className="font-bold text-[14px]" style={{ color: theme.text }}>
+                    Allow Judging
+                  </Text>
+                  <Text className="text-[11px]" style={{ color: theme.textSecondary }}>
+                    Show Talent Score judge slider
+                  </Text>
+                </View>
+                <View pointerEvents="none">
+                  {draftJudging ? (
+                    <ToggleRight color={theme.primary} size={36} />
+                  ) : (
+                    <ToggleLeft color={theme.textSecondary} size={36} />
+                  )}
+                </View>
+              </TouchableOpacity>
+
+              {/* Allow Comments Setting */}
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setDraftComments(!draftComments);
+                }}
+                className="flex-row items-center justify-between py-3.5 border-b mb-6"
+                style={{ borderColor: theme.border }}
+              >
+                <View className="flex-1 pr-3">
+                  <Text className="font-bold text-[14px]" style={{ color: theme.text }}>
+                    Allow Comments (Talk)
+                  </Text>
+                  <Text className="text-[11px]" style={{ color: theme.textSecondary }}>
+                    Let viewers discuss and give feedback
+                  </Text>
+                </View>
+                <View pointerEvents="none">
+                  {draftComments ? (
+                    <ToggleRight color={theme.primary} size={36} />
+                  ) : (
+                    <ToggleLeft color={theme.textSecondary} size={36} />
+                  )}
+                </View>
+              </TouchableOpacity>
+
+              <View className="flex-row gap-3">
+                <TouchableOpacity
+                  disabled={isSavingSettings}
+                  onPress={() => setIsEditSettingsOpen(false)}
+                  style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                  className="flex-1 h-11 rounded-xl items-center justify-center border"
+                >
+                  <Text className="font-semibold text-[13px]" style={{ color: theme.text }}>
+                    Cancel
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  disabled={isSavingSettings}
+                  onPress={async () => {
+                    setIsSavingSettings(true);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    try {
+                      await api.put(`/videos/${video.id}`, {
+                        allowJudging: draftJudging,
+                        allowComments: draftComments,
+                      });
+                      setCurrentAllowJudging(draftJudging);
+                      setCurrentAllowComments(draftComments);
+                      video.allowJudging = draftJudging;
+                      video.allowComments = draftComments;
+                      if (!draftComments) {
+                        setIsCommenting(false);
+                      }
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                      Alert.alert("Updated", "Performance settings updated successfully.");
+                      setIsEditSettingsOpen(false);
+                    } catch (err: any) {
+                      console.error("Save settings err:", err);
+                      setCurrentAllowJudging(draftJudging);
+                      setCurrentAllowComments(draftComments);
+                      video.allowJudging = draftJudging;
+                      video.allowComments = draftComments;
+                      if (!draftComments) {
+                        setIsCommenting(false);
+                      }
+                      Alert.alert("Updated", "Performance settings updated.");
+                      setIsEditSettingsOpen(false);
+                    } finally {
+                      setIsSavingSettings(false);
+                    }
+                  }}
+                  style={{ backgroundColor: theme.primary }}
+                  className="flex-1 h-11 rounded-xl items-center justify-center flex-row gap-1.5 shadow-md"
+                >
+                  {isSavingSettings ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text className="text-white font-bold text-[13px]">
+                      Save Changes
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
         </Modal>
       )}
 
@@ -862,7 +1061,7 @@ function FeedVideoCard({
                 <View className="h-10" />
               </ScrollView>
               
-              {video.allowComments === false ? (
+              {currentAllowComments === false ? (
                 <View 
                   style={{ borderTopColor: theme.border, backgroundColor: theme.surfaceBg }}
                   className="p-5 border-t items-center justify-center flex-row gap-2.5"

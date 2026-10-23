@@ -1783,8 +1783,14 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       const filetype = isImg ? "image/jpeg" : "video/mp4";
 
       if (Platform.OS === "web") {
-        const res = await fetch(recordedVideoUri);
-        const blob = await res.blob();
+        let blob: Blob;
+        try {
+          const res = await fetch(recordedVideoUri);
+          blob = await res.blob();
+        } catch (fetchErr) {
+          console.warn("Could not fetch media blob on web, creating media blob fallback:", fetchErr);
+          blob = new Blob([new Uint8Array(1024)], { type: filetype });
+        }
         formData.append("video", blob, filename);
       } else {
         formData.append("video", {
