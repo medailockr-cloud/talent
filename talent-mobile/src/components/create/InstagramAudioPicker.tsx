@@ -202,6 +202,8 @@ export function InstagramAudioPicker({
       <View style={styles.header}>
         <TouchableOpacity
           onPress={handleClose}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          activeOpacity={0.7}
           style={styles.headerButton}
         >
           <ChevronLeft color="#fff" size={28} />
@@ -279,7 +281,11 @@ export function InstagramAudioPicker({
           onChangeText={setSearchQuery}
         />
         {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery("")}>
+          <TouchableOpacity
+            onPress={() => setSearchQuery("")}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            activeOpacity={0.7}
+          >
             <X color="#888" size={18} />
           </TouchableOpacity>
         )}

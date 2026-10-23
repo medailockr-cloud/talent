@@ -16,6 +16,7 @@ import {
   Linking,
   ActivityIndicator,
   KeyboardAvoidingView,
+  RefreshControl,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import {
@@ -25,6 +26,7 @@ import {
   CheckCircle,
   Check,
   Eye,
+  EyeOff,
   MapPin,
   Play,
   X,
@@ -65,6 +67,8 @@ import {
   Archive,
   Copy,
   AlertTriangle,
+  ToggleLeft,
+  ToggleRight,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { Switch } from "react-native";
@@ -496,6 +500,7 @@ function ProfileFeedVideoCard({
   }, [judgeScore]);
 
   const saveScore = (score: number) => {
+    if (video.allowJudging === false) return;
     const finalScore = parseFloat(Math.max(1.0, Math.min(10.0, score)).toFixed(1));
     setJudgeScore(finalScore);
     judgeScoreRef.current = finalScore;
@@ -510,6 +515,7 @@ function ProfileFeedVideoCard({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 4,
       onPanResponderGrant: () => {
+        if (video.allowJudging === false) return;
         isDraggingRef.current = false;
         const initial = judgeScoreRef.current ?? 5.0;
         startScoreRef.current = initial;
@@ -721,19 +727,21 @@ function ProfileFeedVideoCard({
               {isKept ? "KEPT ✓" : "KEEP"}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              if (onTalk) onTalk();
-            }}
-            activeOpacity={0.7}
-            className="items-center gap-1.5 min-w-[36px]"
-          >
-            <MessageCircle color="#fff" size={22} strokeWidth={1.5} />
-            <Text className="text-[#9CA3AF] text-[9px] font-bold tracking-widest uppercase">
-              TALK
-            </Text>
-          </TouchableOpacity>
+          {video.allowComments !== false && (
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                if (onTalk) onTalk();
+              }}
+              activeOpacity={0.7}
+              className="items-center gap-1.5 min-w-[36px]"
+            >
+              <MessageCircle color="#fff" size={22} strokeWidth={1.5} />
+              <Text className="text-[#9CA3AF] text-[9px] font-bold tracking-widest uppercase">
+                TALK
+              </Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             onPress={async () => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -763,18 +771,20 @@ function ProfileFeedVideoCard({
         </View>
 
         <View className="flex-col items-end pt-1">
-          <View {...panResponder.panHandlers}>
-            <View
-              className={`rounded-full h-[32px] px-3.5 flex-row items-center gap-1.5 mb-2 cursor-pointer ${judgeScore !== null ? "bg-[#E91E76]/15 border border-[#E91E76]" : "bg-[#E91E76]"}`}
-            >
-              <Gauge color={judgeScore !== null ? "#E91E76" : "#fff"} size={13} />
-              <Text
-                className={`text-[10px] font-bold tracking-wider uppercase mt-0.5 ${judgeScore !== null ? "text-[#E91E76]" : "text-white"}`}
+          {video.allowJudging !== false && (
+            <View {...panResponder.panHandlers}>
+              <View
+                className={`rounded-full h-[32px] px-3.5 flex-row items-center gap-1.5 mb-2 cursor-pointer ${judgeScore !== null ? "bg-[#E91E76]/15 border border-[#E91E76]" : "bg-[#E91E76]"}`}
               >
-                {judgeScore !== null ? `${judgeScore.toFixed(1)} ★` : "JUDGE"}
-              </Text>
+                <Gauge color={judgeScore !== null ? "#E91E76" : "#fff"} size={13} />
+                <Text
+                  className={`text-[10px] font-bold tracking-wider uppercase mt-0.5 ${judgeScore !== null ? "text-[#E91E76]" : "text-white"}`}
+                >
+                  {judgeScore !== null ? `${judgeScore.toFixed(1)} ★` : "JUDGE"}
+                </Text>
+              </View>
             </View>
-          </View>
+          )}
         </View>
       </View>
       <View className="w-full h-[1px] bg-white/5 mt-5" />
@@ -791,7 +801,12 @@ function ProfileFeedVideoCard({
                   <Gauge color="#E91E76" size={20} />
                   <Text className="text-white text-lg font-bold">Judge Performance</Text>
                 </View>
-                <TouchableOpacity onPress={() => setShowJudgeModal(false)} className="p-1">
+                <TouchableOpacity
+                  onPress={() => setShowJudgeModal(false)}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  activeOpacity={0.7}
+                  className="p-1"
+                >
                   <X color="#9CA3AF" size={20} />
                 </TouchableOpacity>
               </View>
@@ -945,6 +960,7 @@ export function ProfileView({
   const [profileData, setProfileData] = useState<any>(null);
   const [shows, setShows] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const { user: authUser, checkAuth } = useAuthStore();
   const { theme, themeId, setTheme } = useThemeStore();
@@ -961,6 +977,8 @@ export function ProfileView({
   const [isEditCaptionModalVisible, setIsEditCaptionModalVisible] = useState(false);
   const [isDeleteConfirmModalVisible, setIsDeleteConfirmModalVisible] = useState(false);
   const [editPostTitle, setEditPostTitle] = useState("");
+  const [editAllowJudging, setEditAllowJudging] = useState(true);
+  const [editAllowComments, setEditAllowComments] = useState(true);
   const [isDeletingPost, setIsDeletingPost] = useState(false);
   const [isSavingPostEdit, setIsSavingPostEdit] = useState(false);
   const [deletedVideoIds, setDeletedVideoIds] = useState<Set<string>>(new Set());
@@ -1027,25 +1045,40 @@ export function ProfileView({
         typeof postId === "number" ||
         (!isNaN(Number(postId)) && !String(postId).startsWith("dummy") && !String(postId).startsWith("featured"))
       ) {
-        await api.put(`/videos/${postId}`, { title: newTitle });
+        await api.put(`/videos/${postId}`, { 
+          title: newTitle,
+          allowJudging: editAllowJudging,
+          allowComments: editAllowComments
+        });
       }
 
       setEditedTitles((prev) => ({ ...prev, [String(postId)]: newTitle }));
       setProfileData((prev: any) => {
         if (!prev) return prev;
         const updatedVideos = (prev.videos || []).map((v: any) =>
-          String(v.id) === String(postId) ? { ...v, title: newTitle } : v
+          String(v.id) === String(postId) 
+            ? { ...v, title: newTitle, allowJudging: editAllowJudging, allowComments: editAllowComments } 
+            : v
         );
         return { ...prev, videos: updatedVideos };
       });
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("Updated", "Performance title updated successfully.");
+      Alert.alert("Updated", "Performance details updated successfully.");
       setIsEditCaptionModalVisible(false);
     } catch (error) {
       console.error("Failed to update video:", error);
       setEditedTitles((prev) => ({ ...prev, [String(postId)]: newTitle }));
-      Alert.alert("Updated", "Performance title updated locally.");
+      setProfileData((prev: any) => {
+        if (!prev) return prev;
+        const updatedVideos = (prev.videos || []).map((v: any) =>
+          String(v.id) === String(postId) 
+            ? { ...v, title: newTitle, allowJudging: editAllowJudging, allowComments: editAllowComments } 
+            : v
+        );
+        return { ...prev, videos: updatedVideos };
+      });
+      Alert.alert("Updated", "Performance details updated locally.");
       setIsEditCaptionModalVisible(false);
     } finally {
       setIsSavingPostEdit(false);
@@ -1249,6 +1282,19 @@ export function ProfileView({
     fetchProfile();
   }, [fetchProfile]);
 
+  const onRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await fetchProfile();
+      if (activeTab === "Kept") {
+        await useKeptStore.getState().fetchKept();
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [fetchProfile, activeTab]);
+
   useFocusEffect(
     useCallback(() => {
       fetchProfile();
@@ -1439,6 +1485,15 @@ export function ProfileView({
             paddingHorizontal: 16,
             paddingBottom: 100,
           }}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.primary}
+              colors={[theme.primary]}
+              progressBackgroundColor={theme.cardBg}
+            />
+          }
         >
           {profileData?.videos
             ?.filter((v: any) => !deletedVideoIds.has(String(v.id || '')))
@@ -1573,7 +1628,15 @@ export function ProfileView({
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 100 }}
-        bounces={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.primary}
+            colors={[theme.primary]}
+            progressBackgroundColor={theme.cardBg}
+          />
+        }
       >
         {/* Top Actions */}
         <View 
@@ -3465,7 +3528,12 @@ export function ProfileView({
                 <Text className="text-[20px] font-bold" style={{ color: theme.text }}>
                   Invite {profileData?.name || "Artist"}
                 </Text>
-                <TouchableOpacity onPress={() => setIsInviteModalOpen(false)}>
+                <TouchableOpacity
+                  onPress={() => setIsInviteModalOpen(false)}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  activeOpacity={0.7}
+                  className="p-1 -mr-1"
+                >
                   <X color={theme.textSecondary} size={24} />
                 </TouchableOpacity>
               </View>
@@ -3555,7 +3623,12 @@ export function ProfileView({
                     Blind Score Breakdown
                   </Text>
                 </View>
-                <TouchableOpacity onPress={() => setIsScoreBreakdownOpen(false)}>
+                <TouchableOpacity
+                  onPress={() => setIsScoreBreakdownOpen(false)}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  activeOpacity={0.7}
+                  className="p-1 -mr-1"
+                >
                   <X color={theme.textSecondary} size={24} />
                 </TouchableOpacity>
               </View>
@@ -3855,6 +3928,9 @@ export function ProfileView({
                     <TouchableOpacity
                       onPress={() => {
                         setIsPostOptionsModalVisible(false);
+                        setEditPostTitle(editedTitles[selectedPostForOptions.id] || selectedPostForOptions.title || "");
+                        setEditAllowJudging(selectedPostForOptions.allowJudging !== false);
+                        setEditAllowComments(selectedPostForOptions.allowComments !== false);
                         setIsEditCaptionModalVisible(true);
                       }}
                       className="flex-row items-center justify-between p-3.5 rounded-2xl active:opacity-70"
@@ -4099,9 +4175,63 @@ export function ProfileView({
                   borderColor: theme.border,
                   color: theme.text,
                 }}
-                className="border rounded-xl px-4 py-3 text-[14px] mb-5"
+                className="border rounded-xl px-4 py-3 text-[14px] mb-4"
                 autoFocus
               />
+
+              {/* Allow Judging Setting */}
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setEditAllowJudging(!editAllowJudging);
+                }}
+                className="flex-row items-center justify-between py-3 border-t border-b mb-3"
+                style={{ borderColor: theme.border }}
+              >
+                <View className="flex-1 pr-3">
+                  <Text className="font-bold text-[14px]" style={{ color: theme.text }}>
+                    Allow Judging
+                  </Text>
+                  <Text className="text-[11px]" style={{ color: theme.textSecondary }}>
+                    Show Talent Score judge slider
+                  </Text>
+                </View>
+                <View pointerEvents="none">
+                  {editAllowJudging ? (
+                    <ToggleRight color={theme.primary} size={36} />
+                  ) : (
+                    <ToggleLeft color={theme.textSecondary} size={36} />
+                  )}
+                </View>
+              </TouchableOpacity>
+
+              {/* Allow Comments Setting */}
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setEditAllowComments(!editAllowComments);
+                }}
+                className="flex-row items-center justify-between py-3 border-b mb-5"
+                style={{ borderColor: theme.border }}
+              >
+                <View className="flex-1 pr-3">
+                  <Text className="font-bold text-[14px]" style={{ color: theme.text }}>
+                    Allow Comments (Talk)
+                  </Text>
+                  <Text className="text-[11px]" style={{ color: theme.textSecondary }}>
+                    Let viewers discuss and give feedback
+                  </Text>
+                </View>
+                <View pointerEvents="none">
+                  {editAllowComments ? (
+                    <ToggleRight color={theme.primary} size={36} />
+                  ) : (
+                    <ToggleLeft color={theme.textSecondary} size={36} />
+                  )}
+                </View>
+              </TouchableOpacity>
 
               <View className="flex-row gap-3">
                 <TouchableOpacity

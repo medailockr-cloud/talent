@@ -95,8 +95,8 @@ function FlipSlideItem({
       />
         
       {/* Core UI Gradients for Cinematic Feel */}
-      <View className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-80" />
-      <View className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-transparent opacity-60" />
+      <View pointerEvents="none" className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-80" />
+      <View pointerEvents="none" className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-transparent opacity-60" />
 
       {/* Top Minimalist Header */}
       <View className="absolute top-14 w-full flex-row justify-between items-center px-6 z-20">
@@ -107,6 +107,8 @@ function FlipSlideItem({
         <View className="flex-row items-center gap-2">
           <TouchableOpacity 
             onPress={() => setIsMuted(!isMuted)}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            activeOpacity={0.7}
             className="bg-white/10 w-8 h-8 rounded-full border border-white/20 items-center justify-center backdrop-blur-md"
           >
             {isMuted ? (
@@ -123,7 +125,7 @@ function FlipSlideItem({
 
       {/* The New "Glass Pill" Interactive Sidebar */}
       <View className="absolute right-4 bottom-32 items-center z-20 gap-4 bg-white/5 py-4 px-2.5 rounded-[30px] border border-white/10 backdrop-blur-xl">
-        <TouchableOpacity className="items-center gap-1 mb-2">
+        <TouchableOpacity activeOpacity={0.7} className="items-center gap-1 mb-2">
           <View 
             style={{ backgroundColor: theme.primary + '25', borderColor: theme.primary }}
             className="w-10 h-10 rounded-full border items-center justify-center"
@@ -133,28 +135,32 @@ function FlipSlideItem({
           <Text className="text-white font-bold text-[10px]">{item.talentScore}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity className="items-center gap-1 mb-2">
+        <TouchableOpacity activeOpacity={0.7} className="items-center gap-1 mb-2">
           <View className="w-10 h-10 rounded-full bg-black/40 items-center justify-center border border-white/10">
             <ChevronUp color="#fff" size={24} strokeWidth={3} />
           </View>
           <Text className="text-white/70 font-bold text-[9px]">HYPE</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity className="items-center gap-1 mb-2">
+        <TouchableOpacity activeOpacity={0.7} className="items-center gap-1 mb-2">
           <View className="w-10 h-10 rounded-full bg-black/40 items-center justify-center border border-white/10">
             <Bookmark color="#fff" size={20} />
           </View>
           <Text className="text-white/70 font-bold text-[9px]">KEEP</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity className="items-center gap-1 mb-2">
+        <TouchableOpacity activeOpacity={0.7} className="items-center gap-1 mb-2">
           <View className="w-10 h-10 rounded-full bg-black/40 items-center justify-center border border-white/10">
             <Send color="#fff" size={18} />
           </View>
           <Text className="text-white/70 font-bold text-[9px]">SHARE</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity className="w-8 h-8 rounded-full bg-white/10 items-center justify-center mt-2">
+        <TouchableOpacity
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          activeOpacity={0.7}
+          className="w-8 h-8 rounded-full bg-white/10 items-center justify-center mt-2"
+        >
           <MoreHorizontal color="#fff" size={16} />
         </TouchableOpacity>
       </View>

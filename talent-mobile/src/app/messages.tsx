@@ -337,7 +337,12 @@ export default function MessagesScreen() {
           clearButtonMode="while-editing"
         />
         {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} className="p-1">
+          <TouchableOpacity
+            onPress={() => setSearchQuery('')}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            activeOpacity={0.7}
+            className="p-1"
+          >
             <X color={theme.textSecondary} size={16} />
           </TouchableOpacity>
         )}

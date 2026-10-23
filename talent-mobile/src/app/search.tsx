@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Image } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Image, RefreshControl } from 'react-native';
 import { Search, X, ChevronLeft, ChevronRight, User as UserIcon, Video as VideoIcon, MapPin, Star, Heart, Sparkles } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { api } from '../utils/api';
@@ -44,6 +44,7 @@ export default function DiscoverScreen() {
   const [users, setUsers] = useState<UserResult[]>([]);
   const [videos, setVideos] = useState<VideoResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     if (params.q && typeof params.q === 'string' && params.q !== searchQuery) {
@@ -53,28 +54,34 @@ export default function DiscoverScreen() {
 
   const categories = ['All', 'Music', 'Singing', 'Dance', 'Guitar', 'Beatbox', 'Comedy', 'Art'];
 
+  const fetchResults = useCallback(async () => {
+    try {
+      let endpoint = '/discover?';
+      if (searchQuery) endpoint += `q=${encodeURIComponent(searchQuery)}&`;
+      if (category && category !== 'All') endpoint += `category=${encodeURIComponent(category)}`;
+      const res = await api.get(endpoint);
+      setUsers(res.data.users || []);
+      setVideos(res.data.videos || []);
+    } catch (error) {
+      console.error('Discover search error:', error);
+    }
+  }, [searchQuery, category]);
+
   useEffect(() => {
-    const fetchResults = async () => {
-      setIsLoading(true);
-      try {
-        let endpoint = '/discover?';
-        if (searchQuery) endpoint += `q=${encodeURIComponent(searchQuery)}&`;
-        if (category && category !== 'All') endpoint += `category=${encodeURIComponent(category)}`;
-        const res = await api.get(endpoint);
-        setUsers(res.data.users || []);
-        setVideos(res.data.videos || []);
-      } catch (error) {
-        console.error('Discover search error:', error);
-      }
-      setIsLoading(false);
-    };
-    
+    setIsLoading(true);
     // Debounce search
     const timer = setTimeout(() => {
-      fetchResults();
+      fetchResults().finally(() => setIsLoading(false));
     }, 250);
     return () => clearTimeout(timer);
-  }, [searchQuery, category]);
+  }, [fetchResults]);
+
+  const onRefresh = async () => {
+    setIsRefreshing(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await fetchResults();
+    setIsRefreshing(false);
+  };
 
   const totalResults = users.length + videos.length;
 
@@ -113,7 +120,12 @@ export default function DiscoverScreen() {
             autoFocus
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')} className="p-1">
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              activeOpacity={0.7}
+              className="p-1"
+            >
               <X color={theme.textSecondary} size={16} />
             </TouchableOpacity>
           )}
@@ -211,7 +223,19 @@ export default function DiscoverScreen() {
           <ActivityIndicator color={theme.primary} size="large" />
         </View>
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} className="flex-1 px-4 pt-3">
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          className="flex-1 px-4 pt-3"
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.primary}
+              colors={[theme.primary]}
+              progressBackgroundColor={theme.cardBg}
+            />
+          }
+        >
           {totalResults === 0 ? (
             <View className="items-center justify-center mt-16 px-6">
               <View 

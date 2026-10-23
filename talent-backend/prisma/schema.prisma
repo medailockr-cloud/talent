@@ -52,6 +52,7 @@ model Video {
   purpose      String?
   location     String?
   allowJudging Boolean   @default(true)
+  allowComments Boolean  @default(true)
   isDraft      Boolean   @default(false)
   privacy      String    @default("PUBLIC") // PUBLIC, PRIVATE, FRIENDS
   

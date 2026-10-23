@@ -132,6 +132,8 @@ export function FollowersModal({
             </View>
             <TouchableOpacity
               onPress={onClose}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              activeOpacity={0.7}
               style={{ backgroundColor: theme.surfaceBg }}
               className="w-8 h-8 rounded-full items-center justify-center"
             >
@@ -186,7 +188,12 @@ export function FollowersModal({
                 className="flex-1 text-[13px] p-0"
               />
               {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <TouchableOpacity
+                  onPress={() => setSearchQuery('')}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  activeOpacity={0.7}
+                  className="p-1"
+                >
                   <X color={theme.textSecondary} size={14} />
                 </TouchableOpacity>
               )}

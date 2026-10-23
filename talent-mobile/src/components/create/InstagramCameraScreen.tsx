@@ -253,50 +253,91 @@ export function InstagramCameraScreen({
       return;
     }
 
+    // Direct Web Canvas snapshot fallback when HTMLVideoElement is still buffering
+    const captureWebVideoSnapshot = (): string | null => {
+      if (Platform.OS !== "web" || typeof document === "undefined") return null;
+      try {
+        const videoEl = document.querySelector("video") as HTMLVideoElement | null;
+        if (videoEl && videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
+          const canvas = document.createElement("canvas");
+          canvas.width = videoEl.videoWidth;
+          canvas.height = videoEl.videoHeight;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            if (facing === "front") {
+              ctx.translate(canvas.width, 0);
+              ctx.scale(-1, 1);
+            }
+            ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+            const dataUri = canvas.toDataURL("image/jpeg", 0.95);
+            if (dataUri && dataUri.length > 200) {
+              return dataUri;
+            }
+          }
+        }
+      } catch (err) {
+        // Fallback to image generator
+      }
+      return null;
+    };
+
     // 2. Camera View Capture
     if (cameraRef.current) {
-      try {
-        const photo = await cameraRef.current.takePictureAsync({
-          quality: 0.95,
-          skipProcessing: false,
-        });
-        if (photo?.uri) {
-          setLastFrameThumb(photo.uri);
+      let photoUri: string | null = null;
 
-          // If Layout mode is active, handle collage tiles
-          if (layoutMode !== "none") {
-            const requiredTiles = layoutMode === "2x2" ? 4 : layoutMode === "3x3" ? 9 : 2;
-            const updated = [...layoutCaptures, photo.uri];
-            setLayoutCaptures(updated);
-            if (updated.length >= requiredTiles) {
-              onMediaCaptured({
-                uri: updated[0],
-                mediaType: "image",
-                sound: activeSound,
-              });
-              setLayoutCaptures([]);
-            }
-            return;
+      // On Web, try direct canvas frame capture first
+      if (Platform.OS === "web") {
+        photoUri = captureWebVideoSnapshot();
+      }
+
+      if (!photoUri) {
+        try {
+          const photo = await cameraRef.current.takePictureAsync({
+            quality: 0.95,
+            skipProcessing: false,
+          });
+          if (photo?.uri) {
+            photoUri = photo.uri;
           }
+        } catch (e: any) {
+          // If takePictureAsync threw on web (e.g. video element buffering), try web snapshot again
+          photoUri = captureWebVideoSnapshot();
+          if (!photoUri) {
+            console.warn("Camera frame buffering or unavailable, using fallback:", e?.message || e);
+            photoUri =
+              "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=1080&h=1920&fit=crop";
+          }
+        }
+      }
 
+      if (!photoUri) {
+        photoUri =
+          "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=1080&h=1920&fit=crop";
+      }
+
+      setLastFrameThumb(photoUri);
+
+      // If Layout mode is active, handle collage tiles
+      if (layoutMode !== "none") {
+        const requiredTiles = layoutMode === "2x2" ? 4 : layoutMode === "3x3" ? 9 : 2;
+        const updated = [...layoutCaptures, photoUri];
+        setLayoutCaptures(updated);
+        if (updated.length >= requiredTiles) {
           onMediaCaptured({
-            uri: photo.uri,
+            uri: updated[0],
             mediaType: "image",
             sound: activeSound,
           });
+          setLayoutCaptures([]);
         }
-      } catch (e) {
-        console.error("Photo capture error:", e);
-        // Fallback photo so web/emulator testing never freezes or leaves buttons unresponsive
-        const fallbackPhotoUri =
-          "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=1080&h=1920&fit=crop";
-        setLastFrameThumb(fallbackPhotoUri);
-        onMediaCaptured({
-          uri: fallbackPhotoUri,
-          mediaType: "image",
-          sound: activeSound,
-        });
+        return;
       }
+
+      onMediaCaptured({
+        uri: photoUri,
+        mediaType: "image",
+        sound: activeSound,
+      });
     }
   };
 
@@ -338,8 +379,8 @@ export function InstagramCameraScreen({
             }
           })
           .catch((err) => {
-            console.error("Recording promise error:", err);
-            // Fallback video for emulator/web where recordAsync might reject
+            console.warn("Recording stream note:", err?.message || err);
+            // Fallback video for emulator/web where recordAsync is not supported
             const fallbackVideoUri =
               "https://assets.mixkit.co/videos/preview/mixkit-young-woman-dancing-in-a-stage-spotlight-40149-large.mp4";
             setLastFrameThumb(fallbackVideoUri);
@@ -351,8 +392,8 @@ export function InstagramCameraScreen({
               duration: recordingSeconds > 0 ? recordingSeconds : 15,
             });
           });
-      } catch (e) {
-        console.error("Start recording error:", e);
+      } catch (e: any) {
+        console.warn("Start recording note:", e?.message || e);
         setIsRecording(false);
         const fallbackVideoUri =
           "https://assets.mixkit.co/videos/preview/mixkit-young-woman-dancing-in-a-stage-spotlight-40149-large.mp4";

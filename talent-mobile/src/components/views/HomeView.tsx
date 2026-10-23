@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, Image, Alert, TextInput, Platform, ScrollView, Modal, Dimensions, PanResponder, KeyboardAvoidingView, ActivityIndicator, Share as RNShare } from 'react-native';
+import { View, Text, TouchableOpacity, Image, Alert, TextInput, Platform, ScrollView, Modal, Dimensions, PanResponder, KeyboardAvoidingView, ActivityIndicator, Share as RNShare, RefreshControl } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, { 
   useSharedValue, 
@@ -61,6 +61,7 @@ function FeedVideoCard({
   const isKept = useKeptStore(state => Boolean(state.keptRecord[String(video.id)]));
   const [justKeptToast, setJustKeptToast] = useState(false);
   const [isCopiedToast, setIsCopiedToast] = useState(false);
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const keptText = justKeptToast ? 'KEPT ✓' : isKept ? 'KEPT' : 'KEEP';
 
   const authorName = typeof video.author === 'object' && video.author !== null
@@ -201,6 +202,7 @@ function FeedVideoCard({
   const isBlind = Boolean(isBlindMode && !isRevealed && judgeScore === null);
 
   const saveScore = (score: number) => {
+    if (video.allowJudging === false) return;
     setIsRevealed(true);
     const finalScore = parseFloat(Math.max(1.0, Math.min(10.0, score)).toFixed(1));
     setJudgeScore(finalScore);
@@ -212,6 +214,7 @@ function FeedVideoCard({
   };
 
   const handleGestureStart = (clientY?: number) => {
+    if (video.allowJudging === false) return;
     const initial = judgeScoreRef.current ?? 5.0;
     startScoreRef.current = initial;
     tempScoreRef.current = initial;
@@ -347,23 +350,31 @@ function FeedVideoCard({
   };
 
   const handlePostComment = () => {
-        if (!commentText.trim()) return;
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        const newComment = {
-          id: Math.random().toString(),
-          author: 'You',
-          text: commentText,
-          time: 'Just now',
-          isUseful: false,
-          timestamp: attachMoment ? '00:38' : null
-        };
-        setComments([...comments, newComment]);
-        
-        api.post(`/videos/${video.id}/comment`, { text: commentText }).catch(err => console.error("Comment err:", err));
-        
-        setCommentText('');
-        setAttachMoment(false);
-      };
+    if (video.allowComments === false) {
+      Alert.alert('Comments Disabled', 'Comments are disabled for this performance by the artist.');
+      return;
+    }
+    if (!commentText.trim()) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const newComment = {
+      id: Math.random().toString(),
+      author: 'You',
+      text: commentText,
+      time: 'Just now',
+      isUseful: false,
+      timestamp: attachMoment ? '00:38' : null
+    };
+    setComments([...comments, newComment]);
+    
+    api.post(`/videos/${video.id}/comment`, { text: commentText }).catch(err => {
+      console.error("Comment err:", err);
+      const errMsg = err?.response?.data?.error || 'Failed to post comment';
+      Alert.alert('Cannot Comment', errMsg);
+    });
+    
+    setCommentText('');
+    setAttachMoment(false);
+  };
 
   const toggleUseful = (id: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -409,7 +420,9 @@ function FeedVideoCard({
         <View pointerEvents="none" className="absolute top-3.5 inset-x-3.5 flex-row items-center justify-between z-10">
           <View className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15">
             <View className="w-1.5 h-1.5 rounded-full bg-[#E91E76]" />
-            <Text className="text-[10px] font-bold tracking-wider text-white uppercase">PERFORMANCE</Text>
+            <Text className="text-[10px] font-bold tracking-wider text-white uppercase">
+              {video.category ? video.category.toUpperCase() : 'PERFORMANCE'}
+            </Text>
             <View className="w-1 h-1 rounded-full bg-white/40" />
             <Text className="text-white/80 text-[10px] font-semibold">{formatTime(duration) || video.duration || '0:58'}</Text>
           </View>
@@ -596,6 +609,51 @@ function FeedVideoCard({
         </TouchableOpacity>
       </View>
 
+      {/* Performance Title & Details */}
+      <View className="px-1.5 mb-3">
+        <View className="flex-row items-start justify-between gap-2">
+          <Text 
+            style={{ color: theme.text }} 
+            className="text-[16px] font-extrabold tracking-tight leading-snug flex-1" 
+            numberOfLines={2}
+          >
+            {isBlind ? "Blind Audition Take" : (video.title || "Untitled Performance")}
+          </Text>
+          {Boolean(!isBlind && (video.category || video.subCategory)) && (
+            <View 
+              style={{ backgroundColor: theme.primary + '18', borderColor: theme.primary + '35' }}
+              className="px-2.5 py-0.5 rounded-full border self-start mt-0.5"
+            >
+              <Text style={{ color: theme.primary }} className="text-[10px] font-bold uppercase tracking-wider">
+                {video.category || video.subCategory}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {Boolean(video.description) && (
+          <Text 
+            style={{ color: theme.textSecondary }} 
+            className="text-[13px] leading-relaxed mt-1" 
+            numberOfLines={isDescriptionExpanded ? undefined : 2}
+          >
+            {video.description}
+          </Text>
+        )}
+
+        {Boolean(video.description && video.description.length > 85) && (
+          <TouchableOpacity 
+            activeOpacity={0.7}
+            onPress={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
+            className="mt-0.5 self-start"
+          >
+            <Text style={{ color: theme.primary }} className="text-[11px] font-semibold">
+              {isDescriptionExpanded ? "Show less" : "More"}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
       {/* Main Actions Row */}
       <View 
         style={{ borderTopColor: theme.border }}
@@ -606,10 +664,21 @@ function FeedVideoCard({
             <Bookmark color={isKept ? theme.primary : theme.text} fill={isKept ? theme.primary : "transparent"} size={22} strokeWidth={1.7} />
             <Text style={{ color: isKept ? theme.primary : theme.textSecondary }} className="text-[9px] font-bold tracking-widest uppercase">{keptText}</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setIsCommenting(true); }} activeOpacity={0.7} className="items-center gap-1 min-w-[38px]">
-            <MessageCircle color={theme.text} size={22} strokeWidth={1.7} />
-            <Text style={{ color: theme.textSecondary }} className="text-[9px] font-bold tracking-widest uppercase">TALK</Text>
-          </TouchableOpacity>
+          {video.allowComments !== false && (
+            <TouchableOpacity 
+              onPress={() => { 
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); 
+                setIsCommenting(true); 
+              }} 
+              activeOpacity={0.7} 
+              className="items-center gap-1 min-w-[38px]"
+            >
+              <MessageCircle color={theme.text} size={22} strokeWidth={1.7} />
+              <Text style={{ color: theme.textSecondary }} className="text-[9px] font-bold tracking-widest uppercase">
+                TALK
+              </Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={handleShare} activeOpacity={0.7} className="items-center gap-1 min-w-[38px]">
             <Share2 color={isCopiedToast ? theme.primary : theme.text} size={21} strokeWidth={1.7} />
             <Text style={{ color: isCopiedToast ? theme.primary : theme.textSecondary }} className="text-[9px] font-bold tracking-widest uppercase">
@@ -619,53 +688,57 @@ function FeedVideoCard({
         </View>
 
         {/* SCROLLING JUDGE BUTTON with Direct Drag Gesture */}
-        <View 
-          {...panResponder.panHandlers}
-          {...webPointerHandlers}
-          style={{
-            touchAction: 'none',
-            userSelect: 'none',
-            cursor: 'ns-resize',
-            backgroundColor: isJudgingActive 
-              ? theme.primary 
-              : judgeScore !== null 
-                ? theme.primary + '25' 
-                : theme.primary,
-            borderColor: judgeScore !== null && !isJudgingActive ? theme.primary : undefined,
-            borderWidth: judgeScore !== null && !isJudgingActive ? 1 : 0,
-          } as any}
-          className={`rounded-full h-[36px] px-4 flex-row items-center gap-2 shadow-lg select-none ${
-            isJudgingActive ? 'scale-105' : ''
-          }`}
-        >
-          <Gauge color={judgeScore !== null && !isJudgingActive ? theme.primary : "#fff"} size={14} />
-          <Text 
-            style={{ color: judgeScore !== null && !isJudgingActive ? theme.primary : '#ffffff' }}
-            className="text-[11px] font-bold tracking-wider uppercase select-none"
+        {video.allowJudging !== false && (
+          <View 
+            {...panResponder.panHandlers}
+            {...webPointerHandlers}
+            style={{
+              touchAction: 'none',
+              userSelect: 'none',
+              cursor: 'ns-resize',
+              backgroundColor: isJudgingActive 
+                ? theme.primary 
+                : judgeScore !== null 
+                  ? theme.primary + '25' 
+                  : theme.primary,
+              borderColor: judgeScore !== null && !isJudgingActive ? theme.primary : undefined,
+              borderWidth: judgeScore !== null && !isJudgingActive ? 1 : 0,
+            } as any}
+            className={`rounded-full h-[36px] px-4 flex-row items-center gap-2 shadow-lg select-none ${
+              isJudgingActive ? 'scale-105' : ''
+            }`}
           >
-            {isJudgingActive 
-              ? `${tempScore.toFixed(1)} ★` 
-              : judgeScore !== null 
-                ? `${judgeScore.toFixed(1)} ★` 
-                : 'JUDGE ↕'}
-          </Text>
-        </View>
+            <Gauge color={judgeScore !== null && !isJudgingActive ? theme.primary : "#fff"} size={14} />
+            <Text 
+              style={{ color: judgeScore !== null && !isJudgingActive ? theme.primary : '#ffffff' }}
+              className="text-[11px] font-bold tracking-wider uppercase select-none"
+            >
+              {isJudgingActive 
+                ? `${tempScore.toFixed(1)} ★` 
+                : judgeScore !== null 
+                  ? `${judgeScore.toFixed(1)} ★` 
+                  : 'JUDGE ↕'}
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Judging Criteria Footer Row - Completely Separated to Prevent Cramping */}
-      <View 
-        style={{ borderTopColor: theme.border }}
-        className="flex-row items-center justify-between pt-2.5 mt-2 border-t px-2"
-      >
-        <Text style={{ color: theme.textSecondary }} className="text-[10px] font-medium tracking-wide">Judging criteria</Text>
-        <View className="flex-row items-center gap-2">
-          <Text style={{ color: theme.textSecondary }} className="text-[9px] font-semibold uppercase tracking-wider">Presence</Text>
-          <View style={{ backgroundColor: theme.primary }} className="w-1 h-1 rounded-full opacity-70" />
-          <Text style={{ color: theme.textSecondary }} className="text-[9px] font-semibold uppercase tracking-wider">Originality</Text>
-          <View style={{ backgroundColor: theme.primary }} className="w-1 h-1 rounded-full opacity-70" />
-          <Text style={{ color: theme.textSecondary }} className="text-[9px] font-semibold uppercase tracking-wider">Craft</Text>
+      {video.allowJudging !== false && (
+        <View 
+          style={{ borderTopColor: theme.border }}
+          className="flex-row items-center justify-between pt-2.5 mt-2 border-t px-2"
+        >
+          <Text style={{ color: theme.textSecondary }} className="text-[10px] font-medium tracking-wide">Judging criteria</Text>
+          <View className="flex-row items-center gap-2">
+            <Text style={{ color: theme.textSecondary }} className="text-[9px] font-semibold uppercase tracking-wider">Presence</Text>
+            <View style={{ backgroundColor: theme.primary }} className="w-1 h-1 rounded-full opacity-70" />
+            <Text style={{ color: theme.textSecondary }} className="text-[9px] font-semibold uppercase tracking-wider">Originality</Text>
+            <View style={{ backgroundColor: theme.primary }} className="w-1 h-1 rounded-full opacity-70" />
+            <Text style={{ color: theme.textSecondary }} className="text-[9px] font-semibold uppercase tracking-wider">Craft</Text>
+          </View>
         </View>
-      </View>
+      )}
 
       {/* Options Menu Sheet */}
       {showOptions && (
@@ -718,9 +791,11 @@ function FeedVideoCard({
                 style={{ borderBottomColor: theme.border }}
                 className="flex-row justify-between items-center p-5 border-b"
               >
-                <View>
+                <View className="flex-1 mr-3">
                   <Text style={{ color: theme.text }} className="text-[16px] font-bold tracking-wider">TALK</Text>
-                  <Text style={{ color: theme.textSecondary }} className="text-[12px] mt-0.5">{authorName}</Text>
+                  <Text style={{ color: theme.textSecondary }} className="text-[12px] mt-0.5" numberOfLines={1}>
+                    {video.title ? `"${video.title}" • ${authorName}` : authorName}
+                  </Text>
                 </View>
                 <TouchableOpacity 
                   onPress={() => setIsCommenting(false)} 
@@ -787,58 +862,70 @@ function FeedVideoCard({
                 <View className="h-10" />
               </ScrollView>
               
-              <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+              {video.allowComments === false ? (
                 <View 
-                  style={{ borderTopColor: theme.border, backgroundColor: theme.cardBg }}
-                  className="p-4 border-t"
+                  style={{ borderTopColor: theme.border, backgroundColor: theme.surfaceBg }}
+                  className="p-5 border-t items-center justify-center flex-row gap-2.5"
                 >
-                  <View className="flex-row items-center gap-3">
-                    <View 
-                      style={{ borderColor: theme.border, backgroundColor: theme.surfaceBg }}
-                      className="w-8 h-8 rounded-full items-center justify-center border"
-                    >
-                      <User color={theme.textSecondary} size={15} />
-                    </View>
-                    <TextInput
-                      value={commentText}
-                      onChangeText={setCommentText}
-                      placeholder="Talk about this performance..."
-                      placeholderTextColor={theme.textSecondary}
-                      style={{ 
-                        backgroundColor: theme.surfaceBg, 
-                        borderColor: theme.border,
-                        color: theme.text 
-                      }}
-                      className="flex-1 text-[13px] px-4 py-2.5 rounded-full border"
-                      onSubmitEditing={handlePostComment}
-                      returnKeyType="send"
-                    />
-                    <TouchableOpacity 
-                      onPress={handlePostComment} 
-                      disabled={!commentText.trim()} 
-                      style={{ backgroundColor: commentText.trim() ? theme.primary : theme.surfaceBg }}
-                      className="w-8 h-8 rounded-full items-center justify-center"
-                    >
-                      <Send color={commentText.trim() ? "#fff" : theme.textSecondary} size={14} style={{ transform: [{ rotate: '45deg' }], marginLeft: -2 }} />
-                    </TouchableOpacity>
-                  </View>
-                  <View className="flex-row items-center gap-4 mt-3 ml-11">
-                    <TouchableOpacity 
-                      onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setAttachMoment(!attachMoment); }} 
-                      style={attachMoment ? { backgroundColor: theme.primary + '25', borderColor: theme.primary } : { backgroundColor: theme.surfaceBg, borderColor: theme.border }}
-                      className="flex-row items-center gap-1.5 px-2.5 py-1 rounded-full border"
-                    >
-                      <Text style={{ color: attachMoment ? theme.primary : theme.textSecondary }} className="text-[10px] font-medium">○ Attach moment</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
-                      className="flex-row items-center gap-1.5 px-2.5 py-1 rounded-full border"
-                    >
-                      <Text style={{ color: theme.textSecondary }} className="text-[10px] font-medium">🎤 Voice</Text>
-                    </TouchableOpacity>
-                  </View>
+                  <EyeOff color={theme.textSecondary} size={16} />
+                  <Text style={{ color: theme.textSecondary }} className="text-[12px] font-medium">
+                    Comments are turned off for this performance by the artist.
+                  </Text>
                 </View>
-              </KeyboardAvoidingView>
+              ) : (
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+                  <View 
+                    style={{ borderTopColor: theme.border, backgroundColor: theme.cardBg }}
+                    className="p-4 border-t"
+                  >
+                    <View className="flex-row items-center gap-3">
+                      <View 
+                        style={{ borderColor: theme.border, backgroundColor: theme.surfaceBg }}
+                        className="w-8 h-8 rounded-full items-center justify-center border"
+                      >
+                        <User color={theme.textSecondary} size={15} />
+                      </View>
+                      <TextInput
+                        value={commentText}
+                        onChangeText={setCommentText}
+                        placeholder="Talk about this performance..."
+                        placeholderTextColor={theme.textSecondary}
+                        style={{ 
+                          backgroundColor: theme.surfaceBg, 
+                          borderColor: theme.border,
+                          color: theme.text 
+                        }}
+                        className="flex-1 text-[13px] px-4 py-2.5 rounded-full border"
+                        onSubmitEditing={handlePostComment}
+                        returnKeyType="send"
+                      />
+                      <TouchableOpacity 
+                        onPress={handlePostComment} 
+                        disabled={!commentText.trim()} 
+                        style={{ backgroundColor: commentText.trim() ? theme.primary : theme.surfaceBg }}
+                        className="w-8 h-8 rounded-full items-center justify-center"
+                      >
+                        <Send color={commentText.trim() ? "#fff" : theme.textSecondary} size={14} style={{ transform: [{ rotate: '45deg' }], marginLeft: -2 }} />
+                      </TouchableOpacity>
+                    </View>
+                    <View className="flex-row items-center gap-4 mt-3 ml-11">
+                      <TouchableOpacity 
+                        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setAttachMoment(!attachMoment); }} 
+                        style={attachMoment ? { backgroundColor: theme.primary + '25', borderColor: theme.primary } : { backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                        className="flex-row items-center gap-1.5 px-2.5 py-1 rounded-full border"
+                      >
+                        <Text style={{ color: attachMoment ? theme.primary : theme.textSecondary }} className="text-[10px] font-medium">○ Attach moment</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                        className="flex-row items-center gap-1.5 px-2.5 py-1 rounded-full border"
+                      >
+                        <Text style={{ color: theme.textSecondary }} className="text-[10px] font-medium">🎤 Voice</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </KeyboardAvoidingView>
+              )}
             </View>
           </View>
         </Modal>
@@ -941,6 +1028,15 @@ export function HomeView({ user }: { user?: any }) {
       useKeptStore.getState().fetchKept();
     }
   }, [activeFeedTab]);
+
+  const handleRefresh = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (activeFeedTab === 'Kept') {
+      await useKeptStore.getState().fetchKept();
+    } else {
+      await refetch();
+    }
+  }, [activeFeedTab, refetch]);
 
   const handleToggleKeep = useCallback((id: string, isSaved: boolean) => {
     if (feedData && Array.isArray(feedData)) {
@@ -1132,6 +1228,16 @@ export function HomeView({ user }: { user?: any }) {
         onMomentumScrollEnd={handleScroll}
         onScrollEndDrag={handleScroll}
         scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={theme.primary}
+            colors={[theme.primary]}
+            progressBackgroundColor={theme.cardBg}
+            progressViewOffset={Platform.OS === 'android' ? HEADER_HEIGHT + 10 : 0}
+          />
+        }
       >
         {activeFeedTab === 'Kept' && isLoadingSaved && filteredData.length === 0 ? (
           <View className="items-center justify-center py-24 px-6">

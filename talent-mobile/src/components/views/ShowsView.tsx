@@ -514,6 +514,8 @@ export function ShowsView() {
                 </View>
                 <TouchableOpacity
                   onPress={() => setSelectedShow(null)}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  activeOpacity={0.7}
                   className="w-8 h-8 rounded-full items-center justify-center"
                   style={{ backgroundColor: theme.surfaceBg }}
                 >
@@ -653,7 +655,12 @@ export function ShowsView() {
                   Schedule Live Show Date
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => setIsCreateModalOpen(false)}>
+              <TouchableOpacity
+                onPress={() => setIsCreateModalOpen(false)}
+                hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                activeOpacity={0.7}
+                className="p-1 -mr-1"
+              >
                 <X color={theme.textSecondary} size={20} />
               </TouchableOpacity>
             </View>

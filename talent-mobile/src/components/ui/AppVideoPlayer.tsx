@@ -28,6 +28,7 @@ export function AppVideoPlayer({
   const player = useVideoPlayer(src || '', (p) => {
     p.loop = true;
     p.muted = isMuted;
+    p.timeUpdateEventInterval = 0.25;
     if (isPlaying) {
       try {
         p.play();

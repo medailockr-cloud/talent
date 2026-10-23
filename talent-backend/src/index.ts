@@ -12,7 +12,7 @@ import http from 'http';
 import { Server } from 'socket.io';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsDoc from 'swagger-jsdoc';
-import { cacheFeed, getCachedFeed } from './utils/redis';
+import { cacheFeed, getCachedFeed, redis } from './utils/redis';
 import { cloudUpload } from './utils/cloudinary';
 import { convertToHLS, trimVideoFile } from './utils/ffmpeg';
 import { sendPushNotification } from './utils/notifications';
@@ -192,6 +192,14 @@ app.get('/api/feed', async (req, res) => {
     let formattedVideos = videos.map(v => ({
       id: v.id,
       title: v.title,
+      description: v.description,
+      category: v.category,
+      subCategory: v.subCategory,
+      purpose: v.purpose,
+      location: v.location,
+      allowJudging: (v as any).allowJudging ?? true,
+      allowComments: (v as any).allowComments ?? true,
+      privacy: v.privacy || 'PUBLIC',
       author: v.author.name || v.author.username,
       authorAvatar: v.author.avatarUrl,
       authorId: v.author.id,
@@ -310,7 +318,7 @@ const uploadMiddleware = cloudUpload ? cloudUpload.fields(uploadFields) : upload
 
 app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
   try {
-    const { title, description, category, subCategory, purpose, location, allowJudging, trimStart, trimEnd } = req.body;
+    const { title, description, category, subCategory, purpose, location, allowJudging, allowComments, privacy, trimStart, trimEnd } = req.body;
     
     // Resolve valid authorId
     let authorId = req.userId!;
@@ -385,7 +393,9 @@ app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
         subCategory: subCategory || null,
         purpose: purpose || null,
         location: location || null,
-        allowJudging: allowJudging === 'false' ? false : true,
+        allowJudging: !(allowJudging === false || allowJudging === 'false' || allowJudging === 0 || allowJudging === '0'),
+        allowComments: !(allowComments === false || allowComments === 'false' || allowComments === 0 || allowComments === '0'),
+        privacy: privacy ? String(privacy).toUpperCase() : 'PUBLIC',
         authorId,
         hashtags: {
           connectOrCreate: tags.map(tag => ({
@@ -395,6 +405,16 @@ app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
         }
       }
     });
+
+    // Invalidate Redis feed cache
+    try {
+      if (redis.status === 'ready') {
+        const feedKeys = await redis.keys('feed_*');
+        if (feedKeys.length > 0) {
+          await redis.del(...feedKeys);
+        }
+      }
+    } catch (e) {}
     
     // Trigger HLS Transcoding via BullMQ Background Worker if it's a local video upload (skip images)
     if (!cloudUpload && uploadedFile.path && !isImageFile) {
@@ -471,18 +491,26 @@ app.post('/api/videos/:id/comment', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Comment text is required' });
     }
 
+    const video = await prisma.video.findUnique({ 
+      where: { id: videoId },
+      include: { author: true }
+    });
+    
+    if (!video) {
+      return res.status(404).json({ error: 'Video not found' });
+    }
+
+    if ((video as any).allowComments === false) {
+      return res.status(403).json({ error: 'Comments are disabled for this performance' });
+    }
+
     const comment = await prisma.comment.create({
       data: { text, userId, videoId },
       include: { user: true }
     });
     
     // Generate Notification
-    const video = await prisma.video.findUnique({ 
-      where: { id: videoId },
-      include: { author: true }
-    });
-    
-    if (video && video.authorId !== userId) {
+    if (video.authorId !== userId) {
       await prisma.notification.create({
         data: {
           type: 'COMMENT',
@@ -518,6 +546,15 @@ app.post('/api/videos/:id/rate', requireAuth, async (req, res) => {
     
     if (score < 1 || score > 10) {
       return res.status(400).json({ error: 'Score must be between 1 and 10' });
+    }
+
+    const video = await prisma.video.findUnique({ where: { id: videoId } });
+    if (!video) {
+      return res.status(404).json({ error: 'Video not found' });
+    }
+
+    if ((video as any).allowJudging === false) {
+      return res.status(403).json({ error: 'Judging is disabled for this performance' });
     }
 
     const rating = await prisma.rating.upsert({
@@ -1423,16 +1460,31 @@ app.put('/api/videos/:id', requireAuth, async (req, res) => {
     if (video.authorId !== currentUserId && currentUser?.role !== 'ADMIN') {
       return res.status(403).json({ error: 'Unauthorized to update this video' });
     }
-    const { title, description, privacy, allowJudging } = req.body;
+    const { title, description, privacy, allowJudging, allowComments } = req.body;
+    const updateData: any = {};
+    if (title !== undefined) updateData.title = title;
+    if (description !== undefined) updateData.description = description;
+    if (privacy !== undefined) updateData.privacy = privacy;
+    if (allowJudging !== undefined) {
+      updateData.allowJudging = !(allowJudging === false || allowJudging === 'false' || allowJudging === 0 || allowJudging === '0');
+    }
+    if (allowComments !== undefined) {
+      updateData.allowComments = !(allowComments === false || allowComments === 'false' || allowComments === 0 || allowComments === '0');
+    }
     const updated = await prisma.video.update({
       where: { id: videoId },
-      data: {
-        ...(title !== undefined && { title }),
-        ...(description !== undefined && { description }),
-        ...(privacy !== undefined && { privacy }),
-        ...(allowJudging !== undefined && { allowJudging: Boolean(allowJudging) }),
-      },
+      data: updateData,
     });
+
+    // Invalidate Redis feed cache
+    try {
+      if (redis.status === 'ready') {
+        const feedKeys = await redis.keys('feed_*');
+        if (feedKeys.length > 0) {
+          await redis.del(...feedKeys);
+        }
+      }
+    } catch (e) {}
     res.json({ message: 'Performance updated successfully', video: updated });
   } catch (error) {
     console.error('Error updating video:', error);
@@ -1970,6 +2022,14 @@ app.get('/api/videos/saved', async (req, res) => {
       return {
         id: v.id,
         title: v.title,
+        description: v.description,
+        category: v.category,
+        subCategory: v.subCategory,
+        purpose: v.purpose,
+        location: v.location,
+        allowJudging: (v as any).allowJudging ?? true,
+        allowComments: (v as any).allowComments ?? true,
+        privacy: v.privacy || 'PUBLIC',
         author: authorName,
         authorAvatar: authorObj?.avatarUrl || null,
         authorId: authorObj?.id || null,

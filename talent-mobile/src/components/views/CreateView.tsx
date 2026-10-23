@@ -76,6 +76,7 @@ import {
   VolumeX,
   Plus,
   Trash2,
+  Lock,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -594,6 +595,57 @@ type CreateStep =
   | "SUCCESS"
   | "DRAFTS";
 
+interface TopNavProps {
+  title?: string;
+  onBack: () => void;
+  rightEl?: React.ReactNode;
+  textColor?: string;
+}
+
+const TopNav = React.memo(function TopNav({
+  title,
+  onBack,
+  rightEl,
+  textColor,
+}: TopNavProps) {
+  const { theme } = useThemeStore();
+  const resolvedColor = textColor || theme.text;
+  return (
+    <View
+      className="flex-row items-center justify-between px-5 mb-5"
+      style={{ zIndex: 100, elevation: 10 }}
+    >
+      <TouchableOpacity
+        onPress={onBack}
+        className="p-1.5 -ml-1.5 rounded-full shrink-0"
+        hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+        activeOpacity={0.7}
+        accessibilityLabel="Go back"
+      >
+        <ChevronLeft color={resolvedColor} size={28} />
+      </TouchableOpacity>
+      {title ? (
+        <Text
+          numberOfLines={1}
+          ellipsizeMode="tail"
+          className="font-semibold text-lg flex-1 text-center px-2 shrink"
+          style={{ color: resolvedColor }}
+        >
+          {title}
+        </Text>
+      ) : (
+        <View className="flex-1" />
+      )}
+      <View
+        className="min-w-[28px] items-end shrink-0"
+        style={{ zIndex: 101, elevation: 11 }}
+      >
+        {rightEl}
+      </View>
+    </View>
+  );
+});
+
 export function CreateView({ onClose }: { onClose?: () => void }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -648,6 +700,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   const [allowJudging, setAllowJudging] = useState(true);
   const [allowComments, setAllowComments] = useState(true);
   const [visibility, setVisibility] = useState("Public");
+  const [isMoreSettingsOpen, setIsMoreSettingsOpen] = useState(false);
 
   // Upload progress simulation
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -769,7 +822,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       try {
         player.loop = true;
         player.muted = Platform.OS === "web";
-        player.timeUpdateEventInterval = 0.05;
+        player.timeUpdateEventInterval = 0.25;
         player.play();
       } catch (e) {}
     },
@@ -801,7 +854,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       previewPlayer.loop = true;
       previewPlayer.muted = Platform.OS === "web" ? true : isOriginalMuted;
       previewPlayer.volume = isOriginalMuted ? 0 : Math.max(0, Math.min(1, originalAudioVolume / 100));
-      previewPlayer.timeUpdateEventInterval = 0.05;
+      previewPlayer.timeUpdateEventInterval = 0.25;
       previewPlayer.play();
       setIsPlaying(true);
     } catch (e) {}
@@ -852,8 +905,10 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     const subTime = (previewPlayer as any).addListener?.("timeUpdate", (payload: any) => {
       const t = typeof payload?.currentTime === "number" ? payload.currentTime : (previewPlayer.currentTime ?? 0);
       if (!isTrimmingRef.current && typeof t === "number" && !isNaN(t) && isFinite(t)) {
-        setCurrentTime(t);
-        currentTimeRef.current = t;
+        if (Math.abs(t - currentTimeRef.current) >= 0.2) {
+          setCurrentTime(t);
+          currentTimeRef.current = t;
+        }
       }
       syncDuration();
     });
@@ -884,8 +939,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           const d = player.duration ?? 0;
 
           if (typeof t === "number" && !isNaN(t) && isFinite(t)) {
-            // Only update currentTime from player if user is not actively scrubbing
-            if (!isTrimmingRef.current) {
+            // Only update currentTime from player if user is not actively scrubbing and time has shifted
+            if (!isTrimmingRef.current && Math.abs(t - currentTimeRef.current) >= 0.3) {
               setCurrentTime(t);
               currentTimeRef.current = t;
             }
@@ -927,7 +982,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           }
         } catch (e) {}
       }
-    }, 100);
+    }, 250);
     return () => clearInterval(interval);
   }, [mediaType, recordedVideoUri]);
 
@@ -1711,6 +1766,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       formData.append("purpose", purpose);
       formData.append("location", location);
       formData.append("allowJudging", String(allowJudging));
+      formData.append("allowComments", String(allowComments));
+      formData.append("privacy", visibility.toUpperCase());
       formData.append("filter", activeFilter);
       if (mediaType === "video") {
         if (trimStart > 0) {
@@ -2125,36 +2182,6 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   }, []);
 
   // --- Render Helpers ---
-  const TopNav = ({
-    title,
-    onBack,
-    rightEl,
-    textColor,
-  }: {
-    title?: string;
-    onBack: () => void;
-    rightEl?: React.ReactNode;
-    textColor?: string;
-  }) => {
-    const resolvedColor = textColor || theme.text;
-    return (
-      <View className="flex-row items-center justify-between px-5 mb-5">
-        <TouchableOpacity
-          onPress={onBack}
-          className="p-1.5 -ml-1.5 rounded-full"
-          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
-          activeOpacity={0.7}
-          accessibilityLabel="Go back"
-        >
-          <ChevronLeft color={resolvedColor} size={28} />
-        </TouchableOpacity>
-        {title && (
-          <Text className="font-semibold text-lg" style={{ color: resolvedColor }}>{title}</Text>
-        )}
-        <View className="min-w-[28px] items-end">{rightEl}</View>
-      </View>
-    );
-  };
 
   // --- Screens ---
 
@@ -2660,7 +2687,10 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   );
 
   const renderPreview = () => (
-    <View className="flex-1 bg-[#050608] pt-14">
+    <View
+      className="flex-1 bg-[#050608]"
+      style={{ paddingTop: Math.max(insets.top + 8, 48) }}
+    >
       <TopNav
         textColor="#FFFFFF"
         title={
@@ -2686,8 +2716,10 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                 }
                 setEditMode("none");
               }}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              activeOpacity={0.7}
               className="bg-[#E91E76] px-4 py-1.5 rounded-full flex-row items-center"
-              activeOpacity={0.8}
+              style={{ zIndex: 105, elevation: 12 }}
             >
               <Text className="text-white font-bold text-sm">Done</Text>
             </TouchableOpacity>
@@ -2697,8 +2729,10 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                 onPress={async () => {
                   await handleSaveCurrentDraft(true);
                 }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 8 }}
+                activeOpacity={0.7}
                 className="px-3 py-1.5 rounded-full border flex-row items-center gap-1.5"
-                style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border, zIndex: 105, elevation: 12 }}
               >
                 <Folder color={theme.text} size={13} />
                 <Text className="text-xs font-semibold" style={{ color: theme.text }}>
@@ -2706,8 +2740,17 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => setStep("CHOOSE_TALENT")}
+                onPress={() => {
+                  if (Platform.OS !== "web") {
+                    Haptics.selectionAsync();
+                  }
+                  safePause(previewPlayerRef.current);
+                  setStep("CHOOSE_TALENT");
+                }}
+                hitSlop={{ top: 12, bottom: 12, left: 10, right: 12 }}
+                activeOpacity={0.7}
                 className="bg-[#E91E76] px-4 py-1.5 rounded-full flex-row items-center gap-1"
+                style={{ zIndex: 105, elevation: 12 }}
               >
                 <Text className="text-white font-bold text-sm">Next</Text>
                 <ChevronRight color="#fff" size={16} />
@@ -4961,7 +5004,14 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
             <View className="h-[1px] w-full mb-6" style={{ backgroundColor: theme.border }} />
 
-            <View className="flex-row items-center justify-between mb-6">
+            <TouchableOpacity 
+              activeOpacity={0.8}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setAllowJudging(!allowJudging);
+              }}
+              className="flex-row items-center justify-between mb-6"
+            >
               <View className="flex-1 pr-4">
                 <Text className="font-bold text-[16px] mb-1" style={{ color: theme.text }}>
                   Allow Judging
@@ -4970,25 +5020,143 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
                   Let viewers give this performance a Talent Score.
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => setAllowJudging(!allowJudging)}>
+              <View pointerEvents="none">
                 {allowJudging ? (
                   <ToggleRight color={theme.primary} size={44} />
                 ) : (
                   <ToggleLeft color={theme.textMuted} size={44} />
                 )}
-              </TouchableOpacity>
-            </View>
+              </View>
+            </TouchableOpacity>
 
             <TouchableOpacity 
+              onPress={() => setIsMoreSettingsOpen(true)}
               className="flex-row justify-between items-center p-4 rounded-xl border"
               style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+              activeOpacity={0.7}
             >
-              <Text className="font-medium" style={{ color: theme.text }}>More settings</Text>
+              <View>
+                <Text className="font-medium text-[15px]" style={{ color: theme.text }}>More settings</Text>
+                <Text className="text-xs mt-0.5" style={{ color: theme.textSecondary }}>
+                  Comments: {allowComments ? "Allowed" : "Off"} • Audience: {visibility}
+                </Text>
+              </View>
               <ChevronRight color={theme.textSecondary} size={20} />
             </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
+
+      {/* More Settings Modal */}
+      {isMoreSettingsOpen && (
+        <Modal
+          visible={true}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setIsMoreSettingsOpen(false)}
+        >
+          <View className="flex-1 justify-end bg-black/60">
+            <View
+              className="w-full rounded-t-3xl p-6 border-t"
+              style={{
+                backgroundColor: theme.cardBg,
+                borderColor: theme.border,
+                paddingBottom: Math.max(insets.bottom + 10, 24),
+              }}
+            >
+              <View className="w-12 h-1 rounded-full self-center mb-5" style={{ backgroundColor: theme.border }} />
+
+              <View className="flex-row items-center justify-between mb-5">
+                <View>
+                  <Text className="text-xl font-bold" style={{ color: theme.text }}>More Settings</Text>
+                  <Text className="text-xs mt-0.5" style={{ color: theme.textSecondary }}>Control interactions and privacy</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setIsMoreSettingsOpen(false)}
+                  className="w-8 h-8 rounded-full items-center justify-center"
+                  style={{ backgroundColor: theme.surfaceBg }}
+                >
+                  <X color={theme.textSecondary} size={18} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Allow Comments Toggle */}
+              <TouchableOpacity 
+                activeOpacity={0.8}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setAllowComments(!allowComments);
+                }}
+                className="flex-row items-center justify-between py-4 border-b" 
+                style={{ borderColor: theme.border }}
+              >
+                <View className="flex-1 pr-4">
+                  <Text className="font-bold text-[15px] mb-1" style={{ color: theme.text }}>Allow Comments (Talk)</Text>
+                  <Text className="text-xs leading-4" style={{ color: theme.textSecondary }}>
+                    Let viewers share constructive feedback, reactions, and start discussions.
+                  </Text>
+                </View>
+                <View pointerEvents="none">
+                  {allowComments ? (
+                    <ToggleRight color={theme.primary} size={42} />
+                  ) : (
+                    <ToggleLeft color={theme.textMuted} size={42} />
+                  )}
+                </View>
+              </TouchableOpacity>
+
+              {/* Audience & Privacy */}
+              <View className="pt-5">
+                <Text className="font-bold text-[15px] mb-1" style={{ color: theme.text }}>Who can watch this performance</Text>
+                <Text className="text-xs mb-3.5" style={{ color: theme.textSecondary }}>Choose who can discover this video in feeds.</Text>
+
+                <View className="gap-2.5">
+                  {[
+                    { key: "Public", title: "Public", desc: "Anyone on Talent can discover and watch", icon: Globe },
+                    { key: "Followers", title: "Followers Only", desc: "Only artists & fans who follow you", icon: Users },
+                    { key: "Private", title: "Private", desc: "Only visible to you on your profile", icon: Lock },
+                  ].map((opt) => {
+                    const isSelected = visibility === opt.key;
+                    const IconComp = opt.icon;
+                    return (
+                      <TouchableOpacity
+                        key={opt.key}
+                        onPress={() => setVisibility(opt.key)}
+                        className="flex-row items-center p-3.5 rounded-xl border"
+                        style={{
+                          backgroundColor: isSelected ? theme.primary + "15" : theme.surfaceBg,
+                          borderColor: isSelected ? theme.primary : theme.border,
+                        }}
+                      >
+                        <View
+                          className="w-9 h-9 rounded-full items-center justify-center mr-3"
+                          style={{ backgroundColor: isSelected ? theme.primary : theme.cardBg }}
+                        >
+                          <IconComp color={isSelected ? "#fff" : theme.textSecondary} size={18} />
+                        </View>
+                        <View className="flex-1">
+                          <Text className="font-bold text-[14px]" style={{ color: theme.text }}>{opt.title}</Text>
+                          <Text className="text-xs" style={{ color: theme.textSecondary }}>{opt.desc}</Text>
+                        </View>
+                        {isSelected && <CheckCircle2 color={theme.primary} size={20} />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Done Button */}
+              <TouchableOpacity
+                onPress={() => setIsMoreSettingsOpen(false)}
+                className="w-full py-3.5 rounded-full items-center justify-center mt-6"
+                style={{ backgroundColor: theme.primary }}
+              >
+                <Text className="text-white font-bold text-[15px]">Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
 
       <View 
         style={{ paddingBottom: Math.max(insets.bottom, 20), backgroundColor: theme.bg }}
@@ -5071,15 +5239,19 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           <View className="flex-row justify-between items-center py-1">
             <Text className="font-medium" style={{ color: theme.text }}>Allow Judging</Text>
             <View className="flex-row items-center">
-              <CheckCircle2 color="#10B981" size={16} className="mr-1.5" />
-              <Text className="text-[#10B981] font-medium">On</Text>
+              <CheckCircle2 color={allowJudging ? "#10B981" : theme.textSecondary} size={16} className="mr-1.5" />
+              <Text className="font-medium" style={{ color: allowJudging ? "#10B981" : theme.textSecondary }}>
+                {allowJudging ? "On" : "Off"}
+              </Text>
             </View>
           </View>
           <View className="flex-row justify-between items-center py-1">
             <Text className="font-medium" style={{ color: theme.text }}>Comments (Talk)</Text>
             <View className="flex-row items-center">
-              <CheckCircle2 color="#10B981" size={16} className="mr-1.5" />
-              <Text className="text-[#10B981] font-medium">On</Text>
+              <CheckCircle2 color={allowComments ? "#10B981" : theme.textSecondary} size={16} className="mr-1.5" />
+              <Text className="font-medium" style={{ color: allowComments ? "#10B981" : theme.textSecondary }}>
+                {allowComments ? "On" : "Off"}
+              </Text>
             </View>
           </View>
           <View className="flex-row justify-between items-center py-1">
@@ -5112,8 +5284,16 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           <View className="flex-row justify-between items-center py-1">
             <Text className="font-medium" style={{ color: theme.text }}>Visibility</Text>
             <View className="flex-row items-center">
-              <Globe color={theme.textSecondary} size={16} className="mr-1.5" />
-              <Text className="font-medium" style={{ color: theme.textSecondary }}>Public</Text>
+              {visibility === "Followers" ? (
+                <Users color={theme.textSecondary} size={16} className="mr-1.5" />
+              ) : visibility === "Private" ? (
+                <Lock color={theme.textSecondary} size={16} className="mr-1.5" />
+              ) : (
+                <Globe color={theme.textSecondary} size={16} className="mr-1.5" />
+              )}
+              <Text className="font-medium" style={{ color: theme.textSecondary }}>
+                {visibility === "Followers" ? "Followers Only" : visibility}
+              </Text>
             </View>
           </View>
         </View>

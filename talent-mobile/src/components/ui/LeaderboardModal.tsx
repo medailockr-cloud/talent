@@ -88,6 +88,8 @@ export function LeaderboardModal({ visible, onClose }: LeaderboardModalProps) {
             </View>
             <TouchableOpacity
               onPress={onClose}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              activeOpacity={0.7}
               style={{ backgroundColor: theme.surfaceBg }}
               className="w-8 h-8 rounded-full items-center justify-center"
             >
