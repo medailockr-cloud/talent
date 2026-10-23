@@ -39,3 +39,40 @@ export const convertToHLS = (inputPath: string, videoId: number) => {
       .run();
   });
 };
+
+export const trimVideoFile = (
+  inputPath: string,
+  outputPath: string,
+  trimStart: number,
+  trimEnd?: number
+): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    let cmd = ffmpeg(inputPath);
+    if (trimStart > 0) {
+      cmd = cmd.setStartTime(trimStart);
+    }
+    if (trimEnd && trimEnd > trimStart) {
+      cmd = cmd.setDuration(trimEnd - trimStart);
+    }
+    cmd
+      .outputOptions([
+        '-c:v libx264',
+        '-preset fast',
+        '-crf 22',
+        '-c:a aac',
+        '-b:a 128k',
+        '-movflags +faststart'
+      ])
+      .output(outputPath)
+      .on('end', () => {
+        console.log(`[FFmpeg] Trim finished from ${trimStart}s to ${trimEnd || 'end'}s`);
+        resolve();
+      })
+      .on('error', (err) => {
+        console.error('[FFmpeg] Error trimming video:', err);
+        reject(err);
+      })
+      .run();
+  });
+};
+

@@ -1,13 +1,21 @@
 import { Queue, Worker } from 'bullmq';
 import { convertToHLS } from './ffmpeg';
 
-// Re-use connection from the local redis url
-const connection = {
-  host: process.env.REDIS_HOST || '127.0.0.1',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-};
+// Support REDIS_URL (Render/Upstash) or fallback to REDIS_HOST/REDIS_PORT
+const connection = process.env.REDIS_URL
+  ? { url: process.env.REDIS_URL, maxRetriesPerRequest: null, enableOfflineQueue: false }
+  : {
+      host: process.env.REDIS_HOST || '127.0.0.1',
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+      maxRetriesPerRequest: null,
+      enableOfflineQueue: false,
+    };
 
 export const videoQueue = new Queue('video-transcoding', { connection });
+
+videoQueue.on('error', (err) => {
+  // Gracefully catch and suppress connection error spam if Redis is offline
+});
 
 // In a massive enterprise app, this Worker would actually live on a completely separate server!
 // But for now, we'll run it here.
@@ -23,6 +31,11 @@ export const videoWorker = new Worker('video-transcoding', async (job) => {
   }
 }, { connection });
 
-videoWorker.on('failed', (job, err) => {
-  console.error(`Job ${job?.id} failed with error ${err.message}`);
+videoWorker.on('error', (err) => {
+  // Gracefully catch and suppress connection error spam if Redis is offline
 });
+
+videoWorker.on('failed', (job, err) => {
+  console.error(`Job ${job?.id} failed with error ${err?.message || err}`);
+});
+

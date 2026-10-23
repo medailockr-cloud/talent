@@ -1,4 +1,5 @@
 import request from 'supertest';
+import { describe, it, expect } from '@jest/globals';
 
 // For simplicity in this demo, we test a mock server instead of importing app
 // to avoid conflicts with server.listen and socket.io in the test env.
