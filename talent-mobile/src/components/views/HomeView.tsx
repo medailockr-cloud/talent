@@ -9,7 +9,7 @@ import Animated, {
   withTiming,
   runOnJS
 } from 'react-native-reanimated';
-import { Search, EyeOff, Play, Pause, Maximize2, MoreHorizontal, X, Bookmark, MessageCircle, MessageCircleOff, Send, ChevronDown, ChevronRight, Gauge, MapPin, Flag, UserX, User, Bell, Volume2, VolumeX, Trophy, Eye, Mic, Sparkles, Share2, Sliders, ToggleLeft, ToggleRight, CheckCircle2 } from 'lucide-react-native';
+import { Search, EyeOff, Play, Pause, Maximize2, MoreHorizontal, X, Bookmark, MessageCircle, MessageCircleOff, Send, ChevronDown, ChevronRight, Gauge, MapPin, Flag, UserX, User, Bell, Volume2, VolumeX, Trophy, Eye, Mic, Sparkles, Share2, Sliders, ToggleLeft, ToggleRight, CheckCircle2, PictureInPicture2, SkipForward, ArrowUpRight } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useFeed } from '../../hooks/useFeed';
 import { api, resolveMediaUrl } from '../../utils/api';
@@ -423,14 +423,14 @@ function FeedVideoCard({
     <View 
       ref={containerRef} 
       nativeID={`feed-card-${video.id}`}
-      style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
-      className="rounded-[24px] p-3 border mb-6 shadow-2xl overflow-hidden"
+      style={{ borderBottomColor: theme.border }}
+      className="w-full border-b pb-4 mb-3"
     >
-      {/* Video Playback Area */}
+      {/* Video Playback Area - Edge to Edge */}
       <TouchableOpacity 
         activeOpacity={0.95}
         onPress={togglePlay}
-        className="relative w-full aspect-[4/5] rounded-[18px] overflow-hidden border border-white/10 bg-[#000] mb-3.5"
+        className="relative w-full aspect-[16/10] bg-black overflow-hidden"
       >
         <AppVideoPlayer
           src={srcToUse}
@@ -445,7 +445,7 @@ function FeedVideoCard({
           }}
         />
         
-        {/* Smooth Cinematic Vignette Gradient Overlay (No harsh center band) */}
+        {/* Smooth Cinematic Vignette Gradient Overlay */}
         <View 
           pointerEvents="none" 
           className="absolute inset-0 z-[1]"
@@ -454,21 +454,81 @@ function FeedVideoCard({
           } as any) : undefined}
         />
 
-        {/* Top Header Row: Category Badge & Hidden Metrics (Guaranteed Non-Colliding) */}
-        <View pointerEvents="none" className="absolute top-3.5 inset-x-3.5 flex-row items-center justify-between z-10">
+        {/* Top Header Row: Category Badge & Utility Controls */}
+        <View className="absolute top-3 inset-x-3.5 flex-row items-center justify-between z-10">
+          {/* Left: Category Badge */}
           <View className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15">
             <View className="w-1.5 h-1.5 rounded-full bg-[#E91E76]" />
             <Text className="text-[10px] font-bold tracking-wider text-white uppercase">
-              {video.category ? video.category.toUpperCase() : 'PERFORMANCE'}
+              {isBlind ? "BLIND AUDITION" : `${video.category ? video.category.toUpperCase() : 'TALENT'} · PERFORMANCE`}
             </Text>
-            <View className="w-1 h-1 rounded-full bg-white/40" />
-            <Text className="text-white/80 text-[10px] font-semibold">{formatTime(duration) || video.duration || '0:58'}</Text>
           </View>
 
-          <View className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 flex-row items-center gap-1.5">
-            <EyeOff color="#E91E76" size={11} strokeWidth={2.2} />
-            <Text className="text-[9px] font-bold tracking-wider text-white uppercase">METRICS HIDDEN</Text>
+          {/* Center: PiP & Pass Utility Buttons */}
+          <View className="flex-row items-center gap-2">
+            <TouchableOpacity 
+              activeOpacity={0.8}
+              onPress={(e: any) => {
+                if (e?.stopPropagation) e.stopPropagation();
+                if (Platform.OS === 'web' && videoRef.current) {
+                  if (document.pictureInPictureElement) {
+                    document.exitPictureInPicture?.().catch(() => {});
+                  } else if (videoRef.current.requestPictureInPicture) {
+                    videoRef.current.requestPictureInPicture().catch(() => {
+                      if (document.fullscreenElement) {
+                        document.exitFullscreen?.().catch(() => {});
+                      } else {
+                        videoRef.current?.requestFullscreen?.().catch(() => {});
+                      }
+                    });
+                  } else if (videoRef.current.requestFullscreen) {
+                    if (document.fullscreenElement) {
+                      document.exitFullscreen?.().catch(() => {});
+                    } else {
+                      videoRef.current.requestFullscreen().catch(() => {});
+                    }
+                  }
+                }
+              }}
+              className="w-8 h-8 rounded-lg bg-black/60 backdrop-blur-md border border-white/15 items-center justify-center"
+            >
+              <PictureInPicture2 color="#fff" size={14} />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              activeOpacity={0.8}
+              onPress={(e: any) => {
+                if (e?.stopPropagation) e.stopPropagation();
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                onPass();
+              }}
+              className="w-8 h-8 rounded-lg bg-black/60 backdrop-blur-md border border-white/15 items-center justify-center"
+            >
+              <SkipForward color="#fff" size={14} />
+            </TouchableOpacity>
           </View>
+
+          {/* Right: Audio Mute Toggle Button */}
+          <TouchableOpacity 
+            activeOpacity={0.8} 
+            onPress={(e: any) => {
+              if (e?.stopPropagation) e.stopPropagation();
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              const nextMuted = !isMuted;
+              setIsMuted(nextMuted);
+              if (!isPlaying) {
+                setPlayingVideoId(video.id);
+                onManualToggle?.(video.id, true);
+              }
+            }}
+            className="w-8 h-8 rounded-full bg-black/60 backdrop-blur-md border border-white/15 items-center justify-center"
+          >
+            {isMuted ? (
+              <VolumeX color="#fff" size={15} />
+            ) : (
+              <Volume2 color={theme.primary} size={15} />
+            )}
+          </TouchableOpacity>
         </View>
 
         {/* Center Play Button Overlay (Visible ONLY when paused) */}
@@ -481,63 +541,18 @@ function FeedVideoCard({
         )}
 
         {/* Bottom Playback Scrubber Line */}
-        <View pointerEvents="none" className="absolute bottom-0 inset-x-0 h-[3px] bg-white/20 z-20 overflow-hidden">
+        <View pointerEvents="none" className="absolute bottom-0 inset-x-0 h-[2.5px] bg-white/20 z-20 overflow-hidden">
           <View 
-            className="h-full" 
-            style={{ backgroundColor: theme.primary, width: `${duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0}%` }} 
+            className="h-full bg-[#E91E76]" 
+            style={{ width: `${duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0}%` }} 
           />
         </View>
 
-        {/* Bottom Controls Bar */}
-        <View className="absolute bottom-3 inset-x-3.5 flex-row items-center justify-between z-10">
-          {/* Left: Time Badge */}
-          <View className="h-8 px-3 rounded-full bg-black/60 backdrop-blur-md border border-white/15 flex-row items-center">
-            <Text className="text-[11px] font-medium text-white tracking-wider">
-              {formatTime(currentTime)} / {formatTime(duration) || video.duration || '0:58'}
-            </Text>
-          </View>
-
-          {/* Right: Audio & Fullscreen Buttons */}
-          <View className="flex-row items-center gap-2">
-            {Platform.OS === 'web' && (
-              <TouchableOpacity 
-                activeOpacity={0.8} 
-                onPress={(e: any) => {
-                  if (e?.stopPropagation) e.stopPropagation();
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  const nextMuted = !isMuted;
-                  setIsMuted(nextMuted);
-                  if (!isPlaying) {
-                    setPlayingVideoId(video.id);
-                    onManualToggle?.(video.id, true);
-                  }
-                }}
-                className="w-8 h-8 rounded-full bg-black/60 backdrop-blur-md border border-white/15 items-center justify-center"
-              >
-                {isMuted ? (
-                  <VolumeX color="#9CA3AF" size={14} />
-                ) : (
-                  <Volume2 color={theme.primary} size={14} />
-                )}
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity 
-              activeOpacity={0.8} 
-              onPress={(e: any) => {
-                if (e?.stopPropagation) e.stopPropagation();
-                if (Platform.OS === 'web' && videoRef.current) {
-                  if (document.fullscreenElement) {
-                    document.exitFullscreen?.().catch(() => {});
-                  } else {
-                    videoRef.current.requestFullscreen?.().catch(() => {});
-                  }
-                }
-              }}
-              className="w-8 h-8 rounded-full bg-black/60 backdrop-blur-md border border-white/15 items-center justify-center"
-            >
-              <Maximize2 color="#fff" size={13} strokeWidth={2} />
-            </TouchableOpacity>
-          </View>
+        {/* Bottom Right: Time Duration Badge */}
+        <View pointerEvents="none" className="absolute bottom-2 right-3 z-10 px-2 py-0.5 rounded bg-black/70 backdrop-blur-md border border-white/10">
+          <Text className="text-[10px] font-medium text-white tracking-wider">
+            {formatTime(duration) || video.duration || '0:28'}
+          </Text>
         </View>
 
         {/* Judging Floating Overlay */}
@@ -590,196 +605,179 @@ function FeedVideoCard({
         )}
       </TouchableOpacity>
 
-      {/* Author Profile Row */}
-      <View className="flex-row items-center justify-between px-1 mb-3">
-        <TouchableOpacity 
-          activeOpacity={0.8}
-          className="flex-row items-center gap-3 flex-1 mr-2"
-          onPress={() => {
-            if (isBlind) {
-              setIsRevealed(true);
-              return;
-            }
-            const userId = video.authorId || video.author?.id || video.id;
-            router.push(`/profile/${userId}` as any);
-          }}
-        >
-          <View 
-            style={{ borderColor: theme.border, backgroundColor: theme.surfaceBg }}
-            className="w-11 h-11 rounded-full overflow-hidden border-2 shadow-md items-center justify-center"
+      {/* Information & Actions Area */}
+      <View className="px-4 pt-3.5 pb-1">
+        {/* Author Profile Row */}
+        <View className="flex-row items-center justify-between mb-2">
+          <TouchableOpacity 
+            activeOpacity={0.8}
+            className="flex-row items-center gap-3 flex-1 mr-3"
+            onPress={() => {
+              if (isBlind) {
+                setIsRevealed(true);
+                return;
+              }
+              const userId = video.authorId || video.author?.id || video.id;
+              router.push(`/profile/${userId}` as any);
+            }}
           >
-            {isBlind ? (
-              <EyeOff color={theme.primary} size={20} />
-            ) : (
-              <Image source={{ uri: authorAvatar }} className="w-full h-full" />
-            )}
-          </View>
-          <View className="flex-1">
-            <Text style={{ color: theme.text }} className="text-[15px] font-bold mb-0.5" numberOfLines={1}>
-              {isBlind ? "Blind Audition Contestant" : authorName}
-            </Text>
-            <View className="flex-row items-center gap-1.5 mb-1">
-              <Text style={{ color: theme.textSecondary }} className="text-[11px]">
-                {isBlind ? "Unbiased Talent Pool" : (video.role || 'Artist').split('•')[0].trim()}
-              </Text>
-              <Text style={{ color: theme.textSecondary }} className="text-[11px]">•</Text>
-              <MapPin color={theme.textSecondary} size={10} />
-              <Text style={{ color: theme.textSecondary }} className="text-[11px]">
-                {isBlind ? "Hidden City" : ((video.role || 'World').split('•')[1]?.trim() || 'World')}
-              </Text>
-            </View>
-            <View className="flex-row items-center gap-1.5 flex-wrap">
-              {(isBlind ? ['#blindaudition', '#purevoice', '#talent'] : (video.tags || video.hashtags || ['#performance', '#talent'])).slice(0, 3).map((tag: any, idx: number) => {
-                const tagText = typeof tag === 'string' ? tag : tag?.name ? `#${tag.name}` : '#performance';
-                return (
-                  <Text key={idx} style={{ color: theme.primary }} className="text-[10px] font-medium opacity-80">{tagText}</Text>
-                );
-              })}
-            </View>
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          onPress={() => setShowOptions(true)} 
-          style={{ backgroundColor: theme.surfaceBg }}
-          className="w-9 h-9 rounded-full items-center justify-center"
-        >
-          <MoreHorizontal color={theme.textSecondary} size={16} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Performance Title & Details */}
-      <View className="px-1.5 mb-3">
-        <View className="flex-row items-start justify-between gap-2">
-          <Text 
-            style={{ color: theme.text }} 
-            className="text-[16px] font-extrabold tracking-tight leading-snug flex-1" 
-            numberOfLines={2}
-          >
-            {isBlind ? "Blind Audition Take" : (video.title || "Untitled Performance")}
-          </Text>
-          {Boolean(!isBlind && (video.category || video.subCategory)) && (
             <View 
-              style={{ backgroundColor: theme.primary + '18', borderColor: theme.primary + '35' }}
-              className="px-2.5 py-0.5 rounded-full border self-start mt-0.5"
+              style={{ backgroundColor: theme.surfaceBg }}
+              className="w-11 h-11 rounded-xl overflow-hidden border border-white/10 items-center justify-center"
             >
-              <Text style={{ color: theme.primary }} className="text-[10px] font-bold uppercase tracking-wider">
-                {video.category || video.subCategory}
+              {isBlind ? (
+                <EyeOff color={theme.primary} size={20} />
+              ) : (
+                <Image source={{ uri: authorAvatar }} className="w-full h-full" resizeMode="cover" />
+              )}
+            </View>
+            <View className="flex-1">
+              <Text style={{ color: theme.text }} className="text-[16px] font-bold" numberOfLines={1}>
+                {isBlind ? "Blind Audition Contestant" : authorName}
+              </Text>
+              <Text style={{ color: theme.textSecondary }} className="text-[12px] mt-0.5" numberOfLines={1}>
+                {isBlind 
+                  ? "Unbiased Talent Pool" 
+                  : `${(video.category || 'Artist').charAt(0).toUpperCase() + (video.category || 'Artist').slice(1)} · ${(video.role || 'Sample portfolio').split('•')[0].trim()}`}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            activeOpacity={0.7}
+            onPress={() => {
+              if (isBlind) {
+                setIsRevealed(true);
+                return;
+              }
+              const userId = video.authorId || video.author?.id || video.id;
+              router.push(`/profile/${userId}` as any);
+            }}
+            className="flex-row items-center gap-1 py-1"
+          >
+            <Text style={{ color: theme.textSecondary }} className="text-[13px] font-medium">
+              Portfolio
+            </Text>
+            <ArrowUpRight color={theme.textSecondary} size={15} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Performance Title & Details */}
+        <View className="mb-3">
+          <View className="flex-row items-start justify-between gap-3">
+            <Text 
+              style={{ color: theme.text }} 
+              className="text-[16px] font-bold tracking-tight leading-snug flex-1" 
+              numberOfLines={2}
+            >
+              {isBlind ? "Blind Audition Take" : (video.title || "Be Somebody · beatbox performance · passage 1")}
+            </Text>
+            <TouchableOpacity 
+              onPress={() => setShowOptions(true)} 
+              activeOpacity={0.7}
+              className="w-8 h-8 items-center justify-center -mr-1"
+            >
+              <MoreHorizontal color={theme.text} size={20} />
+            </TouchableOpacity>
+          </View>
+
+          <Text 
+            style={{ color: theme.textSecondary }} 
+            className="text-[12px] leading-relaxed mt-1" 
+            numberOfLines={isDescriptionExpanded ? undefined : 2}
+          >
+            {video.description || "Licensed performance excerpt"}
+          </Text>
+
+          {Boolean(video.description && video.description.length > 85) && (
+            <TouchableOpacity 
+              activeOpacity={0.7}
+              onPress={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
+              className="mt-0.5 self-start"
+            >
+              <Text style={{ color: theme.primary }} className="text-[11px] font-semibold">
+                {isDescriptionExpanded ? "Show less" : "More"}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Main Actions Row */}
+        <View className="flex-row items-center justify-between mb-1.5">
+          <View className="flex-row items-center gap-6">
+            <TouchableOpacity onPress={handleKeepToggle} activeOpacity={0.7} className="items-center gap-1 min-w-[42px]">
+              <Bookmark color={isKept ? theme.primary : theme.text} fill={isKept ? theme.primary : "transparent"} size={23} strokeWidth={1.8} />
+              <Text style={{ color: isKept ? theme.primary : theme.text }} className="text-[11px] font-medium">{isKept ? 'Kept' : 'Keep'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={() => { 
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); 
+                setIsCommenting(true); 
+              }} 
+              activeOpacity={0.7} 
+              className="items-center gap-1 min-w-[42px]"
+              style={{ opacity: currentAllowComments ? 1 : 0.5 }}
+            >
+              {currentAllowComments ? (
+                <MessageCircle color={theme.text} size={23} strokeWidth={1.8} />
+              ) : (
+                <MessageCircleOff color={theme.textSecondary} size={23} strokeWidth={1.8} />
+              )}
+              <Text style={{ color: currentAllowComments ? theme.text : theme.textSecondary }} className="text-[11px] font-medium">
+                {currentAllowComments ? 'Comment' : 'Disabled'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleShare} activeOpacity={0.7} className="items-center gap-1 min-w-[42px]">
+              <Share2 color={isCopiedToast ? theme.primary : theme.text} size={23} strokeWidth={1.8} />
+              <Text style={{ color: isCopiedToast ? theme.primary : theme.text }} className="text-[11px] font-medium">
+                {isCopiedToast ? 'Copied' : 'Share'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* SCROLLING JUDGE BUTTON with Direct Drag Gesture */}
+          {currentAllowJudging && (
+            <View 
+              {...panResponder.panHandlers}
+              {...webPointerHandlers}
+              style={{
+                touchAction: 'none',
+                userSelect: 'none',
+                cursor: 'ns-resize',
+                backgroundColor: isJudgingActive 
+                  ? theme.primary 
+                  : judgeScore !== null 
+                    ? theme.primary + '25' 
+                    : theme.primary,
+                borderColor: judgeScore !== null && !isJudgingActive ? theme.primary : undefined,
+                borderWidth: judgeScore !== null && !isJudgingActive ? 1 : 0,
+              } as any}
+              className={`rounded-full h-[40px] px-5 flex-row items-center gap-2 shadow-lg select-none ${
+                isJudgingActive ? 'scale-105' : ''
+              }`}
+            >
+              <Gauge color={judgeScore !== null && !isJudgingActive ? theme.primary : "#fff"} size={16} />
+              <Text 
+                style={{ color: judgeScore !== null && !isJudgingActive ? theme.primary : '#ffffff' }}
+                className="text-[12px] font-extrabold tracking-wider uppercase select-none"
+              >
+                {isJudgingActive 
+                  ? `${tempScore.toFixed(1)} ★` 
+                  : judgeScore !== null 
+                    ? `${judgeScore.toFixed(1)} ★` 
+                    : 'JUDGE ↕'}
               </Text>
             </View>
           )}
         </View>
 
-        {Boolean(video.description) && (
-          <Text 
-            style={{ color: theme.textSecondary }} 
-            className="text-[13px] leading-relaxed mt-1" 
-            numberOfLines={isDescriptionExpanded ? undefined : 2}
-          >
-            {video.description}
+        {/* Judging Criteria / Helper Sub-caption */}
+        {currentAllowJudging && (
+          <Text style={{ color: theme.textSecondary }} className="text-[11px] text-right mt-1 font-normal opacity-70">
+            Slide Judge to score · Presence, originality & craft
           </Text>
         )}
-
-        {Boolean(video.description && video.description.length > 85) && (
-          <TouchableOpacity 
-            activeOpacity={0.7}
-            onPress={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
-            className="mt-0.5 self-start"
-          >
-            <Text style={{ color: theme.primary }} className="text-[11px] font-semibold">
-              {isDescriptionExpanded ? "Show less" : "More"}
-            </Text>
-          </TouchableOpacity>
-        )}
       </View>
-
-      {/* Main Actions Row */}
-      <View 
-        style={{ borderTopColor: theme.border }}
-        className="flex-row items-center justify-between px-2 pt-2.5 border-t"
-      >
-        <View className="flex-row items-center gap-6">
-          <TouchableOpacity onPress={handleKeepToggle} activeOpacity={0.7} className="items-center gap-1 min-w-[38px]">
-            <Bookmark color={isKept ? theme.primary : theme.text} fill={isKept ? theme.primary : "transparent"} size={22} strokeWidth={1.7} />
-            <Text style={{ color: isKept ? theme.primary : theme.textSecondary }} className="text-[9px] font-bold tracking-widest uppercase">{keptText}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            onPress={() => { 
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); 
-              setIsCommenting(true); 
-            }} 
-            activeOpacity={0.7} 
-            className="items-center gap-1 min-w-[38px]"
-            style={{ opacity: currentAllowComments ? 1 : 0.5 }}
-          >
-            {currentAllowComments ? (
-              <MessageCircle color={theme.text} size={22} strokeWidth={1.7} />
-            ) : (
-              <MessageCircleOff color={theme.textSecondary} size={22} strokeWidth={1.7} />
-            )}
-            <Text style={{ color: theme.textSecondary }} className="text-[9px] font-bold tracking-widest uppercase">
-              {currentAllowComments ? 'TALK' : 'DISABLED'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleShare} activeOpacity={0.7} className="items-center gap-1 min-w-[38px]">
-            <Share2 color={isCopiedToast ? theme.primary : theme.text} size={21} strokeWidth={1.7} />
-            <Text style={{ color: isCopiedToast ? theme.primary : theme.textSecondary }} className="text-[9px] font-bold tracking-widest uppercase">
-              {isCopiedToast ? 'COPIED!' : 'SHARE'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* SCROLLING JUDGE BUTTON with Direct Drag Gesture */}
-        {currentAllowJudging && (
-          <View 
-            {...panResponder.panHandlers}
-            {...webPointerHandlers}
-            style={{
-              touchAction: 'none',
-              userSelect: 'none',
-              cursor: 'ns-resize',
-              backgroundColor: isJudgingActive 
-                ? theme.primary 
-                : judgeScore !== null 
-                  ? theme.primary + '25' 
-                  : theme.primary,
-              borderColor: judgeScore !== null && !isJudgingActive ? theme.primary : undefined,
-              borderWidth: judgeScore !== null && !isJudgingActive ? 1 : 0,
-            } as any}
-            className={`rounded-full h-[36px] px-4 flex-row items-center gap-2 shadow-lg select-none ${
-              isJudgingActive ? 'scale-105' : ''
-            }`}
-          >
-            <Gauge color={judgeScore !== null && !isJudgingActive ? theme.primary : "#fff"} size={14} />
-            <Text 
-              style={{ color: judgeScore !== null && !isJudgingActive ? theme.primary : '#ffffff' }}
-              className="text-[11px] font-bold tracking-wider uppercase select-none"
-            >
-              {isJudgingActive 
-                ? `${tempScore.toFixed(1)} ★` 
-                : judgeScore !== null 
-                  ? `${judgeScore.toFixed(1)} ★` 
-                  : 'JUDGE ↕'}
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {/* Judging Criteria Footer Row - Completely Separated to Prevent Cramping */}
-      {currentAllowJudging && (
-        <View 
-          style={{ borderTopColor: theme.border }}
-          className="flex-row items-center justify-between pt-2.5 mt-2 border-t px-2"
-        >
-          <Text style={{ color: theme.textSecondary }} className="text-[10px] font-medium tracking-wide">Judging criteria</Text>
-          <View className="flex-row items-center gap-2">
-            <Text style={{ color: theme.textSecondary }} className="text-[9px] font-semibold uppercase tracking-wider">Presence</Text>
-            <View style={{ backgroundColor: theme.primary }} className="w-1 h-1 rounded-full opacity-70" />
-            <Text style={{ color: theme.textSecondary }} className="text-[9px] font-semibold uppercase tracking-wider">Originality</Text>
-            <View style={{ backgroundColor: theme.primary }} className="w-1 h-1 rounded-full opacity-70" />
-            <Text style={{ color: theme.textSecondary }} className="text-[9px] font-semibold uppercase tracking-wider">Craft</Text>
-          </View>
-        </View>
-      )}
 
       {/* Options Menu Sheet */}
       {showOptions && (
@@ -1135,7 +1133,7 @@ function FeedVideoCard({
 
 export function HomeView({ user }: { user?: any }) {
   const { theme } = useThemeStore();
-  const [activeFeedTab, setActiveFeedTab] = useState('For You');
+  const [activeFeedTab, setActiveFeedTab] = useState('For you');
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   
   // Search & Filters state removed for dedicated screens
@@ -1223,14 +1221,14 @@ export function HomeView({ user }: { user?: any }) {
 
   // Fetch saved/kept videos whenever 'Kept' tab is selected
   useEffect(() => {
-    if (activeFeedTab === 'Kept') {
+    if (activeFeedTab.toLowerCase() === 'kept') {
       useKeptStore.getState().fetchKept();
     }
   }, [activeFeedTab]);
 
   const handleRefresh = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (activeFeedTab === 'Kept') {
+    if (activeFeedTab.toLowerCase() === 'kept') {
       await useKeptStore.getState().fetchKept();
     } else {
       await refetch();
@@ -1249,14 +1247,15 @@ export function HomeView({ user }: { user?: any }) {
   }, [feedData]);
 
   // Filter Logic based on Tabs and Search (strictly exclude images)
-  const filteredData = activeFeedTab === 'Kept'
+  const filteredData = activeFeedTab.toLowerCase() === 'kept'
     ? keptVideos.filter(v => !isMediaImage(v.url || v.videoUrl))
     : allFeedItems.filter(v => {
         if (isMediaImage(v.url || v.videoUrl)) return false;
         let matchesTab = true;
-        if (activeFeedTab === 'Rising') matchesTab = v.isRising;
-        if (activeFeedTab === 'Nearby') matchesTab = v.isNearby;
-        if (activeFeedTab === 'Blind Audition') matchesTab = true;
+        const tabLower = activeFeedTab.toLowerCase();
+        if (tabLower === 'rising') matchesTab = v.isRising;
+        if (tabLower === 'clubs') matchesTab = v.category?.toLowerCase() === 'club' || v.isClub;
+        if (tabLower === 'blind audition') matchesTab = true;
         
         return matchesTab;
       });
@@ -1351,25 +1350,17 @@ export function HomeView({ user }: { user?: any }) {
   return (
     <View className="flex-1" style={{ backgroundColor: theme.bg }}>
       <Animated.View style={headerStyle}>
-        <View className="px-5 pt-12 pb-4 flex-row items-center justify-between">
-          <View className="flex-row items-baseline">
-            <Text className="font-bold text-[32px] tracking-tight leading-none font-serif" style={{ color: theme.text }}>talent</Text>
-            <Text className="font-bold text-[32px] leading-none ml-[1px] font-serif" style={{ color: theme.primary }}>.</Text>
+        <View className="px-5 pt-12 pb-2 flex-row items-center justify-between">
+          <View>
+            <View className="flex-row items-baseline">
+              <Text className="font-extrabold text-[32px] tracking-tight leading-none font-serif" style={{ color: theme.text }}>talent</Text>
+              <Text className="font-extrabold text-[32px] leading-none ml-[1px] font-serif" style={{ color: theme.primary }}>.</Text>
+            </View>
+            <Text className="text-[10px] tracking-[0.18em] uppercase font-bold text-white/50 mt-1">
+              ABILITY TAKES THE STAGE
+            </Text>
           </View>
           <View className="flex-row items-center gap-4">
-            <TouchableOpacity 
-              activeOpacity={0.7} 
-              onPress={() => { 
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); 
-                setActiveFeedTab('Kept'); 
-                scrollRef.current?.scrollTo({ y: 0, animated: true });
-              }}
-            >
-              <Bookmark color={activeFeedTab === 'Kept' ? theme.primary : theme.text} fill={activeFeedTab === 'Kept' ? theme.primary : 'transparent'} size={22} strokeWidth={activeFeedTab === 'Kept' ? 2.2 : 2} />
-            </TouchableOpacity>
-            <TouchableOpacity activeOpacity={0.7} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setIsLeaderboardOpen(true); }}>
-              <Trophy color="#F59E0B" size={23} strokeWidth={2.2} />
-            </TouchableOpacity>
             <TouchableOpacity activeOpacity={0.7} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/search' as any); }}>
               <Search color={theme.text} size={23} strokeWidth={2} />
             </TouchableOpacity>
@@ -1382,46 +1373,43 @@ export function HomeView({ user }: { user?: any }) {
           </View>
         </View>
         
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 10 }}>
-          {['For You', 'Rising', 'Kept', 'Blind Audition', 'Nearby', 'All Genres'].map((tab) => {
-            const isActive = activeFeedTab === tab;
+        {/* Tab Bar with Underline Indicator */}
+        <View className="flex-row items-center justify-between px-5 pt-2 pb-0">
+          {['For you', 'Rising', 'Clubs', 'Kept'].map((tab) => {
+            const isActive = activeFeedTab.toLowerCase() === tab.toLowerCase();
             return (
-              <TouchableOpacity activeOpacity={0.7}
+              <TouchableOpacity
                 key={tab}
+                activeOpacity={0.7}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   setActiveFeedTab(tab);
-                  // Reset scroll
                   scrollRef.current?.scrollTo({ y: 0, animated: true });
                 }}
-                style={isActive ? { backgroundColor: theme.primary + '20', borderColor: theme.primary } : { backgroundColor: theme.cardBg, borderColor: theme.border }}
-                className="h-[36px] px-5 rounded-full flex-row items-center justify-center border"
+                className="pb-2 relative items-center"
               >
                 <Text 
                   style={{ color: isActive ? theme.text : theme.textSecondary }}
-                  className={`text-[13px] ${isActive ? 'font-bold' : 'font-medium'}`}
+                  className={`text-[15px] ${isActive ? 'font-bold' : 'font-medium'}`}
                 >
                   {tab}
                 </Text>
-                {tab === 'Kept' && (
-                  <Bookmark color={isActive ? theme.primary : theme.textSecondary} size={13} fill={isActive ? theme.primary : "transparent"} style={{ marginLeft: 6 }} />
-                )}
-                {tab === 'Blind Audition' && (
-                  <EyeOff color={isActive ? theme.primary : theme.textSecondary} size={13} style={{ marginLeft: 6 }} />
-                )}
-                {tab === 'All Genres' && (
-                  <ChevronDown color={theme.textSecondary} size={14} className="ml-1" />
+                {isActive && (
+                  <View 
+                    style={{ backgroundColor: theme.primary }} 
+                    className="h-[2.5px] w-full absolute bottom-0 inset-x-0 rounded-full" 
+                  />
                 )}
               </TouchableOpacity>
-            )
+            );
           })}
-        </ScrollView>
+        </View>
       </Animated.View>
 
       <Animated.ScrollView
         ref={scrollRef as any}
         className="flex-1"
-        contentContainerStyle={{ paddingTop: HEADER_HEIGHT + 10, paddingHorizontal: 16, paddingBottom: 100 }}
+        contentContainerStyle={{ paddingTop: HEADER_HEIGHT + 6, paddingHorizontal: 0, paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
         onScroll={scrollHandler}
         onMomentumScrollEnd={handleScroll}

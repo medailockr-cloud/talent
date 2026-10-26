@@ -4922,6 +4922,119 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     </ScrollView>
   );
 
+  const renderMoreSettingsModal = () => {
+    if (!isMoreSettingsOpen) return null;
+    return (
+      <Modal
+        visible={true}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setIsMoreSettingsOpen(false)}
+      >
+        <View className="flex-1 justify-end bg-black/60">
+          <View
+            className="w-full rounded-t-3xl p-6 border-t"
+            style={{
+              backgroundColor: theme.cardBg,
+              borderColor: theme.border,
+              paddingBottom: Math.max(insets.bottom + 10, 24),
+            }}
+          >
+            <View className="w-12 h-1 rounded-full self-center mb-5" style={{ backgroundColor: theme.border }} />
+
+            <View className="flex-row items-center justify-between mb-5">
+              <View>
+                <Text className="text-xl font-bold" style={{ color: theme.text }}>More Settings</Text>
+                <Text className="text-xs mt-0.5" style={{ color: theme.textSecondary }}>Control interactions and privacy</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setIsMoreSettingsOpen(false)}
+                className="w-8 h-8 rounded-full items-center justify-center"
+                style={{ backgroundColor: theme.surfaceBg }}
+              >
+                <X color={theme.textSecondary} size={18} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Allow Comments Toggle */}
+            <TouchableOpacity 
+              activeOpacity={0.8}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setAllowComments(!allowComments);
+              }}
+              className="flex-row items-center justify-between py-4 border-b" 
+              style={{ borderColor: theme.border }}
+            >
+              <View className="flex-1 pr-4">
+                <Text className="font-bold text-[15px] mb-1" style={{ color: theme.text }}>Allow Comments (Talk)</Text>
+                <Text className="text-xs leading-4" style={{ color: theme.textSecondary }}>
+                  Let viewers share constructive feedback, reactions, and start discussions.
+                </Text>
+              </View>
+              <View pointerEvents="none">
+                {allowComments ? (
+                  <ToggleRight color={theme.primary} size={42} />
+                ) : (
+                  <ToggleLeft color={theme.textMuted} size={42} />
+                )}
+              </View>
+            </TouchableOpacity>
+
+            {/* Audience & Privacy */}
+            <View className="pt-5">
+              <Text className="font-bold text-[15px] mb-1" style={{ color: theme.text }}>Who can watch this performance</Text>
+              <Text className="text-xs mb-3.5" style={{ color: theme.textSecondary }}>Choose who can discover this video in feeds.</Text>
+
+              <View className="gap-2.5">
+                {[
+                  { key: "Public", title: "Public", desc: "Anyone on Talent can discover and watch", icon: Globe },
+                  { key: "Followers", title: "Followers Only", desc: "Only artists & fans who follow you", icon: Users },
+                  { key: "Private", title: "Private", desc: "Only visible to you on your profile", icon: Lock },
+                ].map((opt) => {
+                  const isSelected = visibility === opt.key;
+                  const IconComp = opt.icon;
+                  return (
+                    <TouchableOpacity
+                      key={opt.key}
+                      onPress={() => setVisibility(opt.key)}
+                      className="flex-row items-center p-3.5 rounded-xl border"
+                      style={{
+                        backgroundColor: isSelected ? theme.primary + "15" : theme.surfaceBg,
+                        borderColor: isSelected ? theme.primary : theme.border,
+                      }}
+                    >
+                      <View
+                        className="w-9 h-9 rounded-full items-center justify-center mr-3"
+                        style={{ backgroundColor: isSelected ? theme.primary : theme.cardBg }}
+                      >
+                        <IconComp color={isSelected ? "#fff" : theme.textSecondary} size={18} />
+                      </View>
+                      <View className="flex-1">
+                        <Text className="font-bold text-[14px]" style={{ color: theme.text }}>{opt.title}</Text>
+                        <Text className="text-xs" style={{ color: theme.textSecondary }}>{opt.desc}</Text>
+                      </View>
+                      {isSelected && <CheckCircle2 color={theme.primary} size={20} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Done Button */}
+            <TouchableOpacity
+              onPress={() => setIsMoreSettingsOpen(false)}
+              className="w-full py-3.5 rounded-full items-center justify-center mt-6"
+              style={{ backgroundColor: theme.primary }}
+            >
+              <Text className="text-white font-bold text-[15px]">Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
   const renderDetails = () => (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -5053,116 +5166,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         </View>
       </ScrollView>
 
-      {/* More Settings Modal */}
-      {isMoreSettingsOpen && (
-        <Modal
-          visible={true}
-          transparent={true}
-          animationType="slide"
-          onRequestClose={() => setIsMoreSettingsOpen(false)}
-        >
-          <View className="flex-1 justify-end bg-black/60">
-            <View
-              className="w-full rounded-t-3xl p-6 border-t"
-              style={{
-                backgroundColor: theme.cardBg,
-                borderColor: theme.border,
-                paddingBottom: Math.max(insets.bottom + 10, 24),
-              }}
-            >
-              <View className="w-12 h-1 rounded-full self-center mb-5" style={{ backgroundColor: theme.border }} />
 
-              <View className="flex-row items-center justify-between mb-5">
-                <View>
-                  <Text className="text-xl font-bold" style={{ color: theme.text }}>More Settings</Text>
-                  <Text className="text-xs mt-0.5" style={{ color: theme.textSecondary }}>Control interactions and privacy</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => setIsMoreSettingsOpen(false)}
-                  className="w-8 h-8 rounded-full items-center justify-center"
-                  style={{ backgroundColor: theme.surfaceBg }}
-                >
-                  <X color={theme.textSecondary} size={18} />
-                </TouchableOpacity>
-              </View>
-
-              {/* Allow Comments Toggle */}
-              <TouchableOpacity 
-                activeOpacity={0.8}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setAllowComments(!allowComments);
-                }}
-                className="flex-row items-center justify-between py-4 border-b" 
-                style={{ borderColor: theme.border }}
-              >
-                <View className="flex-1 pr-4">
-                  <Text className="font-bold text-[15px] mb-1" style={{ color: theme.text }}>Allow Comments (Talk)</Text>
-                  <Text className="text-xs leading-4" style={{ color: theme.textSecondary }}>
-                    Let viewers share constructive feedback, reactions, and start discussions.
-                  </Text>
-                </View>
-                <View pointerEvents="none">
-                  {allowComments ? (
-                    <ToggleRight color={theme.primary} size={42} />
-                  ) : (
-                    <ToggleLeft color={theme.textMuted} size={42} />
-                  )}
-                </View>
-              </TouchableOpacity>
-
-              {/* Audience & Privacy */}
-              <View className="pt-5">
-                <Text className="font-bold text-[15px] mb-1" style={{ color: theme.text }}>Who can watch this performance</Text>
-                <Text className="text-xs mb-3.5" style={{ color: theme.textSecondary }}>Choose who can discover this video in feeds.</Text>
-
-                <View className="gap-2.5">
-                  {[
-                    { key: "Public", title: "Public", desc: "Anyone on Talent can discover and watch", icon: Globe },
-                    { key: "Followers", title: "Followers Only", desc: "Only artists & fans who follow you", icon: Users },
-                    { key: "Private", title: "Private", desc: "Only visible to you on your profile", icon: Lock },
-                  ].map((opt) => {
-                    const isSelected = visibility === opt.key;
-                    const IconComp = opt.icon;
-                    return (
-                      <TouchableOpacity
-                        key={opt.key}
-                        onPress={() => setVisibility(opt.key)}
-                        className="flex-row items-center p-3.5 rounded-xl border"
-                        style={{
-                          backgroundColor: isSelected ? theme.primary + "15" : theme.surfaceBg,
-                          borderColor: isSelected ? theme.primary : theme.border,
-                        }}
-                      >
-                        <View
-                          className="w-9 h-9 rounded-full items-center justify-center mr-3"
-                          style={{ backgroundColor: isSelected ? theme.primary : theme.cardBg }}
-                        >
-                          <IconComp color={isSelected ? "#fff" : theme.textSecondary} size={18} />
-                        </View>
-                        <View className="flex-1">
-                          <Text className="font-bold text-[14px]" style={{ color: theme.text }}>{opt.title}</Text>
-                          <Text className="text-xs" style={{ color: theme.textSecondary }}>{opt.desc}</Text>
-                        </View>
-                        {isSelected && <CheckCircle2 color={theme.primary} size={20} />}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Done Button */}
-              <TouchableOpacity
-                onPress={() => setIsMoreSettingsOpen(false)}
-                className="w-full py-3.5 rounded-full items-center justify-center mt-6"
-                style={{ backgroundColor: theme.primary }}
-              >
-                <Text className="text-white font-bold text-[15px]">Done</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-      )}
 
       <View 
         style={{ paddingBottom: Math.max(insets.bottom, 20), backgroundColor: theme.bg }}
@@ -5303,14 +5307,6 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
             </View>
           </View>
         </View>
-
-        <TouchableOpacity 
-          className="flex-row justify-between items-center p-4 rounded-xl border mt-8"
-          style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
-        >
-          <Text className="font-medium" style={{ color: theme.text }}>More settings</Text>
-          <ChevronRight color={theme.textSecondary} size={20} />
-        </TouchableOpacity>
       </View>
 
       <View className="mt-auto px-5 pt-6 pb-2">
@@ -5544,6 +5540,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       {renderCurrentStep()}
+      {renderMoreSettingsModal()}
 
       {/* Universal In-App Confirmation Modal */}
       <Modal

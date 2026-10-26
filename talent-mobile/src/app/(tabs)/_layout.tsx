@@ -1,9 +1,10 @@
+import { ShowStageIcon } from '../../components/ui/ShowStageIcon';
 import { Tabs, usePathname } from 'expo-router';
-import { Home, PlaySquare, PlusSquare, Ticket, User } from 'lucide-react-native';
+import { Home, PlaySquare, PlusSquare, User } from 'lucide-react-native';
 import { useAuthStore } from '../../store/authStore';
 import { useUIStore } from '../../store/uiStore';
 import { useThemeStore } from '../../store/themeStore';
-import { Image, View, Platform } from 'react-native';
+import { Image, View, Text, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabsLayout() {
@@ -18,38 +19,56 @@ export default function TabsLayout() {
     ? (insets.bottom > 0 ? insets.bottom : 6)
     : Platform.OS === 'ios' 
       ? Math.max(insets.bottom, 24) 
-      : Math.max(insets.bottom, 8);
+      : Math.max(insets.bottom, 10);
 
   const tabHeight = isWeb
-    ? 64 + (insets.bottom > 0 ? insets.bottom : 0)
+    ? 68 + (insets.bottom > 0 ? insets.bottom : 0)
     : Platform.OS === 'ios'
-      ? 54 + bottomInset
-      : 58 + bottomInset;
+      ? 56 + bottomInset
+      : 60 + bottomInset;
 
   const defaultTabBarStyle = {
     backgroundColor: theme.tabBg,
     borderTopColor: theme.tabBorder,
+    borderTopWidth: isWeb ? 1 : 0,
+    elevation: 0,
+    shadowOpacity: 0,
     height: tabHeight,
-    paddingTop: isWeb ? 4 : 6,
+    paddingTop: 4,
     paddingBottom: bottomInset,
   };
 
   const isCreateRoute = pathname ? pathname.includes('create') : false;
-  const hideTabBar = isTabBarHidden && isCreateRoute;
+  const hideTabBar = (isTabBarHidden && isCreateRoute) || (isWeb && (!!pathname?.includes('flips') || !!pathname?.includes('shows')));
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarStyle: hideTabBar ? { display: 'none' } : defaultTabBarStyle,
-        tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: '600',
-          marginTop: 1,
-          lineHeight: 12,
+        tabBarLabel: ({ color, children }) => (
+          <Text
+            style={{
+              color: String(color),
+              fontSize: 10,
+              fontWeight: '600',
+              textAlign: 'center',
+              lineHeight: 14,
+              paddingTop: 1,
+            }}>
+            {children}
+          </Text>
+        ),
+        tabBarIconStyle: {
+          height: 24,
+          width: 24,
+          marginBottom: 1,
         },
         tabBarItemStyle: {
           outline: 'none',
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
         } as any,
         tabBarActiveTintColor: theme.tabActiveTint,
         tabBarInactiveTintColor: theme.tabInactiveTint,
@@ -66,6 +85,7 @@ export default function TabsLayout() {
         options={{
           title: 'Flips',
           tabBarIcon: ({ color }) => <PlaySquare color={color} size={22} />,
+          tabBarStyle: { display: 'none' },
         }}
       />
       <Tabs.Screen
@@ -80,7 +100,7 @@ export default function TabsLayout() {
         name="shows"
         options={{
           title: 'Shows',
-          tabBarIcon: ({ color }) => <Ticket color={color} size={22} />,
+          tabBarIcon: ({ color }) => <ShowStageIcon color={color} size={23} />,
         }}
       />
       <Tabs.Screen

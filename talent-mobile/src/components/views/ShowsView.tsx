@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,108 +6,344 @@ import {
   TouchableOpacity,
   Image,
   Modal,
-  Platform,
   ActivityIndicator,
   Alert,
   TextInput,
-  Linking,
   RefreshControl,
+  Platform,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import {
-  Ticket,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  SlidersHorizontal,
   MapPin,
   Calendar,
-  Star,
   Users,
-  Music,
-  Navigation,
-  X,
-  Clock,
-  ChevronRight,
+  Ticket,
+  ArrowRight,
+  ArrowUpRight,
+  ShieldCheck,
+  Globe,
   Check,
-  Camera,
+  X,
   QrCode,
-  Plus,
-  Share2,
   Sparkles,
+  Plus,
+  Clock,
+  Briefcase,
+  Bookmark,
+  Star,
+  MessageCircle,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
-import { api, resolveMediaUrl } from '../../utils/api';
-import { AppVideoPlayer } from '../ui/AppVideoPlayer';
+import { useCommunityStore } from '../../store/communityStore';
+import { useClubWorkspaceStore } from '../../store/clubWorkspaceStore';
+import { useWorkPilotStore } from '../../store/workPilotStore';
+import { useShowsLabStore, type LocalClub } from '../../store/showsLabStore';
+import { clubs as defaultClubs, clubEvents, type Club, type ClubEvent } from '../../utils/communityCatalogue';
+import { workspaceClubs, type WorkspaceClub } from '../../utils/clubWorkspace';
+import { pilotBriefs, type Brief, type Application } from '../../utils/workPilot';
+
+interface ShowItem {
+  id: number;
+  title: string;
+  category: string;
+  type: string;
+  location: string;
+  isOnline: boolean;
+  date: string;
+  fullDate: string;
+  slots: string;
+  price: string;
+  rawPrice: number;
+  image: string;
+  description: string;
+  visiting: number;
+  isBooked: boolean;
+  ticketCode: string;
+}
+
+const FEATURED_SHOW: ShowItem = {
+  id: 100,
+  title: 'The Next Stage',
+  category: 'Music',
+  type: 'Headline Showcase',
+  location: 'Bengaluru',
+  isOnline: false,
+  date: '7 Nov',
+  fullDate: '2026-11-07T20:00:00Z',
+  slots: '4 slots',
+  price: '₹499',
+  rawPrice: 499,
+  image: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=1200&auto=format&fit=crop',
+  description: 'Headline acoustic showcase featuring top rising indie artists discovered on talent platform.',
+  visiting: 215,
+  isBooked: false,
+  ticketCode: 'PASS-TNS-2026',
+};
+
+const INITIAL_SAMPLE_SHOWS: ShowItem[] = [
+  {
+    id: 1,
+    title: 'Rhythm & Roots',
+    category: 'Music',
+    type: 'Live performance',
+    location: 'Bengaluru',
+    isOnline: false,
+    date: '2 Nov',
+    fullDate: '2026-11-02T19:30:00Z',
+    slots: '2 performer slots',
+    price: '₹349',
+    rawPrice: 349,
+    image: 'https://images.unsplash.com/photo-1520523839898-50712825e3a7?q=80&w=600&auto=format&fit=crop',
+    description: 'An intimate evening of classical and contemporary acoustic fusion.',
+    visiting: 42,
+    isBooked: false,
+    ticketCode: 'PASS-RR-2026',
+  },
+  {
+    id: 2,
+    title: 'The freestyle exchange',
+    category: 'Dance',
+    type: 'Live performance',
+    location: 'Online',
+    isOnline: true,
+    date: '8 Nov',
+    fullDate: '2026-11-08T20:00:00Z',
+    slots: '6 performer slots',
+    price: 'Free',
+    rawPrice: 0,
+    image: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?q=80&w=600&auto=format&fit=crop',
+    description: 'Global cypher bringing street dancers together in real-time streaming battle.',
+    visiting: 128,
+    isBooked: false,
+    ticketCode: 'PASS-FE-2026',
+  },
+  {
+    id: 3,
+    title: 'Your first five minutes',
+    category: 'Comedy',
+    type: 'Live performance',
+    location: 'Bengaluru',
+    isOnline: false,
+    date: '14 Nov',
+    fullDate: '2026-11-14T20:30:00Z',
+    slots: '3 performer slots',
+    price: '₹199',
+    rawPrice: 199,
+    image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=600&auto=format&fit=crop',
+    description: 'Curated open mic night for breakthrough stand-up comedians.',
+    visiting: 65,
+    isBooked: false,
+    ticketCode: 'PASS-YFFM-2026',
+  },
+  {
+    id: 4,
+    title: 'One scene, many interpretations',
+    category: 'Film',
+    type: 'Live performance',
+    location: 'Mumbai',
+    isOnline: false,
+    date: '21 Nov',
+    fullDate: '2026-11-21T18:30:00Z',
+    slots: '4 performer slots',
+    price: '₹299',
+    rawPrice: 299,
+    image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=600&auto=format&fit=crop',
+    description: 'Live table read and scene work with acting feedback from industry judges.',
+    visiting: 38,
+    isBooked: false,
+    ticketCode: 'PASS-OSMI-2026',
+  },
+  {
+    id: 5,
+    title: 'A Little Impossible',
+    category: 'Magic',
+    type: 'Live performance',
+    location: 'Mumbai',
+    isOnline: false,
+    date: '29 Nov',
+    fullDate: '2026-11-29T19:00:00Z',
+    slots: '3 performer slots',
+    price: '₹249',
+    rawPrice: 249,
+    image: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=600&auto=format&fit=crop',
+    description: 'Close-up illusion and mentalism showcase by traditional sleight masters.',
+    visiting: 51,
+    isBooked: false,
+    ticketCode: 'PASS-ALI-2026',
+  },
+  {
+    id: 6,
+    title: 'Acoustic Sunset Sessions',
+    category: 'Music',
+    type: 'Live performance',
+    location: 'Kochi',
+    isOnline: false,
+    date: '5 Dec',
+    fullDate: '2026-12-05T17:30:00Z',
+    slots: '2 performer slots',
+    price: '₹199',
+    rawPrice: 199,
+    image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=600&auto=format&fit=crop',
+    description: 'Seaside sunset acoustic rhythms and indie singer-songwriter spotlight.',
+    visiting: 80,
+    isBooked: false,
+    ticketCode: 'PASS-ASS-2026',
+  },
+  {
+    id: 7,
+    title: 'Beatbox & Vocal Loop Lab',
+    category: 'Music',
+    type: 'Live performance',
+    location: 'Online',
+    isOnline: true,
+    date: '11 Dec',
+    fullDate: '2026-12-11T21:00:00Z',
+    slots: '5 performer slots',
+    price: 'Free',
+    rawPrice: 0,
+    image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop',
+    description: 'Live interactive looping showcase with real-time viewer voting and cypher.',
+    visiting: 190,
+    isBooked: false,
+    ticketCode: 'PASS-BVLL-2026',
+  },
+  {
+    id: 8,
+    title: 'Raw Verse: Spoken Word',
+    category: 'Poetry',
+    type: 'Live performance',
+    location: 'Delhi NCR',
+    isOnline: false,
+    date: '17 Dec',
+    fullDate: '2026-12-17T19:00:00Z',
+    slots: '4 performer slots',
+    price: '₹149',
+    rawPrice: 149,
+    image: 'https://images.unsplash.com/photo-1524368535928-5b5e00ddc76b?q=80&w=600&auto=format&fit=crop',
+    description: 'Poets and lyricists taking the floor with uncensored spoken word prose.',
+    visiting: 44,
+    isBooked: false,
+    ticketCode: 'PASS-RVSW-2026',
+  },
+  {
+    id: 9,
+    title: 'Midnight Jazz Collective',
+    category: 'Music',
+    type: 'Live performance',
+    location: 'Bengaluru',
+    isOnline: false,
+    date: '24 Dec',
+    fullDate: '2026-12-24T22:00:00Z',
+    slots: '3 performer slots',
+    price: '₹449',
+    rawPrice: 449,
+    image: 'https://images.unsplash.com/photo-1511192336575-5a79af67a629?q=80&w=600&auto=format&fit=crop',
+    description: 'Improvised modal jazz session featuring guest saxophonists and drummers.',
+    visiting: 76,
+    isBooked: false,
+    ticketCode: 'PASS-MJC-2026',
+  },
+];
+
+type MainTab = 'shows' | 'clubs' | 'opportunities' | 'activity';
+type ActivitySubTab = 'passes' | 'clubs' | 'applications';
 
 export function ShowsView() {
+  const router = useRouter();
   const { theme } = useThemeStore();
   const { user } = useAuthStore();
 
-  const [activeTab, setActiveTab] = useState<'upcoming' | 'archive'>('upcoming');
-  const [selectedCity, setSelectedCity] = useState('All Cities');
-  const [shows, setShows] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const communityStore = useCommunityStore();
+  const clubWorkspaceStore = useClubWorkspaceStore();
+  const workPilotStore = useWorkPilotStore();
+  const showsLabStore = useShowsLabStore();
+
+  const [activeTab, setActiveTab] = useState<MainTab>('shows');
+  const [activitySubTab, setActivitySubTab] = useState<ActivitySubTab>('passes');
   const [refreshing, setRefreshing] = useState(false);
 
-  // Selected Show Preview Modal
-  const [selectedShow, setSelectedShow] = useState<any>(null);
-  const [rsvpLoading, setRsvpLoading] = useState(false);
+  // Shows State
+  const [shows, setShows] = useState<ShowItem[]>(INITIAL_SAMPLE_SHOWS);
+  const [featuredShow, setFeaturedShow] = useState<ShowItem>(FEATURED_SHOW);
+  const [showFilter, setShowFilter] = useState<'All' | 'Offline' | 'Online' | 'Near you'>('All');
+  const [isFreeOnly, setIsFreeOnly] = useState(false);
+  const [sortByPrice, setSortByPrice] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [selectedShow, setSelectedShow] = useState<ShowItem | null>(null);
+  const [ticketQrShow, setTicketQrShow] = useState<ShowItem | null>(null);
+  const [isCreateShowModalOpen, setIsCreateShowModalOpen] = useState(false);
+  const [isTicketsModalOpen, setIsTicketsModalOpen] = useState(false);
 
-  // Create Show Modal
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  // New Show Form State
   const [newTitle, setNewTitle] = useState('');
-  const [newLocation, setNewLocation] = useState('');
-  const [newCity, setNewCity] = useState('Bengaluru');
-  const [newDate, setNewDate] = useState('2026-11-20T20:00:00Z');
-  const [newImage, setNewImage] = useState('');
+  const [newLocation, setNewLocation] = useState('Bengaluru');
+  const [newCategory, setNewCategory] = useState('Music');
+  const [newPrice, setNewPrice] = useState('₹299');
+  const [newSlots, setNewSlots] = useState('3 performer slots');
   const [creatingShow, setCreatingShow] = useState(false);
 
-  const cities = ['All Cities', 'Bengaluru', 'Mumbai', 'Kochi', 'Delhi NCR'];
+  // Clubs State
+  const [clubCategory, setClubCategory] = useState('All');
+  const [clubSearch, setClubSearch] = useState('');
+  const [selectedClub, setSelectedClub] = useState<Club | null>(null);
+  const [isCreateClubModalOpen, setIsCreateClubModalOpen] = useState(false);
+  const [joinRole, setJoinRole] = useState<'Fan' | 'Performer'>('Fan');
+  const [joinNote, setJoinNote] = useState('');
+  const [newClubName, setNewClubName] = useState('');
+  const [newClubCategory, setNewClubCategory] = useState('Music');
+  const [newClubCity, setNewClubCity] = useState('Bengaluru');
+  const [newClubDesc, setNewClubDesc] = useState('');
+  const [newClubPrompt, setNewClubPrompt] = useState('');
 
-  const fetchShows = useCallback(async () => {
-    try {
-      setLoading(true);
-      const res = await api.get('/shows', {
-        params: {
-          city: selectedCity !== 'All Cities' ? selectedCity : undefined,
-          status: activeTab,
-        },
-      });
-      if (Array.isArray(res.data)) {
-        setShows(res.data);
-      }
-    } catch (err) {
-      console.warn('Failed to load shows from API:', err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [selectedCity, activeTab]);
+  // Opportunities (WorkPilot) State
+  const [oppCategory, setOppCategory] = useState('All');
+  const [selectedBrief, setSelectedBrief] = useState<Brief | null>(null);
+  const [isCreateBriefModalOpen, setIsCreateBriefModalOpen] = useState(false);
+  const [applyName, setApplyName] = useState(user?.name || user?.username || '');
+  const [applyPerfTitle, setApplyPerfTitle] = useState('');
+  const [applyNote, setApplyNote] = useState('');
+  const [applyFee, setApplyFee] = useState('');
+  const [newBriefTitle, setNewBriefTitle] = useState('');
+  const [newBriefCategory, setNewBriefCategory] = useState('Music');
+  const [newBriefCity, setNewBriefCity] = useState('Bengaluru');
+  const [newBriefFee, setNewBriefFee] = useState('₹5,000');
+  const [newBriefDeadline, setNewBriefDeadline] = useState('15 Nov');
+  const [newBriefReqs, setNewBriefReqs] = useState('');
 
-  useEffect(() => {
-    fetchShows();
-  }, [fetchShows]);
-
-  const onRefresh = () => {
+  const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchShows();
-  };
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 600);
+  }, []);
 
-  const handleToggleRSVP = async (show: any) => {
+  // Shows RSVP Handler
+  const handleToggleRSVP = (show: ShowItem) => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      setRsvpLoading(true);
-      const res = await api.post(`/shows/${show.id}/book`);
-      const isBooked = res.data.isBooked;
+      const isBooking = !show.isBooked;
 
-      // Update in local state
+      if (show.id === featuredShow.id) {
+        setFeaturedShow((prev) => ({
+          ...prev,
+          isBooked: isBooking,
+          visiting: isBooking ? prev.visiting + 1 : Math.max(0, prev.visiting - 1),
+        }));
+      }
+
       setShows((prev) =>
         prev.map((s) => {
           if (s.id === show.id) {
-            const nextCount = isBooked ? s.visiting + 1 : Math.max(0, s.visiting - 1);
             return {
               ...s,
-              isBooked,
-              visiting: nextCount,
-              ticketCode: res.data.ticketCode || `PASS-${s.id}-${user?.id || 1}`,
+              isBooked: isBooking,
+              visiting: isBooking ? s.visiting + 1 : Math.max(0, s.visiting - 1),
             };
           }
           return s;
@@ -115,636 +351,2001 @@ export function ShowsView() {
       );
 
       if (selectedShow && selectedShow.id === show.id) {
-        setSelectedShow((prev: any) => ({
-          ...prev,
-          isBooked,
-          visiting: isBooked ? prev.visiting + 1 : Math.max(0, prev.visiting - 1),
-          ticketCode: res.data.ticketCode || `PASS-${prev.id}-${user?.id || 1}`,
-        }));
-      }
-
-      if (isBooked) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert(
-          'RSVP Confirmed! 🎟️',
-          `Your Digital Entry Pass for "${show.title}" is ready in your preview modal.`
+        setSelectedShow((prev) =>
+          prev
+            ? {
+                ...prev,
+                isBooked: isBooking,
+                visiting: isBooking ? prev.visiting + 1 : Math.max(0, prev.visiting - 1),
+              }
+            : null
         );
       }
-    } catch (err) {
-      console.error('RSVP error:', err);
-      Alert.alert('Error', 'Could not update RSVP. Please try again.');
-    } finally {
-      setRsvpLoading(false);
+
+      if (isBooking) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert(
+          'Pass Booked',
+          `Your entry pass for "${show.title}" is confirmed. Present your digital QR pass at the entrance.`
+        );
+      }
+    } catch {
+      Alert.alert('Error', 'Could not process RSVP. Please try again.');
     }
   };
 
-  const handleCreateShow = async () => {
-    if (!newTitle.trim() || !newLocation.trim()) {
-      Alert.alert('Missing Details', 'Please provide a show title and venue location.');
+  const handleCreateShow = () => {
+    if (!newTitle.trim()) {
+      Alert.alert('Missing Details', 'Please provide a show title.');
       return;
     }
+    setCreatingShow(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    try {
-      setCreatingShow(true);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setTimeout(() => {
+      const isOnlineLocation = newLocation.toLowerCase().includes('online');
+      const parsedPrice = parseInt(newPrice.replace(/[^0-9]/g, '')) || 0;
 
-      const locString = newLocation.includes(newCity)
-        ? newLocation
-        : `${newLocation}, ${newCity}`;
-
-      const res = await api.post('/shows', {
+      const created: ShowItem = {
+        id: Date.now(),
         title: newTitle.trim(),
-        location: locString,
-        date: newDate,
-        image: newImage.trim() || '',
-      });
+        category: newCategory,
+        type: 'Live performance',
+        location: newLocation.trim() || 'Bengaluru',
+        isOnline: isOnlineLocation,
+        date: '28 Dec',
+        fullDate: '2026-12-28T20:00:00Z',
+        slots: newSlots.trim() || '3 performer slots',
+        price: parsedPrice === 0 ? 'Free' : `₹${parsedPrice}`,
+        rawPrice: parsedPrice,
+        image: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=600&auto=format&fit=crop',
+        description: 'New verified live talent gig hosted on talent stage.',
+        visiting: 1,
+        isBooked: true,
+        ticketCode: `PASS-NEW-${Date.now().toString().slice(-4)}`,
+      };
 
-      if (res.data) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setIsCreateModalOpen(false);
-        setNewTitle('');
-        setNewLocation('');
-        setNewImage('');
-        fetchShows();
-        Alert.alert('Show Published!', 'Your live concert date is now visible to judges and fans.');
-      }
-    } catch (err: any) {
-      console.error('Error creating show:', err);
-      Alert.alert('Error', err?.response?.data?.error || 'Failed to create show.');
-    } finally {
+      setShows((prev) => [created, ...prev]);
       setCreatingShow(false);
-    }
+      setIsCreateShowModalOpen(false);
+      setNewTitle('');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Show Published', 'Your live show has been created and listed.');
+    }, 500);
   };
 
-  const formatShowDate = (dateStr?: string) => {
-    if (!dateStr) return 'TBA';
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
+  // Club Handlers
+  const allClubs = useMemo(() => {
+    return [...defaultClubs, ...showsLabStore.clubs];
+  }, [showsLabStore.clubs]);
+
+  const filteredClubs = useMemo(() => {
+    return allClubs.filter((c) => {
+      const matchesCat = clubCategory === 'All' || c.category.toLowerCase() === clubCategory.toLowerCase();
+      const matchesSearch =
+        !clubSearch.trim() ||
+        c.name.toLowerCase().includes(clubSearch.toLowerCase()) ||
+        c.city.toLowerCase().includes(clubSearch.toLowerCase()) ||
+        c.description.toLowerCase().includes(clubSearch.toLowerCase());
+      return matchesCat && matchesSearch;
     });
+  }, [allClubs, clubCategory, clubSearch]);
+
+  const handleJoinClub = (club: Club) => {
+    communityStore.join(club.id, joinRole);
+    try {
+      const wsClub: WorkspaceClub = {
+        ...club,
+        ownerId: 101,
+        joinPolicy: 'open',
+      };
+      clubWorkspaceStore.request(wsClub, joinRole, joinNote, user?.name || user?.username || 'Talent User');
+    } catch {
+      // workspace store sync fallback
+    }
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Alert.alert('Joined Club', `You are now a member of ${club.name} as a ${joinRole}.`);
+    setJoinNote('');
+    setSelectedClub(null);
   };
 
-  const formatShowTime = (dateStr?: string) => {
-    if (!dateStr) return '8:00 PM';
-    const d = new Date(dateStr);
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const handleLeaveClub = (clubId: string) => {
+    communityStore.leave(clubId);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Alert.alert('Membership Ended', 'You have left the club.');
+    setSelectedClub(null);
   };
+
+  const handleCreateClub = () => {
+    if (!newClubName.trim() || !newClubDesc.trim()) {
+      Alert.alert('Missing Info', 'Please enter club name and description.');
+      return;
+    }
+    const initials = newClubName
+      .split(' ')
+      .slice(0, 2)
+      .map((w) => w[0]?.toUpperCase() || '')
+      .join('');
+    const newClub: LocalClub = {
+      id: `club-${Date.now()}`,
+      name: newClubName.trim(),
+      category: newClubCategory,
+      city: newClubCity.trim() || 'Bengaluru',
+      initials: initials || 'TC',
+      color: '#E91E76',
+      description: newClubDesc.trim(),
+      prompt: newClubPrompt.trim() || 'Create and perform with us.',
+      kind: 'Local community',
+      ownerId: 999,
+    };
+    showsLabStore.addClub(newClub);
+    communityStore.join(newClub.id, 'Performer');
+    setIsCreateClubModalOpen(false);
+    setNewClubName('');
+    setNewClubDesc('');
+    setNewClubPrompt('');
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Alert.alert('Club Created', `Your club "${newClub.name}" is now live.`);
+  };
+
+  // Brief / Opportunities Handlers
+  const allBriefs = useMemo(() => {
+    return workPilotStore.briefs.length ? workPilotStore.briefs : pilotBriefs;
+  }, [workPilotStore.briefs]);
+
+  const filteredBriefs = useMemo(() => {
+    return allBriefs.filter((b) => {
+      return oppCategory === 'All' || b.category.toLowerCase().includes(oppCategory.toLowerCase());
+    });
+  }, [allBriefs, oppCategory]);
+
+  const handleApplyBrief = (brief: Brief) => {
+    if (!applyPerfTitle.trim()) {
+      Alert.alert('Missing Detail', 'Please provide a title or link for your performance sample.');
+      return;
+    }
+    const feeNum = parseInt(applyFee.replace(/[^0-9]/g, '')) || brief.fee;
+    const application: Application = {
+      id: `app-${Date.now()}`,
+      briefId: brief.id,
+      name: applyName.trim() || 'Talent Performer',
+      performanceId: String(Date.now()),
+      performanceTitle: applyPerfTitle.trim(),
+      note: applyNote.trim() || 'Looking forward to collaborating on this opportunity.',
+      fee: feeNum,
+      status: 'Applied',
+      artistConfirmed: true,
+      organizerConfirmed: false,
+      messages: [],
+      sample: false,
+    };
+    workPilotStore.apply(brief, application);
+    setSelectedBrief(null);
+    setApplyPerfTitle('');
+    setApplyNote('');
+    setApplyFee('');
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Alert.alert('Application Sent', `Your application for "${brief.title}" has been submitted.`);
+  };
+
+  const handleCreateBrief = () => {
+    if (!newBriefTitle.trim()) {
+      Alert.alert('Missing Title', 'Please enter a title for this opportunity.');
+      return;
+    }
+    const parsedFee = parseInt(newBriefFee.replace(/[^0-9]/g, '')) || 5000;
+    const newBrief: Brief = {
+      id: `brief-${Date.now()}`,
+      title: newBriefTitle.trim(),
+      organizer: user?.name || user?.username || 'Talent Stage',
+      city: newBriefCity.trim() || 'Bengaluru',
+      category: newBriefCategory,
+      format: newBriefCity.toLowerCase().includes('online') ? 'Online' : 'In person',
+      date: '20 Dec',
+      deadline: newBriefDeadline.trim() || '15 Nov',
+      fee: parsedFee,
+      minutes: 45,
+      requirements: newBriefReqs.trim() || 'Original performance demo required.',
+      equipment: 'Stage PA and standard monitors provided.',
+      rights: 'Artist retains ownership of original composition.',
+      cancellation: '48-hour mutual written cancellation notice.',
+      owner: true,
+    };
+    workPilotStore.addBrief(newBrief);
+    setIsCreateBriefModalOpen(false);
+    setNewBriefTitle('');
+    setNewBriefReqs('');
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Alert.alert('Opportunity Posted', `"${newBrief.title}" is now open for artist submissions.`);
+  };
+
+  // Filtered Shows
+  const filteredShows = useMemo(() => {
+    let result = [...shows];
+    if (showFilter === 'Offline') {
+      result = result.filter((s) => !s.isOnline);
+    } else if (showFilter === 'Online') {
+      result = result.filter((s) => s.isOnline);
+    } else if (showFilter === 'Near you') {
+      result = result.filter((s) => s.location.toLowerCase().includes('bengaluru'));
+    }
+    if (isFreeOnly) {
+      result = result.filter((s) => s.rawPrice === 0 || s.price.toLowerCase() === 'free');
+    }
+    if (sortByPrice) {
+      result.sort((a, b) => a.rawPrice - b.rawPrice);
+    }
+    return result;
+  }, [shows, showFilter, isFreeOnly, sortByPrice]);
+
+  const displayedShows = isExpanded ? filteredShows : filteredShows.slice(0, 3);
+  const myBookedShows = useMemo(
+    () => [...shows.filter((s) => s.isBooked), ...(featuredShow.isBooked ? [featuredShow] : [])],
+    [shows, featuredShow]
+  );
+
+  const myJoinedClubs = useMemo(() => {
+    return allClubs.filter((c) => !!communityStore.memberships[c.id]);
+  }, [allClubs, communityStore.memberships]);
+
+  const myApplications = useMemo(() => {
+    return workPilotStore.applications;
+  }, [workPilotStore.applications]);
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.bg }}>
-      <ScrollView
-        className="flex-1 pt-14"
-        contentContainerStyle={{ paddingBottom: 120 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
+      {/* Top Brand Header Bar */}
+      <View
+        className="pt-12 pb-2.5 px-5 flex-row items-center justify-between border-b"
+        style={{
+          borderBottomColor: theme.isDark ? '#27272a' : '#F3F4F6',
+          backgroundColor: theme.bg,
+        }}
       >
-        {/* Header */}
-        <View className="px-5 mb-5 flex-row items-start justify-between">
-          <View className="flex-1 pr-3">
-            <View className="flex-row items-center gap-2.5 mb-1">
-              <View
-                style={{ backgroundColor: theme.primary + '15', borderColor: theme.primary + '30' }}
-                className="w-8 h-8 rounded-lg items-center justify-center border"
+        <View className="flex-row items-center gap-3">
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.push('/(tabs)');
+              }
+            }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            activeOpacity={0.7}
+          >
+            <ChevronLeft size={24} color={theme.text} />
+          </TouchableOpacity>
+
+          <Text className="text-[24px] font-black tracking-tight" style={{ color: theme.text }}>
+            talent<Text className="text-[#E91E76]">.</Text>
+          </Text>
+        </View>
+
+        <View className="flex-row items-center gap-3">
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push('/search');
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            activeOpacity={0.7}
+          >
+            <Search size={22} color={theme.text} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push('/you');
+            }}
+            activeOpacity={0.8}
+          >
+            <Image
+              source={{
+                uri:
+                  user?.avatarUrl ||
+                  'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=200&auto=format&fit=crop',
+              }}
+              className="w-8 h-8 rounded-full border border-neutral-300 dark:border-zinc-700"
+            />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Main 4-Tab Segmented Bar */}
+      <View
+        className="flex-row items-center px-4 py-2 border-b"
+        style={{
+          backgroundColor: theme.isDark ? '#121214' : '#FAFAFA',
+          borderBottomColor: theme.isDark ? '#27272a' : '#E5E7EB',
+        }}
+      >
+        {(
+          [
+            { id: 'shows', label: 'Shows' },
+            { id: 'clubs', label: 'Clubs' },
+            { id: 'opportunities', label: 'Opportunities' },
+            { id: 'activity', label: 'My Activity' },
+          ] as const
+        ).map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <TouchableOpacity
+              key={tab.id}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setActiveTab(tab.id);
+              }}
+              activeOpacity={0.75}
+              style={{
+                backgroundColor: isActive ? '#E91E76' : 'transparent',
+              }}
+              className="flex-1 py-2 rounded-full items-center justify-center mx-0.5"
+            >
+              <Text
+                style={{
+                  color: isActive ? '#FFFFFF' : theme.textSecondary,
+                  fontSize: 12,
+                  fontWeight: isActive ? '700' : '600',
+                }}
+                numberOfLines={1}
               >
-                <Ticket color={theme.primary} size={16} />
-              </View>
-              <Text className="text-[28px] font-bold tracking-tight" style={{ color: theme.text }}>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 110 }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#E91E76" />}
+      >
+        {/* ============================================================== */}
+        {/* TAB 1: SHOWS                                                   */}
+        {/* ============================================================== */}
+        {activeTab === 'shows' && (
+          <View>
+            {/* Title Section */}
+            <View className="mb-4">
+              <Text className="text-[30px] font-bold tracking-tight mb-1" style={{ color: theme.text }}>
                 Shows
               </Text>
+              <Text className="text-[13px]" style={{ color: theme.textSecondary }}>
+                Live experiences built around real talent.
+              </Text>
             </View>
-            <Text className="text-[13px]" style={{ color: theme.textSecondary }}>
-              Live gigs • Intimate acoustic sessions • Verified RSVP passes
-            </Text>
-          </View>
 
-          {/* Create Show Button */}
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setIsCreateModalOpen(true);
-            }}
-            className="flex-row items-center gap-1.5 px-3 py-2 rounded-full border shadow-sm"
-            style={{ backgroundColor: theme.primary, borderColor: theme.primary }}
-          >
-            <Plus color="#ffffff" size={14} strokeWidth={2.5} />
-            <Text className="text-[12px] font-bold text-white">Post Show</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Tabs: Upcoming vs Archive */}
-        <View className="px-5 mb-4 flex-row gap-2">
-          <TouchableOpacity
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setActiveTab('upcoming');
-            }}
-            style={
-              activeTab === 'upcoming'
-                ? { backgroundColor: theme.primary }
-                : { backgroundColor: theme.surfaceBg, borderColor: theme.border }
-            }
-            className={`flex-1 flex-row items-center justify-center gap-2 py-3 rounded-xl border ${
-              activeTab === 'upcoming' ? 'border-transparent shadow-md' : ''
-            }`}
-          >
-            <Calendar color={activeTab === 'upcoming' ? '#fff' : theme.textSecondary} size={14} />
-            <Text
-              className="font-bold text-[13px]"
-              style={{ color: activeTab === 'upcoming' ? '#ffffff' : theme.textSecondary }}
+            {/* Primary Filter Pills */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              className="mb-3.5 -mx-4 px-4"
+              contentContainerStyle={{ gap: 8 }}
             >
-              Upcoming Shows
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setActiveTab('archive');
-            }}
-            style={
-              activeTab === 'archive'
-                ? { backgroundColor: theme.primary }
-                : { backgroundColor: theme.surfaceBg, borderColor: theme.border }
-            }
-            className={`flex-1 flex-row items-center justify-center gap-2 py-3 rounded-xl border ${
-              activeTab === 'archive' ? 'border-transparent shadow-md' : ''
-            }`}
-          >
-            <Ticket color={activeTab === 'archive' ? '#fff' : theme.textSecondary} size={14} />
-            <Text
-              className="font-bold text-[13px]"
-              style={{ color: activeTab === 'archive' ? '#ffffff' : theme.textSecondary }}
-            >
-              Past Archives
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* City Filter Pills */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          className="mb-5 px-5"
-          contentContainerStyle={{ paddingRight: 40, gap: 8 }}
-        >
-          {cities.map((city) => {
-            const isSelected = selectedCity === city;
-            return (
-              <TouchableOpacity
-                key={city}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setSelectedCity(city);
-                }}
-                style={
-                  isSelected
-                    ? { borderColor: theme.primary, backgroundColor: theme.primary + '20' }
-                    : { borderColor: theme.border, backgroundColor: theme.cardBg }
-                }
-                className="px-4 py-2 rounded-full border"
-              >
-                <Text
-                  className="font-medium text-[12px]"
-                  style={{ color: isSelected ? theme.primary : theme.textSecondary }}
-                >
-                  {city}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        {/* Shows Feed Cards */}
-        {loading ? (
-          <View className="py-20 items-center justify-center">
-            <ActivityIndicator size="large" color={theme.primary} />
-            <Text className="text-[13px] mt-3" style={{ color: theme.textSecondary }}>
-              Loading stage dates...
-            </Text>
-          </View>
-        ) : shows.length === 0 ? (
-          <View className="items-center justify-center py-16 px-6">
-            <View
-              className="w-16 h-16 rounded-full items-center justify-center mb-4"
-              style={{ backgroundColor: theme.surfaceBg }}
-            >
-              <Ticket color={theme.textSecondary} size={28} />
-            </View>
-            <Text className="text-[16px] font-bold mb-1" style={{ color: theme.text }}>
-              No shows found for {selectedCity}
-            </Text>
-            <Text className="text-[13px] text-center max-w-xs mb-6" style={{ color: theme.textSecondary }}>
-              Be the first artist to schedule a live gig in this city!
-            </Text>
-            <TouchableOpacity
-              onPress={() => setIsCreateModalOpen(true)}
-              className="px-5 py-2.5 rounded-full"
-              style={{ backgroundColor: theme.primary }}
-            >
-              <Text className="text-white font-bold text-[13px]">Post a Show Date</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View className="px-5 gap-6">
-            {shows.map((show) => {
-              const isBooked = show.isBooked;
-              return (
-                <View
-                  key={show.id}
-                  style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
-                  className="rounded-3xl border overflow-hidden shadow-lg"
-                >
-                  {/* Show Banner Image / Media Preview */}
+              {(['All', 'Offline', 'Online', 'Near you'] as const).map((filter) => {
+                const isSelected = showFilter === filter;
+                return (
                   <TouchableOpacity
-                    activeOpacity={0.9}
+                    key={filter}
                     onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setSelectedShow(show);
+                      setShowFilter(filter);
                     }}
-                    className="h-44 w-full relative bg-black"
+                    activeOpacity={0.8}
+                    style={{
+                      backgroundColor: isSelected
+                        ? theme.isDark
+                          ? '#FFFFFF'
+                          : '#121212'
+                        : theme.isDark
+                        ? '#1f1f23'
+                        : '#FFFFFF',
+                      borderColor: isSelected
+                        ? 'transparent'
+                        : theme.isDark
+                        ? '#2e2e33'
+                        : '#E5E7EB',
+                      borderWidth: 1,
+                    }}
+                    className="px-5 py-2 rounded-full"
                   >
-                    <Image
-                      source={{
-                        uri: show.image || '',
+                    <Text
+                      className="text-[13px] font-semibold"
+                      style={{
+                        color: isSelected
+                          ? theme.isDark
+                            ? '#000000'
+                            : '#FFFFFF'
+                          : theme.textSecondary,
                       }}
-                      className="w-full h-full opacity-80"
-                      resizeMode="cover"
-                    />
-                    <View className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent" />
-
-                    {/* Top Badges */}
-                    <View className="absolute top-3 inset-x-3 flex-row items-center justify-between">
-                      <View className="bg-black/60 backdrop-blur-md px-3 py-1 rounded-full border border-white/20 flex-row items-center gap-1.5">
-                        <Calendar color="#E91E76" size={11} />
-                        <Text className="text-white text-[11px] font-bold">
-                          {formatShowDate(show.date)}
-                        </Text>
-                      </View>
-
-                      {isBooked ? (
-                        <View className="bg-[#10B981] px-3 py-1 rounded-full flex-row items-center gap-1 shadow-sm">
-                          <Check color="#fff" size={12} strokeWidth={2.5} />
-                          <Text className="text-white text-[10px] font-bold uppercase">Pass Booked</Text>
-                        </View>
-                      ) : (
-                        <View className="bg-black/60 backdrop-blur-md px-3 py-1 rounded-full border border-white/20 flex-row items-center gap-1.5">
-                          <Users color="#fff" size={11} />
-                          <Text className="text-white/90 text-[10px] font-semibold">
-                            {show.visiting} RSVP'd
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-
-                    {/* Host Avatar & Name Bottom Overlay */}
-                    <View className="absolute bottom-3 left-3 right-3 flex-row items-center justify-between">
-                      <View className="flex-row items-center gap-2">
-                        <Image
-                          source={{
-                            uri:
-                              show.host?.avatarUrl ||
-                              `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                                show.host?.name || show.host?.username || 'Artist'
-                              )}&background=E91E76&color=fff`,
-                          }}
-                          className="w-6 h-6 rounded-full border border-white/40"
-                        />
-                        <Text className="text-white text-[12px] font-medium" numberOfLines={1}>
-                          {show.host?.name || show.host?.username || 'Featured Artist'}
-                        </Text>
-                      </View>
-
-                      <Text className="text-white/80 text-[11px] font-medium">
-                        {formatShowTime(show.date)}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-
-                  {/* Body Content */}
-                  <View className="p-4">
-                    <TouchableOpacity
-                      activeOpacity={0.8}
-                      onPress={() => setSelectedShow(show)}
                     >
+                      {filter}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* Secondary Filter Chips */}
+            <View className="flex-row items-center gap-2 mb-4">
+              <TouchableOpacity
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setSortByPrice(!sortByPrice);
+                }}
+                activeOpacity={0.8}
+                style={{
+                  backgroundColor: sortByPrice
+                    ? theme.isDark
+                      ? '#27272a'
+                      : '#F3F4F6'
+                    : 'transparent',
+                  borderColor: theme.isDark ? '#2e2e33' : '#E5E7EB',
+                  borderWidth: 1,
+                }}
+                className="flex-row items-center gap-2 px-3.5 py-1.5 rounded-full"
+              >
+                <SlidersHorizontal size={13} color={theme.textSecondary} />
+                <Text className="text-[12px] font-medium" style={{ color: theme.textSecondary }}>
+                  {sortByPrice ? 'Price: Low to High' : 'Date & price'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setIsFreeOnly(!isFreeOnly);
+                }}
+                activeOpacity={0.8}
+                style={{
+                  backgroundColor: isFreeOnly ? '#E91E76' : 'transparent',
+                  borderColor: isFreeOnly ? '#E91E76' : theme.isDark ? '#2e2e33' : '#E5E7EB',
+                  borderWidth: 1,
+                }}
+                className="px-3.5 py-1.5 rounded-full"
+              >
+                <Text
+                  className="text-[12px] font-medium"
+                  style={{ color: isFreeOnly ? '#FFFFFF' : theme.textSecondary }}
+                >
+                  Free shows
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Featured Show Card */}
+            <View className="rounded-3xl overflow-hidden relative h-[310px] w-full mb-3 bg-black shadow-lg">
+              <Image
+                source={{ uri: featuredShow.image }}
+                className="w-full h-full absolute inset-0 opacity-90"
+                resizeMode="cover"
+              />
+              <View className="absolute inset-0 bg-black/40" />
+
+              <View className="flex-1 p-5 justify-between">
+                <View className="self-start bg-black/60 px-3 py-1.5 rounded-full border border-white/20">
+                  <Text className="text-white text-[10px] font-bold tracking-widest uppercase">
+                    FEATURED SHOWCASE
+                  </Text>
+                </View>
+
+                <View>
+                  <Text className="text-white text-[26px] font-extrabold leading-[30px] mb-1">
+                    {featuredShow.title}
+                  </Text>
+                  <Text className="text-white/80 text-[13px] mb-3 font-normal">
+                    Discovered through talent.
+                  </Text>
+
+                  <View className="flex-row items-center gap-4 mb-4">
+                    <View className="flex-row items-center gap-1.5">
+                      <MapPin size={13} color="#FFFFFF" />
+                      <Text className="text-white/95 text-[12px] font-medium">{featuredShow.location}</Text>
+                    </View>
+                    <View className="flex-row items-center gap-1.5">
+                      <Calendar size={13} color="#FFFFFF" />
+                      <Text className="text-white/95 text-[12px] font-medium">{featuredShow.date}</Text>
+                    </View>
+                    <View className="flex-row items-center gap-1.5">
+                      <Users size={13} color="#FFFFFF" />
+                      <Text className="text-white/95 text-[12px] font-medium">{featuredShow.slots}</Text>
+                    </View>
+                  </View>
+
+                  <View className="flex-row items-center gap-2.5">
+                    <TouchableOpacity
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setSelectedShow(featuredShow);
+                      }}
+                      activeOpacity={0.85}
+                      className="flex-1 bg-[#E91E76] py-3 rounded-2xl flex-row items-center justify-center gap-2"
+                    >
+                      <Text className="text-white text-[14px] font-bold">View show</Text>
+                      <ArrowRight size={15} color="#FFFFFF" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        handleToggleRSVP(featuredShow);
+                      }}
+                      activeOpacity={0.85}
+                      className="flex-1 bg-white/15 border border-white/30 py-3 rounded-2xl flex-row items-center justify-center gap-2"
+                    >
+                      <Ticket size={15} color="#FFFFFF" />
+                      <Text className="text-white text-[14px] font-bold">
+                        {featuredShow.isBooked ? 'Booked' : 'Book pass'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* Upcoming Shows Header */}
+            <View className="mb-3 mt-4">
+              <View className="flex-row items-center justify-between mb-0.5">
+                <Text className="text-[20px] font-bold tracking-tight" style={{ color: theme.text }}>
+                  Upcoming Live Shows
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setIsExpanded(!isExpanded);
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  className="flex-row items-center gap-0.5"
+                >
+                  <Text className="text-[13px] font-medium" style={{ color: theme.textSecondary }}>
+                    {isExpanded ? 'Show less' : `See all ${filteredShows.length}`}
+                  </Text>
+                  <ChevronRight size={14} color={theme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Shows Cards */}
+            {displayedShows.map((show) => (
+              <TouchableOpacity
+                key={show.id}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setSelectedShow(show);
+                }}
+                activeOpacity={0.88}
+                style={{
+                  backgroundColor: theme.isDark ? '#18181b' : '#FFFFFF',
+                  borderColor: theme.border,
+                  borderWidth: 1,
+                }}
+                className="rounded-2xl mb-3 overflow-hidden flex-row p-2.5 shadow-sm"
+              >
+                <View className="w-[96px] h-[108px] rounded-xl overflow-hidden relative bg-black">
+                  <Image source={{ uri: show.image }} className="w-full h-full" resizeMode="cover" />
+                  <View className="absolute bottom-1.5 left-1.5 bg-black/80 px-1.5 py-0.5 rounded">
+                    <Text className="text-white text-[9px] font-bold tracking-wider uppercase">
+                      {show.isOnline ? 'ONLINE' : 'OFFLINE'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View className="flex-1 pl-3 justify-between py-0.5">
+                  <View>
+                    <View className="flex-row items-start justify-between">
                       <Text
-                        className="text-[18px] font-bold mb-1 leading-snug"
+                        className="text-[15px] font-bold leading-tight flex-1 pr-1"
                         style={{ color: theme.text }}
+                        numberOfLines={1}
                       >
                         {show.title}
                       </Text>
-                    </TouchableOpacity>
-
-                    <View className="flex-row items-center gap-1.5 mb-4">
-                      <MapPin color={theme.primary} size={14} />
-                      <Text
-                        className="text-[13px] flex-1"
-                        style={{ color: theme.textSecondary }}
-                        numberOfLines={1}
+                      <View
+                        className="w-6 h-6 rounded-full items-center justify-center -mt-0.5"
+                        style={{ backgroundColor: theme.isDark ? '#27272a' : '#F3F4F6' }}
                       >
+                        <ArrowUpRight size={13} color={theme.text} />
+                      </View>
+                    </View>
+                    <Text className="text-[12px] mt-0.5" style={{ color: theme.textSecondary }}>
+                      {show.category} · {show.type}
+                    </Text>
+                  </View>
+
+                  <View className="flex-row items-center gap-3">
+                    <View className="flex-row items-center gap-1">
+                      {show.isOnline ? (
+                        <Globe size={11} color={theme.textSecondary} />
+                      ) : (
+                        <MapPin size={11} color={theme.textSecondary} />
+                      )}
+                      <Text className="text-[11px]" style={{ color: theme.textSecondary }}>
                         {show.location}
                       </Text>
                     </View>
-
-                    {/* Action Bar */}
-                    <View className="flex-row items-center justify-between pt-3 border-t" style={{ borderTopColor: theme.border }}>
-                      <TouchableOpacity
-                        activeOpacity={0.7}
-                        onPress={() => setSelectedShow(show)}
-                        className="flex-row items-center gap-1 py-1"
-                      >
-                        <Text className="text-[12px] font-bold" style={{ color: theme.primary }}>
-                          View Stage Preview
-                        </Text>
-                        <ChevronRight color={theme.primary} size={14} />
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        activeOpacity={0.8}
-                        onPress={() => handleToggleRSVP(show)}
-                        disabled={rsvpLoading}
-                        style={{
-                          backgroundColor: isBooked ? '#10B981' : theme.primary,
-                        }}
-                        className="px-4 py-2 rounded-xl flex-row items-center gap-1.5 shadow-sm"
-                      >
-                        {isBooked ? (
-                          <>
-                            <QrCode color="#fff" size={13} />
-                            <Text className="text-white font-bold text-[12px]">View QR Pass</Text>
-                          </>
-                        ) : (
-                          <>
-                            <Ticket color="#fff" size={13} />
-                            <Text className="text-white font-bold text-[12px]">RSVP Free Pass</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
+                    <View className="flex-row items-center gap-1">
+                      <Calendar size={11} color={theme.textSecondary} />
+                      <Text className="text-[11px]" style={{ color: theme.textSecondary }}>
+                        {show.date}
+                      </Text>
                     </View>
                   </View>
+
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-[#E91E76] text-[11px] font-medium" numberOfLines={1}>
+                      {show.slots}
+                    </Text>
+                    <Text className="text-[14px] font-extrabold" style={{ color: theme.text }}>
+                      {show.price}
+                    </Text>
+                  </View>
                 </View>
+              </TouchableOpacity>
+            ))}
+
+            {/* Host a Show Prompt Card */}
+            <View
+              style={{
+                backgroundColor: theme.isDark ? '#18181b' : '#FFFFFF',
+                borderColor: theme.border,
+                borderWidth: 1,
+              }}
+              className="rounded-2xl p-4 flex-row items-center justify-between mb-3 mt-2 shadow-sm"
+            >
+              <View className="flex-1 pr-3">
+                <Text className="text-[16px] font-bold" style={{ color: theme.text }}>
+                  Ready to host a show?
+                </Text>
+                <Text className="text-[12px] mt-0.5" style={{ color: theme.textSecondary }}>
+                  Curate performers and list your live showcase.
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setIsCreateShowModalOpen(true);
+                }}
+                activeOpacity={0.85}
+                className="bg-[#E91E76] px-4 py-2 rounded-full flex-row items-center gap-1"
+              >
+                <Plus size={14} color="#FFFFFF" />
+                <Text className="text-white text-[13px] font-bold">Host show</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* ============================================================== */}
+        {/* TAB 2: CLUBS (CLUBS WORKSPACE)                                 */}
+        {/* ============================================================== */}
+        {activeTab === 'clubs' && (
+          <View>
+            <View className="flex-row items-center justify-between mb-3">
+              <View className="flex-1 pr-2">
+                <Text className="text-[30px] font-bold tracking-tight mb-0.5" style={{ color: theme.text }}>
+                  Clubs
+                </Text>
+                <Text className="text-[13px]" style={{ color: theme.textSecondary }}>
+                  Join creative collectives, rehearsal rooms & jam sessions.
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setIsCreateClubModalOpen(true);
+                }}
+                activeOpacity={0.85}
+                className="bg-[#E91E76] px-3.5 py-2 rounded-full flex-row items-center gap-1"
+              >
+                <Plus size={14} color="#FFFFFF" />
+                <Text className="text-white text-[12px] font-bold">New club</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Club Search Bar */}
+            <View
+              className="flex-row items-center px-3.5 py-2 rounded-xl mb-3 border"
+              style={{
+                backgroundColor: theme.isDark ? '#18181b' : '#FFFFFF',
+                borderColor: theme.border,
+              }}
+            >
+              <Search size={16} color={theme.textSecondary} />
+              <TextInput
+                value={clubSearch}
+                onChangeText={setClubSearch}
+                placeholder="Search clubs by name, city, prompt..."
+                placeholderTextColor={theme.textSecondary}
+                className="flex-1 ml-2 text-[13px]"
+                style={{ color: theme.text }}
+              />
+              {!!clubSearch && (
+                <TouchableOpacity onPress={() => setClubSearch('')}>
+                  <X size={15} color={theme.textSecondary} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Category Filter Pills */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              className="mb-4 -mx-4 px-4"
+              contentContainerStyle={{ gap: 8 }}
+            >
+              {['All', 'Music', 'Dance', 'Comedy', 'Film', 'Magic', 'Writing'].map((cat) => {
+                const isSelected = clubCategory.toLowerCase() === cat.toLowerCase();
+                return (
+                  <TouchableOpacity
+                    key={cat}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setClubCategory(cat);
+                    }}
+                    activeOpacity={0.8}
+                    style={{
+                      backgroundColor: isSelected ? '#E91E76' : theme.isDark ? '#1f1f23' : '#FFFFFF',
+                      borderColor: isSelected ? '#E91E76' : theme.border,
+                      borderWidth: 1,
+                    }}
+                    className="px-4 py-1.5 rounded-full"
+                  >
+                    <Text
+                      className="text-[12px] font-semibold"
+                      style={{ color: isSelected ? '#FFFFFF' : theme.textSecondary }}
+                    >
+                      {cat}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* Clubs List */}
+            {filteredClubs.map((club) => {
+              const isMember = !!communityStore.memberships[club.id];
+              const memberRole = communityStore.memberships[club.id];
+
+              return (
+                <TouchableOpacity
+                  key={club.id}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setSelectedClub(club);
+                  }}
+                  activeOpacity={0.85}
+                  style={{
+                    backgroundColor: theme.isDark ? '#18181b' : '#FFFFFF',
+                    borderColor: theme.border,
+                    borderWidth: 1,
+                  }}
+                  className="rounded-2xl p-4 mb-3 shadow-sm"
+                >
+                  <View className="flex-row items-start justify-between mb-2">
+                    <View className="flex-row items-center gap-3 flex-1 pr-2">
+                      <View
+                        className="w-11 h-11 rounded-full items-center justify-center"
+                        style={{ backgroundColor: club.color || '#E91E76' }}
+                      >
+                        <Text className="text-white text-[15px] font-extrabold">{club.initials}</Text>
+                      </View>
+                      <View className="flex-1">
+                        <Text className="text-[16px] font-bold" style={{ color: theme.text }}>
+                          {club.name}
+                        </Text>
+                        <View className="flex-row items-center gap-2 mt-0.5">
+                          <Text className="text-[12px] font-medium text-[#E91E76]">{club.category}</Text>
+                          <Text className="text-[12px]" style={{ color: theme.textSecondary }}>
+                            ·
+                          </Text>
+                          <Text className="text-[12px]" style={{ color: theme.textSecondary }}>
+                            {club.city}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    {isMember ? (
+                      <View className="bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-1 rounded-full">
+                        <Text className="text-emerald-500 text-[10px] font-bold uppercase">
+                          {memberRole || 'Member'}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View
+                        className="px-3 py-1 rounded-full border"
+                        style={{ borderColor: theme.border, backgroundColor: theme.isDark ? '#27272a' : '#F3F4F6' }}
+                      >
+                        <Text className="text-[11px] font-semibold" style={{ color: theme.text }}>
+                          Explore
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <Text className="text-[13px] leading-relaxed mb-3" style={{ color: theme.textSecondary }}>
+                    {club.description}
+                  </Text>
+
+                  {/* Creative Prompt Box */}
+                  <View
+                    className="p-2.5 rounded-xl border flex-row items-center gap-2"
+                    style={{
+                      backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                      borderColor: theme.border,
+                    }}
+                  >
+                    <Sparkles size={13} color="#E91E76" />
+                    <Text className="text-[11px] font-medium flex-1 italic" style={{ color: theme.text }}>
+                      "{club.prompt}"
+                    </Text>
+                  </View>
+                </TouchableOpacity>
               );
             })}
           </View>
         )}
-      </ScrollView>
 
-      {/* Show Preview & Digital QR Pass Modal */}
-      {selectedShow && (
-        <Modal visible={true} transparent={true} animationType="slide" onRequestClose={() => setSelectedShow(null)}>
-          <View className="flex-1 bg-black/80 justify-end">
-            <View
-              className="h-[90%] rounded-t-3xl border-t overflow-hidden"
-              style={{ backgroundColor: theme.bg, borderTopColor: theme.border }}
-            >
-              {/* Modal Top Bar */}
-              <View
-                className="flex-row items-center justify-between p-4 border-b"
-                style={{ borderBottomColor: theme.border }}
-              >
-                <View className="flex-row items-center gap-2">
-                  <View className="bg-[#E91E76] px-2 py-0.5 rounded">
-                    <Text className="text-white text-[10px] font-bold uppercase tracking-wider">Show Details</Text>
-                  </View>
-                  <Text className="font-bold text-[14px] max-w-[200px]" style={{ color: theme.text }} numberOfLines={1}>
-                    {selectedShow.title}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => setSelectedShow(null)}
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                  activeOpacity={0.7}
-                  className="w-8 h-8 rounded-full items-center justify-center"
-                  style={{ backgroundColor: theme.surfaceBg }}
-                >
-                  <X color={theme.text} size={18} />
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView className="flex-1 p-5" contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
-                <Text className="text-[#E91E76] text-[11px] font-bold tracking-widest uppercase mb-1">
-                  Verified Artist Concert
+        {/* ============================================================== */}
+        {/* TAB 3: OPPORTUNITIES (WORKPILOT)                               */}
+        {/* ============================================================== */}
+        {activeTab === 'opportunities' && (
+          <View>
+            <View className="flex-row items-center justify-between mb-3">
+              <View className="flex-1 pr-2">
+                <Text className="text-[30px] font-bold tracking-tight mb-0.5" style={{ color: theme.text }}>
+                  Opportunities
                 </Text>
-                <Text className="text-[24px] font-bold leading-tight mb-3" style={{ color: theme.text }}>
-                  {selectedShow.title}
-                </Text>
-
-                <View className="flex-row items-center gap-4 mb-5">
-                  <View className="flex-row items-center gap-1.5">
-                    <Calendar color={theme.primary} size={14} />
-                    <Text className="text-[13px]" style={{ color: theme.textSecondary }}>
-                      {formatShowDate(selectedShow.date)}
-                    </Text>
-                  </View>
-                  <View className="flex-row items-center gap-1.5">
-                    <Clock color={theme.primary} size={14} />
-                    <Text className="text-[13px]" style={{ color: theme.textSecondary }}>
-                      {formatShowTime(selectedShow.date)}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* DIGITAL QR ENTRY PASS BLOCK (Active when RSVP'd) */}
-                {selectedShow.isBooked && (
-                  <View
-                    style={{ backgroundColor: theme.cardBg, borderColor: '#10B981', borderWidth: 1.5 }}
-                    className="rounded-2xl p-4 mb-6 shadow-xl relative overflow-hidden"
-                  >
-                    <View className="flex-row items-center justify-between mb-3">
-                      <View className="flex-row items-center gap-1.5">
-                        <QrCode color="#10B981" size={16} />
-                        <Text className="text-[#10B981] font-bold text-[13px] tracking-wide uppercase">
-                          Official Entry Pass
-                        </Text>
-                      </View>
-                      <View className="bg-[#10B981]/20 px-2 py-0.5 rounded border border-[#10B981]/40">
-                        <Text className="text-[#10B981] text-[10px] font-bold">VERIFIED GUEST</Text>
-                      </View>
-                    </View>
-
-                    {/* QR Code Matrix Visual Representation */}
-                    <View className="items-center py-3 bg-white rounded-xl mb-3 shadow-sm">
-                      <QrCode color="#000" size={100} strokeWidth={2} />
-                      <Text className="text-black font-mono font-bold text-[12px] tracking-widest mt-2">
-                        {selectedShow.ticketCode || `PASS-${selectedShow.id}-${user?.id || 1}`}
-                      </Text>
-                      <Text className="text-gray-500 text-[10px] mt-0.5">Show this at the venue door entrance</Text>
-                    </View>
-
-                    <Text className="text-[11px] text-center" style={{ color: theme.textSecondary }}>
-                      Pass registered to: <Text className="font-bold text-white">@{user?.username || 'You'}</Text>
-                    </Text>
-                  </View>
-                )}
-
-                {/* Venue Details */}
-                <View
-                  className="rounded-2xl p-4 border mb-5"
-                  style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
-                >
-                  <Text className="text-[10px] font-bold tracking-widest uppercase mb-3" style={{ color: theme.textSecondary }}>
-                    Venue & Navigation
-                  </Text>
-                  <View className="flex-row justify-between items-start">
-                    <View className="flex-1 pr-3">
-                      <Text className="font-bold text-[15px] mb-1" style={{ color: theme.text }}>
-                        {selectedShow.location}
-                      </Text>
-                      <Text className="text-[11px]" style={{ color: theme.textSecondary }}>
-                        All Ages • Doors open 45 minutes before stage start
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        const query = encodeURIComponent(selectedShow.location);
-                        Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`).catch(() => {});
-                      }}
-                      className="px-3 py-2 rounded-xl flex-row items-center gap-1.5 border"
-                      style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
-                    >
-                      <Navigation color={theme.text} size={13} />
-                      <Text className="text-[11px] font-bold" style={{ color: theme.text }}>
-                        Directions
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {/* RSVP Bottom Button */}
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => handleToggleRSVP(selectedShow)}
-                  disabled={rsvpLoading}
-                  style={{
-                    backgroundColor: selectedShow.isBooked ? '#EF4444' : theme.primary,
-                  }}
-                  className="w-full py-4 rounded-2xl flex-row items-center justify-center gap-2 shadow-lg mb-4"
-                >
-                  {selectedShow.isBooked ? (
-                    <>
-                      <X color="#fff" size={18} />
-                      <Text className="text-white font-bold text-[15px]">Cancel My RSVP</Text>
-                    </>
-                  ) : (
-                    <>
-                      <Ticket color="#fff" size={18} />
-                      <Text className="text-white font-bold text-[15px]">Claim Free RSVP Ticket</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
-      )}
-
-      {/* Post / Create Show Modal for Artists */}
-      <Modal visible={isCreateModalOpen} transparent={true} animationType="slide" onRequestClose={() => setIsCreateModalOpen(false)}>
-        <View className="flex-1 bg-black/75 justify-end">
-          <View
-            className="h-[80%] rounded-t-3xl border-t p-5"
-            style={{ backgroundColor: theme.bg, borderTopColor: theme.border }}
-          >
-            <View className="flex-row items-center justify-between pb-4 border-b mb-4" style={{ borderBottomColor: theme.border }}>
-              <View className="flex-row items-center gap-2">
-                <Sparkles color={theme.primary} size={18} />
-                <Text className="text-[18px] font-bold" style={{ color: theme.text }}>
-                  Schedule Live Show Date
+                <Text className="text-[13px]" style={{ color: theme.textSecondary }}>
+                  Paid creative briefs, auditions, and live lineups.
                 </Text>
               </View>
               <TouchableOpacity
-                onPress={() => setIsCreateModalOpen(false)}
-                hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
-                activeOpacity={0.7}
-                className="p-1 -mr-1"
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setIsCreateBriefModalOpen(true);
+                }}
+                activeOpacity={0.85}
+                className="bg-[#E91E76] px-3.5 py-2 rounded-full flex-row items-center gap-1"
               >
-                <X color={theme.textSecondary} size={20} />
+                <Plus size={14} color="#FFFFFF" />
+                <Text className="text-white text-[12px] font-bold">Post brief</Text>
               </TouchableOpacity>
             </View>
 
-            <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-              <View className="mb-4">
-                <Text className="text-[12px] font-bold mb-1.5" style={{ color: theme.text }}>
-                  Concert / Gig Title
-                </Text>
-                <TextInput
-                  value={newTitle}
-                  onChangeText={setNewTitle}
-                  placeholder="e.g. Unplugged Candlelight Session"
-                  placeholderTextColor={theme.textSecondary}
-                  style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border, color: theme.text }}
-                  className="px-4 py-3 rounded-xl border text-[14px]"
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-[12px] font-bold mb-1.5" style={{ color: theme.text }}>
-                  Venue Address & Location
-                </Text>
-                <TextInput
-                  value={newLocation}
-                  onChangeText={setNewLocation}
-                  placeholder="e.g. The Next Stage, Indiranagar"
-                  placeholderTextColor={theme.textSecondary}
-                  style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border, color: theme.text }}
-                  className="px-4 py-3 rounded-xl border text-[14px]"
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-[12px] font-bold mb-1.5" style={{ color: theme.text }}>
-                  City
-                </Text>
-                <View className="flex-row flex-wrap gap-2">
-                  {['Bengaluru', 'Mumbai', 'Kochi', 'Delhi NCR'].map((c) => (
-                    <TouchableOpacity
-                      key={c}
-                      onPress={() => setNewCity(c)}
-                      style={{
-                        backgroundColor: newCity === c ? theme.primary : theme.surfaceBg,
-                        borderColor: newCity === c ? theme.primary : theme.border,
-                      }}
-                      className="px-4 py-2 rounded-full border"
+            {/* Category Filter Pills */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              className="mb-4 -mx-4 px-4"
+              contentContainerStyle={{ gap: 8 }}
+            >
+              {['All', 'Music', 'Singing', 'Dance', 'Comedy', 'Film'].map((cat) => {
+                const isSelected = oppCategory.toLowerCase() === cat.toLowerCase();
+                return (
+                  <TouchableOpacity
+                    key={cat}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setOppCategory(cat);
+                    }}
+                    activeOpacity={0.8}
+                    style={{
+                      backgroundColor: isSelected ? '#E91E76' : theme.isDark ? '#1f1f23' : '#FFFFFF',
+                      borderColor: isSelected ? '#E91E76' : theme.border,
+                      borderWidth: 1,
+                    }}
+                    className="px-4 py-1.5 rounded-full"
+                  >
+                    <Text
+                      className="text-[12px] font-semibold"
+                      style={{ color: isSelected ? '#FFFFFF' : theme.textSecondary }}
                     >
-                      <Text
-                        className="text-[12px] font-bold"
-                        style={{ color: newCity === c ? '#fff' : theme.textSecondary }}
+                      {cat}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* Opportunities List */}
+            {filteredBriefs.map((brief) => (
+              <TouchableOpacity
+                key={brief.id}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setSelectedBrief(brief);
+                }}
+                activeOpacity={0.88}
+                style={{
+                  backgroundColor: theme.isDark ? '#18181b' : '#FFFFFF',
+                  borderColor: theme.border,
+                  borderWidth: 1,
+                }}
+                className="rounded-2xl p-4 mb-3 shadow-sm"
+              >
+                <View className="flex-row items-center justify-between mb-2">
+                  <View className="bg-pink-500/10 border border-pink-500/20 px-2.5 py-0.5 rounded-full">
+                    <Text className="text-[#E91E76] text-[10px] font-bold uppercase">{brief.category}</Text>
+                  </View>
+                  <View className="flex-row items-center gap-1.5">
+                    <Clock size={12} color={theme.textSecondary} />
+                    <Text className="text-[11px]" style={{ color: theme.textSecondary }}>
+                      Deadline: {brief.deadline}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text className="text-[17px] font-bold leading-snug mb-1" style={{ color: theme.text }}>
+                  {brief.title}
+                </Text>
+
+                <Text className="text-[12px] mb-3" style={{ color: theme.textSecondary }}>
+                  {brief.organizer} · {brief.city} ({brief.format})
+                </Text>
+
+                <View
+                  className="p-3 rounded-xl mb-3 border"
+                  style={{
+                    backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                    borderColor: theme.border,
+                  }}
+                >
+                  <Text className="text-[12px] font-medium" style={{ color: theme.text }}>
+                    {brief.requirements}
+                  </Text>
+                </View>
+
+                <View className="flex-row items-center justify-between pt-1">
+                  <View>
+                    <Text className="text-[10px] uppercase font-bold tracking-wider" style={{ color: theme.textSecondary }}>
+                      Compensation
+                    </Text>
+                    <Text className="text-[16px] font-black text-[#E91E76]">
+                      {brief.fee ? `₹${brief.fee.toLocaleString('en-IN')}` : 'Stage slot & credits'}
+                    </Text>
+                  </View>
+
+                  <View className="bg-[#E91E76] px-4 py-2 rounded-xl flex-row items-center gap-1.5">
+                    <Text className="text-white text-[12px] font-bold">Apply now</Text>
+                    <ArrowRight size={13} color="#FFFFFF" />
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* ============================================================== */}
+        {/* TAB 4: MY ACTIVITY                                             */}
+        {/* ============================================================== */}
+        {activeTab === 'activity' && (
+          <View>
+            <View className="mb-4">
+              <Text className="text-[30px] font-bold tracking-tight mb-1" style={{ color: theme.text }}>
+                My Activity
+              </Text>
+              <Text className="text-[13px]" style={{ color: theme.textSecondary }}>
+                Booked passes, joined clubs, and application status.
+              </Text>
+            </View>
+
+            {/* Sub-tabs */}
+            <View
+              className="flex-row items-center p-1 rounded-xl mb-4 border"
+              style={{
+                backgroundColor: theme.isDark ? '#18181b' : '#F3F4F6',
+                borderColor: theme.border,
+              }}
+            >
+              {(
+                [
+                  { id: 'passes', label: `Passes (${myBookedShows.length})` },
+                  { id: 'clubs', label: `Clubs (${myJoinedClubs.length})` },
+                  { id: 'applications', label: `Gigs (${myApplications.length})` },
+                ] as const
+              ).map((sub) => {
+                const isSelected = activitySubTab === sub.id;
+                return (
+                  <TouchableOpacity
+                    key={sub.id}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setActivitySubTab(sub.id);
+                    }}
+                    style={{
+                      backgroundColor: isSelected ? (theme.isDark ? '#27272a' : '#FFFFFF') : 'transparent',
+                    }}
+                    className="flex-1 py-1.5 rounded-lg items-center justify-center"
+                  >
+                    <Text
+                      style={{
+                        color: isSelected ? theme.text : theme.textSecondary,
+                        fontSize: 12,
+                        fontWeight: isSelected ? '700' : '500',
+                      }}
+                    >
+                      {sub.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Passes View */}
+            {activitySubTab === 'passes' && (
+              <View>
+                {myBookedShows.length === 0 ? (
+                  <View className="py-12 items-center justify-center">
+                    <Ticket size={40} color={theme.textSecondary} />
+                    <Text className="text-[16px] font-bold mt-3" style={{ color: theme.text }}>
+                      No passes booked yet
+                    </Text>
+                    <Text className="text-[13px] text-center mt-1" style={{ color: theme.textSecondary }}>
+                      Book entry passes for upcoming live shows in the Shows tab.
+                    </Text>
+                  </View>
+                ) : (
+                  myBookedShows.map((show) => (
+                    <View
+                      key={show.id}
+                      style={{
+                        backgroundColor: theme.isDark ? '#18181b' : '#FFFFFF',
+                        borderColor: theme.border,
+                        borderWidth: 1,
+                      }}
+                      className="rounded-2xl p-4 mb-3 shadow-sm"
+                    >
+                      <View className="flex-row items-start justify-between mb-3">
+                        <View className="flex-1 pr-2">
+                          <Text className="text-[17px] font-bold" style={{ color: theme.text }}>
+                            {show.title}
+                          </Text>
+                          <Text className="text-[12px] mt-0.5" style={{ color: theme.textSecondary }}>
+                            {show.date} · {show.location}
+                          </Text>
+                        </View>
+                        <View className="bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
+                          <Text className="text-emerald-500 text-[10px] font-bold">CONFIRMED</Text>
+                        </View>
+                      </View>
+
+                      <View
+                        className="p-3 rounded-xl mb-3 flex-row items-center justify-between border"
+                        style={{
+                          backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                          borderColor: theme.border,
+                        }}
                       >
-                        {c}
+                        <View>
+                          <Text className="text-[10px] uppercase font-bold tracking-wider" style={{ color: theme.textSecondary }}>
+                            Pass Reference
+                          </Text>
+                          <Text className="text-[14px] font-mono font-bold" style={{ color: theme.text }}>
+                            {show.ticketCode}
+                          </Text>
+                        </View>
+                        <Text className="text-[14px] font-bold text-[#E91E76]">{show.price}</Text>
+                      </View>
+
+                      <TouchableOpacity
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setTicketQrShow(show);
+                        }}
+                        activeOpacity={0.85}
+                        className="bg-[#E91E76] py-2.5 rounded-xl flex-row items-center justify-center gap-2"
+                      >
+                        <QrCode size={16} color="#FFFFFF" />
+                        <Text className="text-white text-[13px] font-bold">Show digital QR pass</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                )}
+              </View>
+            )}
+
+            {/* Clubs View */}
+            {activitySubTab === 'clubs' && (
+              <View>
+                {myJoinedClubs.length === 0 ? (
+                  <View className="py-12 items-center justify-center">
+                    <Users size={40} color={theme.textSecondary} />
+                    <Text className="text-[16px] font-bold mt-3" style={{ color: theme.text }}>
+                      No clubs joined yet
+                    </Text>
+                    <Text className="text-[13px] text-center mt-1" style={{ color: theme.textSecondary }}>
+                      Browse clubs to practice, exchange material, and perform together.
+                    </Text>
+                  </View>
+                ) : (
+                  myJoinedClubs.map((club) => (
+                    <View
+                      key={club.id}
+                      style={{
+                        backgroundColor: theme.isDark ? '#18181b' : '#FFFFFF',
+                        borderColor: theme.border,
+                        borderWidth: 1,
+                      }}
+                      className="rounded-2xl p-4 mb-3 shadow-sm flex-row items-center justify-between"
+                    >
+                      <View className="flex-row items-center gap-3 flex-1 pr-2">
+                        <View
+                          className="w-11 h-11 rounded-full items-center justify-center"
+                          style={{ backgroundColor: club.color || '#E91E76' }}
+                        >
+                          <Text className="text-white text-[15px] font-extrabold">{club.initials}</Text>
+                        </View>
+                        <View className="flex-1">
+                          <Text className="text-[15px] font-bold" style={{ color: theme.text }}>
+                            {club.name}
+                          </Text>
+                          <Text className="text-[12px]" style={{ color: theme.textSecondary }}>
+                            {club.category} · {club.city}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <TouchableOpacity
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setSelectedClub(club);
+                        }}
+                        activeOpacity={0.8}
+                        className="px-3 py-1.5 rounded-full border"
+                        style={{ borderColor: theme.border, backgroundColor: theme.isDark ? '#27272a' : '#F3F4F6' }}
+                      >
+                        <Text className="text-[12px] font-semibold" style={{ color: theme.text }}>
+                          Manage
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                )}
+              </View>
+            )}
+
+            {/* Applications View */}
+            {activitySubTab === 'applications' && (
+              <View>
+                {myApplications.length === 0 ? (
+                  <View className="py-12 items-center justify-center">
+                    <Briefcase size={40} color={theme.textSecondary} />
+                    <Text className="text-[16px] font-bold mt-3" style={{ color: theme.text }}>
+                      No applications submitted
+                    </Text>
+                    <Text className="text-[13px] text-center mt-1" style={{ color: theme.textSecondary }}>
+                      Apply to creative briefs and live performance lineup calls in Opportunities.
+                    </Text>
+                  </View>
+                ) : (
+                  myApplications.map((app) => (
+                    <View
+                      key={app.id}
+                      style={{
+                        backgroundColor: theme.isDark ? '#18181b' : '#FFFFFF',
+                        borderColor: theme.border,
+                        borderWidth: 1,
+                      }}
+                      className="rounded-2xl p-4 mb-3 shadow-sm"
+                    >
+                      <View className="flex-row items-start justify-between mb-2">
+                        <View className="flex-1 pr-2">
+                          <Text className="text-[16px] font-bold" style={{ color: theme.text }}>
+                            {app.performanceTitle}
+                          </Text>
+                          <Text className="text-[12px] mt-0.5" style={{ color: theme.textSecondary }}>
+                            Applicant: {app.name}
+                          </Text>
+                        </View>
+                        <View className="bg-blue-500/15 border border-blue-500/30 px-2.5 py-0.5 rounded-full">
+                          <Text className="text-blue-500 text-[10px] font-bold uppercase">{app.status}</Text>
+                        </View>
+                      </View>
+
+                      <View
+                        className="p-3 rounded-xl border mb-2"
+                        style={{
+                          backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                          borderColor: theme.border,
+                        }}
+                      >
+                        <Text className="text-[12px]" style={{ color: theme.text }}>
+                          "{app.note}"
+                        </Text>
+                      </View>
+
+                      <View className="flex-row items-center justify-between pt-1">
+                        <Text className="text-[11px]" style={{ color: theme.textSecondary }}>
+                          Proposed fee: ₹{app.fee.toLocaleString('en-IN')}
+                        </Text>
+                        <View className="flex-row items-center gap-1">
+                          <Check size={13} color="#10B981" />
+                          <Text className="text-[11px] font-semibold text-emerald-500">Submitted</Text>
+                        </View>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </View>
+            )}
+          </View>
+        )}
+      </ScrollView>
+
+      {/* ============================================================== */}
+      {/* MODAL 1: SHOW DETAILS & BOOKING MODAL                          */}
+      {/* ============================================================== */}
+      <Modal visible={!!selectedShow} animationType="slide" transparent onRequestClose={() => setSelectedShow(null)}>
+        <View className="flex-1 justify-end bg-black/60">
+          <View
+            className="rounded-t-3xl max-h-[88%] p-5 overflow-hidden"
+            style={{ backgroundColor: theme.isDark ? '#18181b' : '#FFFFFF' }}
+          >
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View className="flex-row items-center justify-between mb-4">
+                <Text className="text-[20px] font-bold" style={{ color: theme.text }}>
+                  Show Details
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setSelectedShow(null)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <X size={20} color={theme.text} />
+                </TouchableOpacity>
+              </View>
+
+              {selectedShow && (
+                <View>
+                  <View className="w-full h-44 rounded-2xl overflow-hidden mb-4 relative bg-black">
+                    <Image source={{ uri: selectedShow.image }} className="w-full h-full" resizeMode="cover" />
+                    <View className="absolute bottom-2 left-2 bg-black/75 px-2.5 py-1 rounded-full">
+                      <Text className="text-white text-[11px] font-bold">{selectedShow.price}</Text>
+                    </View>
+                  </View>
+
+                  <Text className="text-[22px] font-extrabold mb-1" style={{ color: theme.text }}>
+                    {selectedShow.title}
+                  </Text>
+                  <Text className="text-[13px] mb-3" style={{ color: theme.textSecondary }}>
+                    {selectedShow.category} · {selectedShow.type}
+                  </Text>
+
+                  <View
+                    className="p-3.5 rounded-2xl mb-4 border flex-row items-center justify-around"
+                    style={{
+                      backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                      borderColor: theme.border,
+                    }}
+                  >
+                    <View className="items-center">
+                      <MapPin size={16} color="#E91E76" />
+                      <Text className="text-[12px] font-bold mt-1" style={{ color: theme.text }}>
+                        {selectedShow.location}
+                      </Text>
+                      <Text className="text-[10px]" style={{ color: theme.textSecondary }}>
+                        Location
+                      </Text>
+                    </View>
+                    <View className="w-[1px] h-8" style={{ backgroundColor: theme.border }} />
+                    <View className="items-center">
+                      <Calendar size={16} color="#E91E76" />
+                      <Text className="text-[12px] font-bold mt-1" style={{ color: theme.text }}>
+                        {selectedShow.date}
+                      </Text>
+                      <Text className="text-[10px]" style={{ color: theme.textSecondary }}>
+                        Date
+                      </Text>
+                    </View>
+                    <View className="w-[1px] h-8" style={{ backgroundColor: theme.border }} />
+                    <View className="items-center">
+                      <Users size={16} color="#E91E76" />
+                      <Text className="text-[12px] font-bold mt-1" style={{ color: theme.text }}>
+                        {selectedShow.visiting}
+                      </Text>
+                      <Text className="text-[10px]" style={{ color: theme.textSecondary }}>
+                        Attending
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text className="text-[14px] leading-relaxed mb-5" style={{ color: theme.textSecondary }}>
+                    {selectedShow.description}
+                  </Text>
+
+                  <TouchableOpacity
+                    onPress={() => handleToggleRSVP(selectedShow)}
+                    activeOpacity={0.85}
+                    style={{ backgroundColor: selectedShow.isBooked ? '#10B981' : '#E91E76' }}
+                    className="w-full py-3.5 rounded-2xl flex-row items-center justify-center gap-2 mb-3"
+                  >
+                    <Ticket size={18} color="#FFFFFF" />
+                    <Text className="text-white text-[15px] font-bold">
+                      {selectedShow.isBooked ? 'Pass Booked · Tap to Cancel' : `Book entry pass · ${selectedShow.price}`}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {selectedShow.isBooked && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        const s = selectedShow;
+                        setSelectedShow(null);
+                        setTicketQrShow(s);
+                      }}
+                      activeOpacity={0.8}
+                      className="py-2.5 rounded-xl border flex-row items-center justify-center gap-2 mb-2"
+                      style={{ borderColor: theme.border }}
+                    >
+                      <QrCode size={15} color={theme.text} />
+                      <Text className="text-[13px] font-semibold" style={{ color: theme.text }}>
+                        View digital QR pass
                       </Text>
                     </TouchableOpacity>
-                  ))}
+                  )}
                 </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ============================================================== */}
+      {/* MODAL 2: DIGITAL QR ENTRY PASS MODAL                           */}
+      {/* ============================================================== */}
+      <Modal visible={!!ticketQrShow} animationType="fade" transparent onRequestClose={() => setTicketQrShow(null)}>
+        <View className="flex-1 justify-center items-center bg-black/80 px-6">
+          <View
+            className="w-full rounded-3xl p-6 items-center border"
+            style={{
+              backgroundColor: theme.isDark ? '#18181b' : '#FFFFFF',
+              borderColor: theme.border,
+            }}
+          >
+            <View className="self-end">
+              <TouchableOpacity onPress={() => setTicketQrShow(null)}>
+                <X size={20} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View className="w-16 h-16 rounded-full bg-emerald-500/15 items-center justify-center mb-3">
+              <ShieldCheck size={32} color="#10B981" />
+            </View>
+
+            <Text className="text-[20px] font-extrabold text-center mb-1" style={{ color: theme.text }}>
+              Entry Pass Confirmed
+            </Text>
+            <Text className="text-[13px] text-center mb-4" style={{ color: theme.textSecondary }}>
+              {ticketQrShow?.title}
+            </Text>
+
+            {/* QR Mockup Canvas Box */}
+            <View className="p-4 bg-white rounded-2xl border border-neutral-200 mb-4 items-center justify-center">
+              <QrCode size={140} color="#000000" />
+            </View>
+
+            <View
+              className="w-full p-3 rounded-xl border mb-4 items-center"
+              style={{
+                backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                borderColor: theme.border,
+              }}
+            >
+              <Text className="text-[10px] uppercase font-bold tracking-widest text-[#E91E76]">
+                GATE VERIFICATION CODE
+              </Text>
+              <Text className="text-[18px] font-mono font-black mt-0.5" style={{ color: theme.text }}>
+                {ticketQrShow?.ticketCode}
+              </Text>
+            </View>
+
+            <Text className="text-[11px] text-center leading-relaxed" style={{ color: theme.textSecondary }}>
+              Show this pass at venue check-in. Valid for {user?.name || user?.username || 'Talent User'}.
+            </Text>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ============================================================== */}
+      {/* MODAL 3: CLUB DETAILS & JOIN FLOW MODAL                        */}
+      {/* ============================================================== */}
+      <Modal visible={!!selectedClub} animationType="slide" transparent onRequestClose={() => setSelectedClub(null)}>
+        <View className="flex-1 justify-end bg-black/60">
+          <View
+            className="rounded-t-3xl max-h-[85%] p-5"
+            style={{ backgroundColor: theme.isDark ? '#18181b' : '#FFFFFF' }}
+          >
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View className="flex-row items-center justify-between mb-4">
+                <Text className="text-[20px] font-bold" style={{ color: theme.text }}>
+                  Club Profile
+                </Text>
+                <TouchableOpacity onPress={() => setSelectedClub(null)}>
+                  <X size={20} color={theme.text} />
+                </TouchableOpacity>
               </View>
 
-              <View className="mb-6">
-                <Text className="text-[12px] font-bold mb-1.5" style={{ color: theme.text }}>
-                  Poster Image URL (Optional)
+              {selectedClub && (
+                <View>
+                  <View className="flex-row items-center gap-3 mb-4">
+                    <View
+                      className="w-14 h-14 rounded-full items-center justify-center"
+                      style={{ backgroundColor: selectedClub.color || '#E91E76' }}
+                    >
+                      <Text className="text-white text-[20px] font-black">{selectedClub.initials}</Text>
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-[20px] font-bold" style={{ color: theme.text }}>
+                        {selectedClub.name}
+                      </Text>
+                      <Text className="text-[13px]" style={{ color: theme.textSecondary }}>
+                        {selectedClub.category} · {selectedClub.city}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text className="text-[14px] leading-relaxed mb-4" style={{ color: theme.textSecondary }}>
+                    {selectedClub.description}
+                  </Text>
+
+                  {/* Club Prompt */}
+                  <View
+                    className="p-3.5 rounded-2xl mb-4 border"
+                    style={{
+                      backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                      borderColor: theme.border,
+                    }}
+                  >
+                    <Text className="text-[11px] font-bold uppercase tracking-wider text-[#E91E76] mb-1">
+                      CREATIVE PROMPT
+                    </Text>
+                    <Text className="text-[13px] font-medium italic" style={{ color: theme.text }}>
+                      "{selectedClub.prompt}"
+                    </Text>
+                  </View>
+
+                  {/* Join Section */}
+                  {communityStore.memberships[selectedClub.id] ? (
+                    <View className="mb-4">
+                      <View className="bg-emerald-500/15 border border-emerald-500/30 p-3 rounded-2xl flex-row items-center justify-between mb-3">
+                        <View className="flex-row items-center gap-2">
+                          <Check size={16} color="#10B981" />
+                          <Text className="text-emerald-500 text-[13px] font-bold">
+                            You are a member ({communityStore.memberships[selectedClub.id]})
+                          </Text>
+                        </View>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => handleLeaveClub(selectedClub.id)}
+                        className="py-2.5 rounded-xl border border-red-500/30 items-center"
+                      >
+                        <Text className="text-red-500 text-[13px] font-semibold">Leave Club</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View className="mb-4">
+                      <Text className="text-[13px] font-bold mb-2" style={{ color: theme.text }}>
+                        Join this Club
+                      </Text>
+
+                      {/* Role Selector */}
+                      <View className="flex-row gap-2 mb-3">
+                        {(['Fan', 'Performer'] as const).map((r) => (
+                          <TouchableOpacity
+                            key={r}
+                            onPress={() => setJoinRole(r)}
+                            style={{
+                              backgroundColor: joinRole === r ? '#E91E76' : theme.isDark ? '#27272a' : '#F3F4F6',
+                            }}
+                            className="flex-1 py-2 rounded-xl items-center"
+                          >
+                            <Text
+                              style={{
+                                color: joinRole === r ? '#FFFFFF' : theme.text,
+                                fontWeight: '700',
+                                fontSize: 13,
+                              }}
+                            >
+                              Join as {r}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+
+                      <TextInput
+                        value={joinNote}
+                        onChangeText={setJoinNote}
+                        placeholder="Tell the host about your craft or what you want to practice..."
+                        placeholderTextColor={theme.textSecondary}
+                        multiline
+                        className="p-3 rounded-xl border text-[13px] mb-3 min-h-[70px]"
+                        style={{
+                          backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                          borderColor: theme.border,
+                          color: theme.text,
+                        }}
+                      />
+
+                      <TouchableOpacity
+                        onPress={() => handleJoinClub(selectedClub)}
+                        activeOpacity={0.85}
+                        className="bg-[#E91E76] py-3.5 rounded-2xl items-center"
+                      >
+                        <Text className="text-white text-[14px] font-bold">Confirm Membership</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ============================================================== */}
+      {/* MODAL 4: BRIEF DETAIL & APPLY FORM MODAL                       */}
+      {/* ============================================================== */}
+      <Modal visible={!!selectedBrief} animationType="slide" transparent onRequestClose={() => setSelectedBrief(null)}>
+        <View className="flex-1 justify-end bg-black/60">
+          <View
+            className="rounded-t-3xl max-h-[88%] p-5"
+            style={{ backgroundColor: theme.isDark ? '#18181b' : '#FFFFFF' }}
+          >
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View className="flex-row items-center justify-between mb-4">
+                <Text className="text-[20px] font-bold" style={{ color: theme.text }}>
+                  Opportunity Details
                 </Text>
-                <TextInput
-                  value={newImage}
-                  onChangeText={setNewImage}
-                  placeholder="https://example.com/poster.jpg"
-                  placeholderTextColor={theme.textSecondary}
-                  style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border, color: theme.text }}
-                  className="px-4 py-3 rounded-xl border text-[14px]"
-                />
+                <TouchableOpacity onPress={() => setSelectedBrief(null)}>
+                  <X size={20} color={theme.text} />
+                </TouchableOpacity>
               </View>
+
+              {selectedBrief && (
+                <View>
+                  <Text className="text-[20px] font-black leading-tight mb-1" style={{ color: theme.text }}>
+                    {selectedBrief.title}
+                  </Text>
+                  <Text className="text-[13px] text-[#E91E76] font-semibold mb-3">
+                    {selectedBrief.organizer} · {selectedBrief.city} ({selectedBrief.format})
+                  </Text>
+
+                  <View
+                    className="p-3.5 rounded-2xl border mb-4 flex-row items-center justify-around"
+                    style={{
+                      backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                      borderColor: theme.border,
+                    }}
+                  >
+                    <View className="items-center">
+                      <Text className="text-[10px] uppercase font-bold" style={{ color: theme.textSecondary }}>
+                        DEADLINE
+                      </Text>
+                      <Text className="text-[13px] font-bold mt-0.5" style={{ color: theme.text }}>
+                        {selectedBrief.deadline}
+                      </Text>
+                    </View>
+                    <View className="w-[1px] h-7" style={{ backgroundColor: theme.border }} />
+                    <View className="items-center">
+                      <Text className="text-[10px] uppercase font-bold" style={{ color: theme.textSecondary }}>
+                        DURATION
+                      </Text>
+                      <Text className="text-[13px] font-bold mt-0.5" style={{ color: theme.text }}>
+                        {selectedBrief.minutes} mins
+                      </Text>
+                    </View>
+                    <View className="w-[1px] h-7" style={{ backgroundColor: theme.border }} />
+                    <View className="items-center">
+                      <Text className="text-[10px] uppercase font-bold" style={{ color: theme.textSecondary }}>
+                        COMPENSATION
+                      </Text>
+                      <Text className="text-[14px] font-black text-[#E91E76] mt-0.5">
+                        ₹{selectedBrief.fee.toLocaleString('en-IN')}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text className="text-[13px] font-bold mb-1" style={{ color: theme.text }}>
+                    Requirements
+                  </Text>
+                  <Text className="text-[13px] leading-relaxed mb-4" style={{ color: theme.textSecondary }}>
+                    {selectedBrief.requirements}
+                  </Text>
+
+                  {/* Application Form */}
+                  <View
+                    className="p-4 rounded-2xl border mb-4"
+                    style={{
+                      backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                      borderColor: theme.border,
+                    }}
+                  >
+                    <Text className="text-[14px] font-bold mb-3 text-[#E91E76]">
+                      Submit Your Performance Sample
+                    </Text>
+
+                    <Text className="text-[11px] font-semibold mb-1" style={{ color: theme.text }}>
+                      Sample Title or URL
+                    </Text>
+                    <TextInput
+                      value={applyPerfTitle}
+                      onChangeText={setApplyPerfTitle}
+                      placeholder="e.g. Acoustic guitar set excerpt"
+                      placeholderTextColor={theme.textSecondary}
+                      className="p-2.5 rounded-xl border text-[13px] mb-3"
+                      style={{
+                        backgroundColor: theme.isDark ? '#18181b' : '#FFFFFF',
+                        borderColor: theme.border,
+                        color: theme.text,
+                      }}
+                    />
+
+                    <Text className="text-[11px] font-semibold mb-1" style={{ color: theme.text }}>
+                      Pitch Note
+                    </Text>
+                    <TextInput
+                      value={applyNote}
+                      onChangeText={setApplyNote}
+                      placeholder="Tell the organizer why this opportunity is right for your craft..."
+                      placeholderTextColor={theme.textSecondary}
+                      multiline
+                      className="p-2.5 rounded-xl border text-[13px] mb-3 min-h-[60px]"
+                      style={{
+                        backgroundColor: theme.isDark ? '#18181b' : '#FFFFFF',
+                        borderColor: theme.border,
+                        color: theme.text,
+                      }}
+                    />
+
+                    <Text className="text-[11px] font-semibold mb-1" style={{ color: theme.text }}>
+                      Proposed Fee (INR)
+                    </Text>
+                    <TextInput
+                      value={applyFee}
+                      onChangeText={setApplyFee}
+                      placeholder={`₹${selectedBrief.fee.toLocaleString('en-IN')}`}
+                      placeholderTextColor={theme.textSecondary}
+                      className="p-2.5 rounded-xl border text-[13px] mb-4"
+                      style={{
+                        backgroundColor: theme.isDark ? '#18181b' : '#FFFFFF',
+                        borderColor: theme.border,
+                        color: theme.text,
+                      }}
+                    />
+
+                    <TouchableOpacity
+                      onPress={() => handleApplyBrief(selectedBrief)}
+                      activeOpacity={0.85}
+                      className="bg-[#E91E76] py-3 rounded-xl items-center"
+                    >
+                      <Text className="text-white text-[14px] font-bold">Submit Application</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ============================================================== */}
+      {/* MODAL 5: CREATE SHOW MODAL                                     */}
+      {/* ============================================================== */}
+      <Modal visible={isCreateShowModalOpen} animationType="slide" transparent onRequestClose={() => setIsCreateShowModalOpen(false)}>
+        <View className="flex-1 justify-end bg-black/60">
+          <View
+            className="rounded-t-3xl max-h-[85%] p-5"
+            style={{ backgroundColor: theme.isDark ? '#18181b' : '#FFFFFF' }}
+          >
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View className="flex-row items-center justify-between mb-4">
+                <Text className="text-[20px] font-bold" style={{ color: theme.text }}>
+                  Host a Live Show
+                </Text>
+                <TouchableOpacity onPress={() => setIsCreateShowModalOpen(false)}>
+                  <X size={20} color={theme.text} />
+                </TouchableOpacity>
+              </View>
+
+              <Text className="text-[12px] font-semibold mb-1" style={{ color: theme.text }}>
+                Show Title
+              </Text>
+              <TextInput
+                value={newTitle}
+                onChangeText={setNewTitle}
+                placeholder="e.g. Midnight Jazz & Spoken Word"
+                placeholderTextColor={theme.textSecondary}
+                className="p-3 rounded-xl border text-[13px] mb-3"
+                style={{
+                  backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                  borderColor: theme.border,
+                  color: theme.text,
+                }}
+              />
+
+              <Text className="text-[12px] font-semibold mb-1" style={{ color: theme.text }}>
+                Location / Format
+              </Text>
+              <TextInput
+                value={newLocation}
+                onChangeText={setNewLocation}
+                placeholder="e.g. Bengaluru or Online"
+                placeholderTextColor={theme.textSecondary}
+                className="p-3 rounded-xl border text-[13px] mb-3"
+                style={{
+                  backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                  borderColor: theme.border,
+                  color: theme.text,
+                }}
+              />
+
+              <Text className="text-[12px] font-semibold mb-1" style={{ color: theme.text }}>
+                Entry Price (INR or Free)
+              </Text>
+              <TextInput
+                value={newPrice}
+                onChangeText={setNewPrice}
+                placeholder="₹299"
+                placeholderTextColor={theme.textSecondary}
+                className="p-3 rounded-xl border text-[13px] mb-3"
+                style={{
+                  backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                  borderColor: theme.border,
+                  color: theme.text,
+                }}
+              />
+
+              <Text className="text-[12px] font-semibold mb-1" style={{ color: theme.text }}>
+                Performer Slots
+              </Text>
+              <TextInput
+                value={newSlots}
+                onChangeText={setNewSlots}
+                placeholder="3 performer slots"
+                placeholderTextColor={theme.textSecondary}
+                className="p-3 rounded-xl border text-[13px] mb-5"
+                style={{
+                  backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                  borderColor: theme.border,
+                  color: theme.text,
+                }}
+              />
 
               <TouchableOpacity
                 onPress={handleCreateShow}
                 disabled={creatingShow}
-                style={{ backgroundColor: theme.primary }}
-                className="w-full py-4 rounded-xl items-center justify-center shadow-md mb-6"
+                activeOpacity={0.85}
+                className="bg-[#E91E76] py-3.5 rounded-2xl items-center"
               >
                 {creatingShow ? (
-                  <ActivityIndicator color="#fff" />
+                  <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
-                  <Text className="text-white font-bold text-[15px]">Publish Live Date</Text>
+                  <Text className="text-white text-[14px] font-bold">Publish Show</Text>
                 )}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ============================================================== */}
+      {/* MODAL 6: CREATE CLUB MODAL                                     */}
+      {/* ============================================================== */}
+      <Modal visible={isCreateClubModalOpen} animationType="slide" transparent onRequestClose={() => setIsCreateClubModalOpen(false)}>
+        <View className="flex-1 justify-end bg-black/60">
+          <View
+            className="rounded-t-3xl max-h-[85%] p-5"
+            style={{ backgroundColor: theme.isDark ? '#18181b' : '#FFFFFF' }}
+          >
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View className="flex-row items-center justify-between mb-4">
+                <Text className="text-[20px] font-bold" style={{ color: theme.text }}>
+                  Start a Community Club
+                </Text>
+                <TouchableOpacity onPress={() => setIsCreateClubModalOpen(false)}>
+                  <X size={20} color={theme.text} />
+                </TouchableOpacity>
+              </View>
+
+              <Text className="text-[12px] font-semibold mb-1" style={{ color: theme.text }}>
+                Club Name
+              </Text>
+              <TextInput
+                value={newClubName}
+                onChangeText={setNewClubName}
+                placeholder="e.g. Acoustic Songwriters Circle"
+                placeholderTextColor={theme.textSecondary}
+                className="p-3 rounded-xl border text-[13px] mb-3"
+                style={{
+                  backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                  borderColor: theme.border,
+                  color: theme.text,
+                }}
+              />
+
+              <Text className="text-[12px] font-semibold mb-1" style={{ color: theme.text }}>
+                Category & City
+              </Text>
+              <View className="flex-row gap-2 mb-3">
+                <TextInput
+                  value={newClubCategory}
+                  onChangeText={setNewClubCategory}
+                  placeholder="Category"
+                  placeholderTextColor={theme.textSecondary}
+                  className="flex-1 p-3 rounded-xl border text-[13px]"
+                  style={{
+                    backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                    borderColor: theme.border,
+                    color: theme.text,
+                  }}
+                />
+                <TextInput
+                  value={newClubCity}
+                  onChangeText={setNewClubCity}
+                  placeholder="City"
+                  placeholderTextColor={theme.textSecondary}
+                  className="flex-1 p-3 rounded-xl border text-[13px]"
+                  style={{
+                    backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                    borderColor: theme.border,
+                    color: theme.text,
+                  }}
+                />
+              </View>
+
+              <Text className="text-[12px] font-semibold mb-1" style={{ color: theme.text }}>
+                About the Community
+              </Text>
+              <TextInput
+                value={newClubDesc}
+                onChangeText={setNewClubDesc}
+                placeholder="What does your club do? How often do you meet?"
+                placeholderTextColor={theme.textSecondary}
+                multiline
+                className="p-3 rounded-xl border text-[13px] mb-3 min-h-[60px]"
+                style={{
+                  backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                  borderColor: theme.border,
+                  color: theme.text,
+                }}
+              />
+
+              <Text className="text-[12px] font-semibold mb-1" style={{ color: theme.text }}>
+                Creative Prompt / Mission
+              </Text>
+              <TextInput
+                value={newClubPrompt}
+                onChangeText={setNewClubPrompt}
+                placeholder="e.g. One rhythm. Your own movement."
+                placeholderTextColor={theme.textSecondary}
+                className="p-3 rounded-xl border text-[13px] mb-5"
+                style={{
+                  backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                  borderColor: theme.border,
+                  color: theme.text,
+                }}
+              />
+
+              <TouchableOpacity
+                onPress={handleCreateClub}
+                activeOpacity={0.85}
+                className="bg-[#E91E76] py-3.5 rounded-2xl items-center"
+              >
+                <Text className="text-white text-[14px] font-bold">Create Club</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ============================================================== */}
+      {/* MODAL 7: CREATE BRIEF MODAL                                    */}
+      {/* ============================================================== */}
+      <Modal visible={isCreateBriefModalOpen} animationType="slide" transparent onRequestClose={() => setIsCreateBriefModalOpen(false)}>
+        <View className="flex-1 justify-end bg-black/60">
+          <View
+            className="rounded-t-3xl max-h-[85%] p-5"
+            style={{ backgroundColor: theme.isDark ? '#18181b' : '#FFFFFF' }}
+          >
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View className="flex-row items-center justify-between mb-4">
+                <Text className="text-[20px] font-bold" style={{ color: theme.text }}>
+                  Post an Opportunity
+                </Text>
+                <TouchableOpacity onPress={() => setIsCreateBriefModalOpen(false)}>
+                  <X size={20} color={theme.text} />
+                </TouchableOpacity>
+              </View>
+
+              <Text className="text-[12px] font-semibold mb-1" style={{ color: theme.text }}>
+                Brief Title
+              </Text>
+              <TextInput
+                value={newBriefTitle}
+                onChangeText={setNewBriefTitle}
+                placeholder="e.g. Lead vocalist for indie film theme song"
+                placeholderTextColor={theme.textSecondary}
+                className="p-3 rounded-xl border text-[13px] mb-3"
+                style={{
+                  backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                  borderColor: theme.border,
+                  color: theme.text,
+                }}
+              />
+
+              <Text className="text-[12px] font-semibold mb-1" style={{ color: theme.text }}>
+                Category & City
+              </Text>
+              <View className="flex-row gap-2 mb-3">
+                <TextInput
+                  value={newBriefCategory}
+                  onChangeText={setNewBriefCategory}
+                  placeholder="Category"
+                  placeholderTextColor={theme.textSecondary}
+                  className="flex-1 p-3 rounded-xl border text-[13px]"
+                  style={{
+                    backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                    borderColor: theme.border,
+                    color: theme.text,
+                  }}
+                />
+                <TextInput
+                  value={newBriefCity}
+                  onChangeText={setNewBriefCity}
+                  placeholder="City or Online"
+                  placeholderTextColor={theme.textSecondary}
+                  className="flex-1 p-3 rounded-xl border text-[13px]"
+                  style={{
+                    backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                    borderColor: theme.border,
+                    color: theme.text,
+                  }}
+                />
+              </View>
+
+              <Text className="text-[12px] font-semibold mb-1" style={{ color: theme.text }}>
+                Budget / Compensation (INR)
+              </Text>
+              <TextInput
+                value={newBriefFee}
+                onChangeText={setNewBriefFee}
+                placeholder="₹5,000"
+                placeholderTextColor={theme.textSecondary}
+                className="p-3 rounded-xl border text-[13px] mb-3"
+                style={{
+                  backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                  borderColor: theme.border,
+                  color: theme.text,
+                }}
+              />
+
+              <Text className="text-[12px] font-semibold mb-1" style={{ color: theme.text }}>
+                Requirements & Selection Process
+              </Text>
+              <TextInput
+                value={newBriefReqs}
+                onChangeText={setNewBriefReqs}
+                placeholder="Describe the desired sound, equipment, or portfolio requirements..."
+                placeholderTextColor={theme.textSecondary}
+                multiline
+                className="p-3 rounded-xl border text-[13px] mb-5 min-h-[60px]"
+                style={{
+                  backgroundColor: theme.isDark ? '#121214' : '#F9FAFB',
+                  borderColor: theme.border,
+                  color: theme.text,
+                }}
+              />
+
+              <TouchableOpacity
+                onPress={handleCreateBrief}
+                activeOpacity={0.85}
+                className="bg-[#E91E76] py-3.5 rounded-2xl items-center"
+              >
+                <Text className="text-white text-[14px] font-bold">Publish Opportunity</Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
