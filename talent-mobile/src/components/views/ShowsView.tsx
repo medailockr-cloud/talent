@@ -36,8 +36,12 @@ import {
   Bookmark,
   Star,
   MessageCircle,
+  Music2,
+  Activity,
+  Mic2,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { useCommunityStore } from '../../store/communityStore';
@@ -67,6 +71,163 @@ interface ShowItem {
   ticketCode: string;
 }
 
+function getInitials(name: string): string {
+  if (!name) return 'A';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function StageVisual({
+  category = 'Music',
+  format = 'In person',
+  accent,
+  size = 'card',
+}: {
+  category?: string;
+  format?: string;
+  accent?: string;
+  size?: 'hero' | 'card' | 'modal' | 'thumb';
+}) {
+  const isOnline = format !== 'In person';
+  const catLower = (category || 'music').toLowerCase();
+
+  const getTheme = () => {
+    if (catLower.includes('dance')) {
+      return { bg: '#231008', accent: '#F97316', label: 'DANCE STAGE' };
+    }
+    if (catLower.includes('comedy')) {
+      return { bg: '#221B05', accent: '#EAB308', label: 'COMEDY STAGE' };
+    }
+    if (catLower.includes('film') || catLower.includes('theatre')) {
+      return { bg: '#061C24', accent: '#06B6D4', label: 'CINEMA STAGE' };
+    }
+    if (catLower.includes('magic')) {
+      return { bg: '#1B0C32', accent: '#A855F7', label: 'ILLUSION STAGE' };
+    }
+    if (catLower.includes('poetry') || catLower.includes('writing')) {
+      return { bg: '#0E1F1A', accent: '#10B981', label: 'PROSE STAGE' };
+    }
+    return { bg: '#220815', accent: '#E91E76', label: 'MUSIC STAGE' };
+  };
+
+  const themeConfig = getTheme();
+  const activeAccent = accent || themeConfig.accent;
+
+  const renderIcon = (iconSize: number) => {
+    if (catLower.includes('dance')) return <Activity size={iconSize} color={activeAccent} strokeWidth={1.8} />;
+    if (catLower.includes('comedy')) return <Mic2 size={iconSize} color={activeAccent} strokeWidth={1.8} />;
+    if (catLower.includes('film')) return <Sparkles size={iconSize} color={activeAccent} strokeWidth={1.8} />;
+    if (catLower.includes('magic')) return <Sparkles size={iconSize} color={activeAccent} strokeWidth={1.8} />;
+    if (catLower.includes('poetry')) return <Sparkles size={iconSize} color={activeAccent} strokeWidth={1.8} />;
+    return <Music2 size={iconSize} color={activeAccent} strokeWidth={1.8} />;
+  };
+
+  if (size === 'thumb') {
+    return (
+      <View
+        style={{ backgroundColor: themeConfig.bg, borderColor: activeAccent + '40' }}
+        className="w-[96px] h-[108px] rounded-xl border items-center justify-center relative overflow-hidden"
+      >
+        <View
+          style={{
+            position: 'absolute',
+            width: 70,
+            height: 70,
+            borderRadius: 35,
+            backgroundColor: activeAccent,
+            opacity: 0.15,
+          }}
+        />
+        {renderIcon(30)}
+        <View
+          style={{ backgroundColor: isOnline ? '#2563EB' : '#15803D' }}
+          className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded"
+        >
+          <Text className="text-white text-[9px] font-bold tracking-wider uppercase">
+            {isOnline ? 'ONLINE' : 'OFFLINE'}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (size === 'modal') {
+    return (
+      <View
+        style={{ backgroundColor: themeConfig.bg, borderColor: activeAccent + '30' }}
+        className="w-full h-44 rounded-2xl border items-center justify-center relative overflow-hidden"
+      >
+        <View
+          style={{
+            position: 'absolute',
+            width: 200,
+            height: 200,
+            borderRadius: 100,
+            backgroundColor: activeAccent,
+            opacity: 0.15,
+          }}
+        />
+        {renderIcon(52)}
+        <View className="flex-row items-center gap-2 mt-3">
+          <View
+            style={{ backgroundColor: activeAccent + '25', borderColor: activeAccent }}
+            className="px-3 py-1 rounded-full border"
+          >
+            <Text style={{ color: activeAccent }} className="text-[10px] font-bold tracking-widest uppercase">
+              {themeConfig.label}
+            </Text>
+          </View>
+          <View
+            style={{ backgroundColor: isOnline ? '#2563EB' : '#15803D' }}
+            className="px-2.5 py-1 rounded-full"
+          >
+            <Text className="text-white text-[10px] font-bold tracking-wider uppercase">
+              {isOnline ? 'ONLINE' : 'OFFLINE'}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  // default / hero
+  return (
+    <View
+      style={{ backgroundColor: themeConfig.bg }}
+      className="absolute inset-0 items-center justify-center overflow-hidden"
+    >
+      <View
+        style={{
+          position: 'absolute',
+          width: 340,
+          height: 340,
+          borderRadius: 170,
+          backgroundColor: activeAccent,
+          opacity: 0.2,
+          top: -60,
+          right: -50,
+        }}
+      />
+      <View
+        style={{
+          position: 'absolute',
+          width: 200,
+          height: 200,
+          borderRadius: 100,
+          backgroundColor: activeAccent,
+          opacity: 0.12,
+          bottom: -40,
+          left: -30,
+        }}
+      />
+      <View className="items-center justify-center opacity-85">
+        {renderIcon(size === 'hero' ? 70 : 44)}
+      </View>
+    </View>
+  );
+}
+
 const FEATURED_SHOW: ShowItem = {
   id: 100,
   title: 'The Next Stage',
@@ -79,7 +240,7 @@ const FEATURED_SHOW: ShowItem = {
   slots: '4 slots',
   price: '₹499',
   rawPrice: 499,
-  image: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=1200&auto=format&fit=crop',
+  image: '',
   description: 'Headline acoustic showcase featuring top rising indie artists discovered on talent platform.',
   visiting: 215,
   isBooked: false,
@@ -99,7 +260,7 @@ const INITIAL_SAMPLE_SHOWS: ShowItem[] = [
     slots: '2 performer slots',
     price: '₹349',
     rawPrice: 349,
-    image: 'https://images.unsplash.com/photo-1520523839898-50712825e3a7?q=80&w=600&auto=format&fit=crop',
+    image: '',
     description: 'An intimate evening of classical and contemporary acoustic fusion.',
     visiting: 42,
     isBooked: false,
@@ -117,7 +278,7 @@ const INITIAL_SAMPLE_SHOWS: ShowItem[] = [
     slots: '6 performer slots',
     price: 'Free',
     rawPrice: 0,
-    image: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?q=80&w=600&auto=format&fit=crop',
+    image: '',
     description: 'Global cypher bringing street dancers together in real-time streaming battle.',
     visiting: 128,
     isBooked: false,
@@ -135,7 +296,7 @@ const INITIAL_SAMPLE_SHOWS: ShowItem[] = [
     slots: '3 performer slots',
     price: '₹199',
     rawPrice: 199,
-    image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=600&auto=format&fit=crop',
+    image: '',
     description: 'Curated open mic night for breakthrough stand-up comedians.',
     visiting: 65,
     isBooked: false,
@@ -153,7 +314,7 @@ const INITIAL_SAMPLE_SHOWS: ShowItem[] = [
     slots: '4 performer slots',
     price: '₹299',
     rawPrice: 299,
-    image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=600&auto=format&fit=crop',
+    image: '',
     description: 'Live table read and scene work with acting feedback from industry judges.',
     visiting: 38,
     isBooked: false,
@@ -171,7 +332,7 @@ const INITIAL_SAMPLE_SHOWS: ShowItem[] = [
     slots: '3 performer slots',
     price: '₹249',
     rawPrice: 249,
-    image: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=600&auto=format&fit=crop',
+    image: '',
     description: 'Close-up illusion and mentalism showcase by traditional sleight masters.',
     visiting: 51,
     isBooked: false,
@@ -189,7 +350,7 @@ const INITIAL_SAMPLE_SHOWS: ShowItem[] = [
     slots: '2 performer slots',
     price: '₹199',
     rawPrice: 199,
-    image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=600&auto=format&fit=crop',
+    image: '',
     description: 'Seaside sunset acoustic rhythms and indie singer-songwriter spotlight.',
     visiting: 80,
     isBooked: false,
@@ -207,7 +368,7 @@ const INITIAL_SAMPLE_SHOWS: ShowItem[] = [
     slots: '5 performer slots',
     price: 'Free',
     rawPrice: 0,
-    image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop',
+    image: '',
     description: 'Live interactive looping showcase with real-time viewer voting and cypher.',
     visiting: 190,
     isBooked: false,
@@ -225,7 +386,7 @@ const INITIAL_SAMPLE_SHOWS: ShowItem[] = [
     slots: '4 performer slots',
     price: '₹149',
     rawPrice: 149,
-    image: 'https://images.unsplash.com/photo-1524368535928-5b5e00ddc76b?q=80&w=600&auto=format&fit=crop',
+    image: '',
     description: 'Poets and lyricists taking the floor with uncensored spoken word prose.',
     visiting: 44,
     isBooked: false,
@@ -243,7 +404,7 @@ const INITIAL_SAMPLE_SHOWS: ShowItem[] = [
     slots: '3 performer slots',
     price: '₹449',
     rawPrice: 449,
-    image: 'https://images.unsplash.com/photo-1511192336575-5a79af67a629?q=80&w=600&auto=format&fit=crop',
+    image: '',
     description: 'Improvised modal jazz session featuring guest saxophonists and drummers.',
     visiting: 76,
     isBooked: false,
@@ -258,6 +419,8 @@ export function ShowsView() {
   const router = useRouter();
   const { theme } = useThemeStore();
   const { user } = useAuthStore();
+  const insets = useSafeAreaInsets();
+  const topInset = insets.top > 0 ? insets.top : (Platform.OS === 'android' ? 28 : 20);
 
   const communityStore = useCommunityStore();
   const clubWorkspaceStore = useClubWorkspaceStore();
@@ -398,7 +561,7 @@ export function ShowsView() {
         slots: newSlots.trim() || '3 performer slots',
         price: parsedPrice === 0 ? 'Free' : `₹${parsedPrice}`,
         rawPrice: parsedPrice,
-        image: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=600&auto=format&fit=crop',
+        image: '',
         description: 'New verified live talent gig hosted on talent stage.',
         visiting: 1,
         isBooked: true,
@@ -596,8 +759,9 @@ export function ShowsView() {
     <View className="flex-1" style={{ backgroundColor: theme.bg }}>
       {/* Top Brand Header Bar */}
       <View
-        className="pt-12 pb-2.5 px-5 flex-row items-center justify-between border-b"
+        className="pb-2.5 px-5 flex-row items-center justify-between border-b"
         style={{
+          paddingTop: topInset + 6,
           borderBottomColor: theme.isDark ? '#27272a' : '#F3F4F6',
           backgroundColor: theme.bg,
         }}
@@ -642,14 +806,21 @@ export function ShowsView() {
             }}
             activeOpacity={0.8}
           >
-            <Image
-              source={{
-                uri:
-                  user?.avatarUrl ||
-                  'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=200&auto=format&fit=crop',
-              }}
-              className="w-8 h-8 rounded-full border border-neutral-300 dark:border-zinc-700"
-            />
+            {user?.avatarUrl ? (
+              <Image
+                source={{ uri: user.avatarUrl }}
+                className="w-8 h-8 rounded-full border border-neutral-300 dark:border-zinc-700"
+              />
+            ) : (
+              <View
+                className="w-8 h-8 rounded-full items-center justify-center border border-neutral-300 dark:border-zinc-700"
+                style={{ backgroundColor: '#E91E76' }}
+              >
+                <Text className="text-white text-[12px] font-bold">
+                  {getInitials(user?.name || user?.username || 'You')}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -820,12 +991,12 @@ export function ShowsView() {
 
             {/* Featured Show Card */}
             <View className="rounded-3xl overflow-hidden relative h-[310px] w-full mb-3 bg-black shadow-lg">
-              <Image
-                source={{ uri: featuredShow.image }}
-                className="w-full h-full absolute inset-0 opacity-90"
-                resizeMode="cover"
+              <StageVisual
+                category={featuredShow.category}
+                format={featuredShow.isOnline ? 'Online' : 'In person'}
+                size="hero"
               />
-              <View className="absolute inset-0 bg-black/40" />
+              <View className="absolute inset-0 bg-black/35" />
 
               <View className="flex-1 p-5 justify-between">
                 <View className="self-start bg-black/60 px-3 py-1.5 rounded-full border border-white/20">
@@ -926,14 +1097,11 @@ export function ShowsView() {
                 }}
                 className="rounded-2xl mb-3 overflow-hidden flex-row p-2.5 shadow-sm"
               >
-                <View className="w-[96px] h-[108px] rounded-xl overflow-hidden relative bg-black">
-                  <Image source={{ uri: show.image }} className="w-full h-full" resizeMode="cover" />
-                  <View className="absolute bottom-1.5 left-1.5 bg-black/80 px-1.5 py-0.5 rounded">
-                    <Text className="text-white text-[9px] font-bold tracking-wider uppercase">
-                      {show.isOnline ? 'ONLINE' : 'OFFLINE'}
-                    </Text>
-                  </View>
-                </View>
+                <StageVisual
+                  category={show.category}
+                  format={show.isOnline ? 'Online' : 'In person'}
+                  size="thumb"
+                />
 
                 <View className="flex-1 pl-3 justify-between py-0.5">
                   <View>
@@ -1602,11 +1770,12 @@ export function ShowsView() {
 
               {selectedShow && (
                 <View>
-                  <View className="w-full h-44 rounded-2xl overflow-hidden mb-4 relative bg-black">
-                    <Image source={{ uri: selectedShow.image }} className="w-full h-full" resizeMode="cover" />
-                    <View className="absolute bottom-2 left-2 bg-black/75 px-2.5 py-1 rounded-full">
-                      <Text className="text-white text-[11px] font-bold">{selectedShow.price}</Text>
-                    </View>
+                  <View className="mb-4">
+                    <StageVisual
+                      category={selectedShow.category}
+                      format={selectedShow.isOnline ? 'Online' : 'In person'}
+                      size="modal"
+                    />
                   </View>
 
                   <Text className="text-[22px] font-extrabold mb-1" style={{ color: theme.text }}>

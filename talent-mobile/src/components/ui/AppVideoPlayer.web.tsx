@@ -37,7 +37,7 @@ export function AppVideoPlayer({
       loop
       muted={isMuted}
       playsInline
-      poster={poster}
+      poster={poster || undefined}
       onTimeUpdate={(e: any) => {
         if (e?.target) onTimeUpdate?.(e.target.currentTime);
       }}

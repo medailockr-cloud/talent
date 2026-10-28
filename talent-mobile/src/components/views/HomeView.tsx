@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, Image, Alert, TextInput, Platform, ScrollView, Modal, Dimensions, PanResponder, KeyboardAvoidingView, ActivityIndicator, Share as RNShare, RefreshControl } from 'react-native';
+import { View, Text, TouchableOpacity, Image, Alert, TextInput, Platform, ScrollView, Modal, Dimensions, PanResponder, KeyboardAvoidingView, ActivityIndicator, Share as RNShare, RefreshControl, StatusBar as RNStatusBar } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, { 
   useSharedValue, 
@@ -9,16 +9,20 @@ import Animated, {
   withTiming,
   runOnJS
 } from 'react-native-reanimated';
-import { Search, EyeOff, Play, Pause, Maximize2, MoreHorizontal, X, Bookmark, MessageCircle, MessageCircleOff, Send, ChevronDown, ChevronRight, Gauge, MapPin, Flag, UserX, User, Bell, Volume2, VolumeX, Trophy, Eye, Mic, Sparkles, Share2, Sliders, ToggleLeft, ToggleRight, CheckCircle2, PictureInPicture2, SkipForward, ArrowUpRight } from 'lucide-react-native';
+import { Search, EyeOff, Play, Pause, Maximize2, MoreHorizontal, X, Bookmark, MessageCircle, MessageCircleOff, Send, ChevronDown, ChevronRight, Gauge, MapPin, Flag, UserX, User, Bell, Volume2, VolumeX, Trophy, Eye, Mic, Sparkles, Share2, Sliders, ToggleLeft, ToggleRight, CheckCircle2, PictureInPicture2, SkipForward, ArrowUpRight, Clock } from 'lucide-react-native';
+import Svg, { Path } from 'react-native-svg';
 import { useRouter } from 'expo-router';
 import { useFeed } from '../../hooks/useFeed';
 import { api, resolveMediaUrl } from '../../utils/api';
 import { useThemeStore } from '../../store/themeStore';
 import { useKeptStore } from '../../store/keptStore';
+import { useCommunityStore } from '../../store/communityStore';
 import { AppVideoPlayer } from '../ui/AppVideoPlayer';
 import { LeaderboardModal } from '../ui/LeaderboardModal';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 
-const HEADER_HEIGHT = 130;
+const COLLAPSIBLE_HEADER_HEIGHT = 100;
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const isMediaImage = (url?: string | null): boolean => {
@@ -39,6 +43,51 @@ const isJudgingAllowed = (val: any): boolean => {
   }
   return true;
 };
+
+function ApplauseIcon({ filled, color }: { filled: boolean; color: string }) {
+  return (
+    <Svg
+      width={23}
+      height={23}
+      viewBox="0 0 26 26"
+      fill="none"
+      stroke={color}
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <Path
+        fill={filled ? color : 'none'}
+        fillOpacity={filled ? 0.22 : 0}
+        d="m9 20-4-5c-1-1.4 1-3 2-1.8l1.8 1.6-3.6-6c-.9-1.6 1.3-2.8 2.2-1.2l3 4.5-2.8-6c-.7-1.7 1.6-2.6 2.3-1l3 5.7-1.8-5.5c-.5-1.7 1.9-2.4 2.4-.8l2.5 6.7c.7-1 2-1.3 2.5-.3l1.7 4c1.8 4.3-1.6 8.5-5.4 8.5-2.3 0-4.1-1.5-5.8-3.4Z"
+      />
+      <Path d="m19 3 1-1m1 5 2-1m-1 5h2" />
+    </Svg>
+  );
+}
+
+function getInitials(name: string): string {
+  if (!name) return 'A';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function formatRelativeTime(dateStr?: string | Date): string {
+  if (!dateStr) return 'Just now';
+  const now = Date.now();
+  const created = new Date(dateStr).getTime();
+  if (isNaN(created)) return 'Just now';
+  const diffSec = Math.floor((now - created) / 1000);
+  if (diffSec < 60) return 'Just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
 
 function FeedVideoCard({ 
   video, 
@@ -71,20 +120,50 @@ function FeedVideoCard({
   // Interactive States
   const [isRevealed, setIsRevealed] = useState(false);
   const isKept = useKeptStore(state => Boolean(state.keptRecord[String(video.id)]));
+  const isApplauded = useCommunityStore(state => (state.applauded || []).includes(String(video.id)));
+  const toggleApplaud = useCommunityStore(state => state.toggleApplaud);
   const [justKeptToast, setJustKeptToast] = useState(false);
   const [isCopiedToast, setIsCopiedToast] = useState(false);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
-  const keptText = justKeptToast ? 'KEPT ✓' : isKept ? 'KEPT' : 'KEEP';
+  const keptText = justKeptToast ? 'KEPT' : isKept ? 'KEPT' : 'KEEP';
 
   const authorName = typeof video.author === 'object' && video.author !== null
     ? (video.author.name || video.author.username || 'Artist')
     : (typeof video.author === 'string' && video.author ? video.author : 'Artist');
-  const authorAvatar = video.avatar || video.authorAvatar || (typeof video.author === 'object' ? video.author?.avatarUrl : null) || `https://ui-avatars.com/api/?name=${encodeURIComponent(authorName)}&background=E91E76&color=fff`;
+  const authorAvatar = video.avatar || video.authorAvatar || (typeof video.author === 'object' ? video.author?.avatarUrl : null) || null;
+  const [avatarLoadError, setAvatarLoadError] = useState(false);
+
+  const handleApplaudToggle = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    toggleApplaud(String(video.id));
+    api.post(`/videos/${video.id}/applaud`).catch(() => {});
+  };
   
   const [isCommenting, setIsCommenting] = useState(false);
   const [commentText, setCommentText] = useState('');
-  const [comments, setComments] = useState(video.comments || []);
+  const [comments, setComments] = useState<any[]>(video.comments || []);
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
   const [attachMoment, setAttachMoment] = useState(false);
+
+  const fetchComments = useCallback(async () => {
+    try {
+      setIsLoadingComments(true);
+      const res = await api.get(`/videos/${video.id}/comments`);
+      if (res.data && Array.isArray(res.data.comments)) {
+        setComments(res.data.comments);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch comments:", err);
+    } finally {
+      setIsLoadingComments(false);
+    }
+  }, [video.id]);
+
+  useEffect(() => {
+    if (isCommenting) {
+      fetchComments();
+    }
+  }, [isCommenting, fetchComments]);
   
   const [showOptions, setShowOptions] = useState(false);
   const [currentAllowJudging, setCurrentAllowJudging] = useState(isJudgingAllowed(video.allowJudging));
@@ -383,35 +462,49 @@ function FeedVideoCard({
     }
   };
 
-  const handlePostComment = () => {
+  const handlePostComment = async () => {
     if (!currentAllowComments) {
       Alert.alert('Comments Disabled', 'Comments are disabled for this performance by the artist.');
       setIsCommenting(false);
       return;
     }
-    if (!commentText.trim()) return;
+    const trimmed = commentText.trim();
+    if (!trimmed) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const postText = commentText.trim();
+
+    const momentPrefix = attachMoment ? `[${formatTime(currentTime)}] ` : '';
+    const fullText = `${momentPrefix}${trimmed}`;
+    
     setCommentText('');
     setAttachMoment(false);
-    
-    api.post(`/videos/${video.id}/comment`, { text: postText })
-      .then(res => {
-        const added = {
-          id: res.data?.id || Math.random().toString(),
-          author: res.data?.user?.name || res.data?.author || 'You',
-          text: postText,
-          time: 'Just now',
-          isUseful: false,
-          timestamp: attachMoment ? '00:38' : null
-        };
-        setComments((prev: any[]) => [...prev, added]);
-      })
-      .catch(err => {
-        console.error("Comment err:", err);
-        const errMsg = err?.response?.data?.error || 'Comments are disabled for this performance';
-        Alert.alert('Cannot Comment', errMsg);
-      });
+
+    const optimisticId = `temp-${Date.now()}`;
+    const optimisticComment = {
+      id: optimisticId,
+      text: fullText,
+      author: 'You',
+      user: { name: 'You', username: 'you' },
+      createdAt: new Date().toISOString(),
+      time: 'Just now',
+      isUseful: false,
+      timestamp: attachMoment ? formatTime(currentTime) : null
+    };
+
+    setComments((prev: any[]) => [optimisticComment, ...prev]);
+
+    try {
+      const res = await api.post(`/videos/${video.id}/comment`, { text: fullText });
+      if (res.data) {
+        setComments((prev: any[]) =>
+          prev.map((c) => (c.id === optimisticId ? { ...res.data, time: 'Just now' } : c))
+        );
+      }
+    } catch (err: any) {
+      console.error("Comment post error:", err);
+      setComments((prev: any[]) => prev.filter((c) => c.id !== optimisticId));
+      const errMsg = err?.response?.data?.error || 'Could not post comment. Please try again.';
+      Alert.alert('Cannot Comment', errMsg);
+    }
   };
 
   const toggleUseful = (id: string) => {
@@ -470,7 +563,7 @@ function FeedVideoCard({
               activeOpacity={0.8}
               onPress={(e: any) => {
                 if (e?.stopPropagation) e.stopPropagation();
-                if (Platform.OS === 'web' && videoRef.current) {
+                if (Platform.OS === 'web' && typeof document !== 'undefined' && videoRef.current) {
                   if (document.pictureInPictureElement) {
                     document.exitPictureInPicture?.().catch(() => {});
                   } else if (videoRef.current.requestPictureInPicture) {
@@ -627,8 +720,22 @@ function FeedVideoCard({
             >
               {isBlind ? (
                 <EyeOff color={theme.primary} size={20} />
+              ) : authorAvatar && !avatarLoadError ? (
+                <Image
+                  source={{ uri: authorAvatar }}
+                  className="w-full h-full"
+                  resizeMode="cover"
+                  onError={() => setAvatarLoadError(true)}
+                />
               ) : (
-                <Image source={{ uri: authorAvatar }} className="w-full h-full" resizeMode="cover" />
+                <View
+                  style={{ backgroundColor: theme.primary }}
+                  className="w-full h-full items-center justify-center"
+                >
+                  <Text className="text-white font-bold text-[13px] tracking-wider">
+                    {getInitials(authorName)}
+                  </Text>
+                </View>
               )}
             </View>
             <View className="flex-1">
@@ -704,11 +811,29 @@ function FeedVideoCard({
 
         {/* Main Actions Row */}
         <View className="flex-row items-center justify-between mb-1.5">
-          <View className="flex-row items-center gap-6">
+          <View className="flex-row items-center gap-4 sm:gap-6">
+            {/* Applaud */}
+            <TouchableOpacity 
+              onPress={handleApplaudToggle} 
+              activeOpacity={0.7} 
+              className="items-center gap-1 min-w-[42px]"
+            >
+              <ApplauseIcon filled={isApplauded} color={isApplauded ? theme.primary : theme.text} />
+              <Text 
+                style={{ color: isApplauded ? theme.primary : theme.text }} 
+                className="text-[11px] font-medium"
+              >
+                {isApplauded ? 'Applauded' : 'Applaud'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Keep */}
             <TouchableOpacity onPress={handleKeepToggle} activeOpacity={0.7} className="items-center gap-1 min-w-[42px]">
-              <Bookmark color={isKept ? theme.primary : theme.text} fill={isKept ? theme.primary : "transparent"} size={23} strokeWidth={1.8} />
+              <Bookmark color={isKept ? theme.primary : theme.text} fill={isKept ? theme.primary : "transparent"} size={22} strokeWidth={1.8} />
               <Text style={{ color: isKept ? theme.primary : theme.text }} className="text-[11px] font-medium">{isKept ? 'Kept' : 'Keep'}</Text>
             </TouchableOpacity>
+
+            {/* Talk */}
             <TouchableOpacity 
               onPress={() => { 
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); 
@@ -719,16 +844,18 @@ function FeedVideoCard({
               style={{ opacity: currentAllowComments ? 1 : 0.5 }}
             >
               {currentAllowComments ? (
-                <MessageCircle color={theme.text} size={23} strokeWidth={1.8} />
+                <MessageCircle color={theme.text} size={22} strokeWidth={1.8} />
               ) : (
-                <MessageCircleOff color={theme.textSecondary} size={23} strokeWidth={1.8} />
+                <MessageCircleOff color={theme.textSecondary} size={22} strokeWidth={1.8} />
               )}
               <Text style={{ color: currentAllowComments ? theme.text : theme.textSecondary }} className="text-[11px] font-medium">
-                {currentAllowComments ? 'Comment' : 'Disabled'}
+                {currentAllowComments ? 'Talk' : 'Off'}
               </Text>
             </TouchableOpacity>
+
+            {/* Share */}
             <TouchableOpacity onPress={handleShare} activeOpacity={0.7} className="items-center gap-1 min-w-[42px]">
-              <Share2 color={isCopiedToast ? theme.primary : theme.text} size={23} strokeWidth={1.8} />
+              <Share2 color={isCopiedToast ? theme.primary : theme.text} size={22} strokeWidth={1.8} />
               <Text style={{ color: isCopiedToast ? theme.primary : theme.text }} className="text-[11px] font-medium">
                 {isCopiedToast ? 'Copied' : 'Share'}
               </Text>
@@ -752,19 +879,19 @@ function FeedVideoCard({
                 borderColor: judgeScore !== null && !isJudgingActive ? theme.primary : undefined,
                 borderWidth: judgeScore !== null && !isJudgingActive ? 1 : 0,
               } as any}
-              className={`rounded-full h-[40px] px-5 flex-row items-center gap-2 shadow-lg select-none ${
+              className={`rounded-full h-[40px] px-4 flex-row items-center gap-1.5 shadow-lg select-none ${
                 isJudgingActive ? 'scale-105' : ''
               }`}
             >
-              <Gauge color={judgeScore !== null && !isJudgingActive ? theme.primary : "#fff"} size={16} />
+              <Gauge color={judgeScore !== null && !isJudgingActive ? theme.primary : "#fff"} size={15} />
               <Text 
                 style={{ color: judgeScore !== null && !isJudgingActive ? theme.primary : '#ffffff' }}
-                className="text-[12px] font-extrabold tracking-wider uppercase select-none"
+                className="text-[11px] font-extrabold tracking-wider uppercase select-none"
               >
                 {isJudgingActive 
-                  ? `${tempScore.toFixed(1)} ★` 
+                  ? `${tempScore.toFixed(1)} / 10` 
                   : judgeScore !== null 
-                    ? `${judgeScore.toFixed(1)} ★` 
+                    ? `${judgeScore.toFixed(1)} / 10` 
                     : 'JUDGE ↕'}
               </Text>
             </View>
@@ -773,7 +900,7 @@ function FeedVideoCard({
 
         {/* Judging Criteria / Helper Sub-caption */}
         {currentAllowJudging && (
-          <Text style={{ color: theme.textSecondary }} className="text-[11px] text-right mt-1 font-normal opacity-70">
+          <Text style={{ color: theme.textSecondary }} className="text-[10px] text-right mt-1 font-normal opacity-70">
             Slide Judge to score · Presence, originality & craft
           </Text>
         )}
@@ -1004,57 +1131,100 @@ function FeedVideoCard({
               </View>
               
               <ScrollView className="flex-1 p-5" showsVerticalScrollIndicator={false}>
-                {comments.length === 0 ? (
-                  <Text style={{ color: theme.textSecondary }} className="text-[13px] text-center mt-10">No comments yet. Start the conversation!</Text>
+                {isLoadingComments && comments.length === 0 ? (
+                  <View className="py-12 items-center justify-center">
+                    <ActivityIndicator size="small" color={theme.primary} />
+                    <Text style={{ color: theme.textSecondary }} className="text-[12px] mt-2">
+                      Loading conversation...
+                    </Text>
+                  </View>
+                ) : comments.length === 0 ? (
+                  <Text style={{ color: theme.textSecondary }} className="text-[13px] text-center mt-10">
+                    No comments yet. Start the conversation!
+                  </Text>
                 ) : (
-                  comments.map((c: any) => (
-                    <View key={c.id} className="mb-6">
-                      <View className="flex-row items-start gap-3">
-                        <View 
-                          style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
-                          className="w-8 h-8 rounded-full items-center justify-center border overflow-hidden"
-                        >
-                          <User color={theme.textSecondary} size={16} />
-                        </View>
-                        <View className="flex-1">
-                          <View className="flex-row items-center gap-2 mb-1">
-                            <Text style={{ color: theme.text }} className="text-[12px] font-medium">{c.user}</Text>
-                            <Text style={{ color: theme.textSecondary }} className="text-[10px]">{c.time}</Text>
-                            {c.isArtist && <Text style={{ backgroundColor: theme.primary + '20', color: theme.primary }} className="text-[8px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-widest">Artist</Text>}
-                            {c.isFeedback && <Text className="bg-blue-500/20 text-blue-500 text-[8px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-widest">Feedback</Text>}
-                            {c.isOpportunity && <Text className="bg-emerald-500/20 text-emerald-500 text-[8px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-widest">Opportunity</Text>}
-                            {c.isQuestion && <Text className="bg-amber-500/20 text-amber-500 text-[8px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-widest">Question</Text>}
-                            {c.timestamp && (
-                              <TouchableOpacity 
-                                style={{ backgroundColor: theme.surfaceBg }}
-                                className="rounded-full px-2 py-0.5 ml-1"
-                              >
-                                <Text style={{ color: theme.text }} className="text-[9px] font-medium">○ {c.timestamp}</Text>
-                              </TouchableOpacity>
+                  comments.map((c: any) => {
+                    const authorName = typeof c.author === 'string' && c.author.trim()
+                      ? c.author
+                      : (typeof c.user === 'string' && c.user.trim()
+                          ? c.user
+                          : (c.user?.name || c.user?.username || 'Performer'));
+                    
+                    const avatarUrl = c.authorAvatar || c.user?.avatarUrl;
+                    const relativeTime = c.time || formatRelativeTime(c.createdAt);
+                    
+                    const matchTime = typeof c.text === 'string' ? c.text.match(/^\[(\d+:\d+)\]\s*/) : null;
+                    const displayTimestamp = c.timestamp || (matchTime ? matchTime[1] : null);
+                    const cleanText = matchTime ? c.text.replace(/^\[\d+:\d+\]\s*/, '') : c.text;
+
+                    return (
+                      <View key={c.id} className="mb-6">
+                        <View className="flex-row items-start gap-3">
+                          <View 
+                            style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                            className="w-8 h-8 rounded-full items-center justify-center border overflow-hidden"
+                          >
+                            {avatarUrl ? (
+                              <Image source={{ uri: avatarUrl }} className="w-full h-full" resizeMode="cover" />
+                            ) : (
+                              <User color={theme.textSecondary} size={16} />
                             )}
                           </View>
-                          <Text style={{ color: theme.text }} className="text-[13px] leading-5">{c.text}</Text>
-                          
-                          <View className="flex-row items-center gap-4 mt-2">
-                            <TouchableOpacity>
-                              <Text style={{ color: theme.textSecondary }} className="text-[11px] font-medium">Reply</Text>
-                            </TouchableOpacity>
-                            {c.isOpportunity ? (
-                              <TouchableOpacity>
-                                <Text className="text-emerald-500 text-[11px] font-bold">Connect</Text>
+                          <View className="flex-1">
+                            <View className="flex-row items-center gap-2 mb-1 flex-wrap">
+                              <Text style={{ color: theme.text }} className="text-[12px] font-bold">
+                                {authorName}
+                              </Text>
+                              <Text style={{ color: theme.textSecondary }} className="text-[10px]">
+                                {relativeTime}
+                              </Text>
+                              {c.isArtist && (
+                                <Text style={{ backgroundColor: theme.primary + '20', color: theme.primary }} className="text-[8px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-widest">
+                                  Artist
+                                </Text>
+                              )}
+                              {displayTimestamp && (
+                                <TouchableOpacity 
+                                  onPress={() => {
+                                    const parts = String(displayTimestamp).split(':').map(Number);
+                                    const secs = parts.length === 2 ? parts[0] * 60 + parts[1] : 0;
+                                    if (Platform.OS === 'web' && videoRef.current) {
+                                      videoRef.current.currentTime = secs;
+                                    }
+                                    setCurrentTime(secs);
+                                    setIsCommenting(false);
+                                  }}
+                                  style={{ backgroundColor: theme.primary + '20', borderColor: theme.primary + '50' }}
+                                  className="rounded-full px-2 py-0.5 ml-1 border flex-row items-center gap-1"
+                                >
+                                  <Clock size={9} color={theme.primary} />
+                                  <Text style={{ color: theme.primary }} className="text-[10px] font-bold">
+                                    {displayTimestamp}
+                                  </Text>
+                                </TouchableOpacity>
+                              )}
+                            </View>
+                            <Text style={{ color: theme.text }} className="text-[13px] leading-5">
+                              {cleanText}
+                            </Text>
+                            
+                            <View className="flex-row items-center gap-4 mt-2">
+                              <TouchableOpacity onPress={() => {
+                                setCommentText(`@${authorName} `);
+                              }}>
+                                <Text style={{ color: theme.textSecondary }} className="text-[11px] font-medium">Reply</Text>
                               </TouchableOpacity>
-                            ) : (
                               <TouchableOpacity onPress={() => toggleUseful(c.id)}>
                                 <Text style={{ color: c.isUseful ? theme.primary : theme.textSecondary }} className="text-[11px] font-medium">
-                                  {c.isUseful ? 'Useful ✓' : 'Useful'}
+                                  {c.isUseful ? 'Useful (1)' : 'Useful'}
                                 </Text>
                               </TouchableOpacity>
-                            )}
+                            </View>
                           </View>
                         </View>
                       </View>
-                    </View>
-                  ))
+                    );
+                  })
                 )}
                 <View className="h-10" />
               </ScrollView>
@@ -1109,15 +1279,19 @@ function FeedVideoCard({
                       <TouchableOpacity 
                         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setAttachMoment(!attachMoment); }} 
                         style={attachMoment ? { backgroundColor: theme.primary + '25', borderColor: theme.primary } : { backgroundColor: theme.surfaceBg, borderColor: theme.border }}
-                        className="flex-row items-center gap-1.5 px-2.5 py-1 rounded-full border"
+                        className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border"
                       >
-                        <Text style={{ color: attachMoment ? theme.primary : theme.textSecondary }} className="text-[10px] font-medium">○ Attach moment</Text>
+                        <Clock size={11} color={attachMoment ? theme.primary : theme.textSecondary} />
+                        <Text style={{ color: attachMoment ? theme.primary : theme.textSecondary }} className="text-[10px] font-medium">
+                          {attachMoment ? `At moment ${formatTime(currentTime)}` : 'Attach moment'}
+                        </Text>
                       </TouchableOpacity>
                       <TouchableOpacity 
                         style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
-                        className="flex-row items-center gap-1.5 px-2.5 py-1 rounded-full border"
+                        className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border"
                       >
-                        <Text style={{ color: theme.textSecondary }} className="text-[10px] font-medium">🎤 Voice</Text>
+                        <Mic size={11} color={theme.textSecondary} />
+                        <Text style={{ color: theme.textSecondary }} className="text-[10px] font-medium">Voice</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -1133,6 +1307,11 @@ function FeedVideoCard({
 
 export function HomeView({ user }: { user?: any }) {
   const { theme } = useThemeStore();
+  const insets = useSafeAreaInsets();
+  const topInset = Platform.OS === 'web'
+    ? 0
+    : (insets.top > 0 ? insets.top : (Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 44));
+  const totalHeaderHeight = topInset + COLLAPSIBLE_HEADER_HEIGHT;
   const [activeFeedTab, setActiveFeedTab] = useState('For you');
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   
@@ -1247,18 +1426,20 @@ export function HomeView({ user }: { user?: any }) {
   }, [feedData]);
 
   // Filter Logic based on Tabs and Search (strictly exclude images)
-  const filteredData = activeFeedTab.toLowerCase() === 'kept'
-    ? keptVideos.filter(v => !isMediaImage(v.url || v.videoUrl))
-    : allFeedItems.filter(v => {
-        if (isMediaImage(v.url || v.videoUrl)) return false;
-        let matchesTab = true;
-        const tabLower = activeFeedTab.toLowerCase();
-        if (tabLower === 'rising') matchesTab = v.isRising;
-        if (tabLower === 'clubs') matchesTab = v.category?.toLowerCase() === 'club' || v.isClub;
-        if (tabLower === 'blind audition') matchesTab = true;
-        
-        return matchesTab;
+  const filteredData = React.useMemo(() => {
+    const tabLower = activeFeedTab.toLowerCase();
+    if (tabLower === 'kept') {
+      return keptVideos.filter(v => !isMediaImage(v.url || v.videoUrl));
+    }
+    if (tabLower === 'rising') {
+      return [...allFeedItems].sort((a, b) => {
+        const scoreA = Number(a.userRating ?? a.avgRating ?? a.rating ?? 0);
+        const scoreB = Number(b.userRating ?? b.avgRating ?? b.rating ?? 0);
+        return scoreB - scoreA;
       });
+    }
+    return allFeedItems;
+  }, [activeFeedTab, keptVideos, allFeedItems]);
 
   // Switch tabs auto-play first card of new tab
   useEffect(() => {
@@ -1277,17 +1458,16 @@ export function HomeView({ user }: { user?: any }) {
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       const currentY = event.contentOffset.y;
-      if (currentY < 0) return;
+      if (currentY <= 0) {
+        headerTranslateY.value = 0;
+        lastScrollY.value = 0;
+        return;
+      }
       const diff = currentY - lastScrollY.value;
       
       let newTranslateY = headerTranslateY.value - diff;
-      if (newTranslateY < -HEADER_HEIGHT) newTranslateY = -HEADER_HEIGHT;
+      if (newTranslateY < -COLLAPSIBLE_HEADER_HEIGHT) newTranslateY = -COLLAPSIBLE_HEADER_HEIGHT;
       if (newTranslateY > 0) newTranslateY = 0;
-      
-      if (currentY <= HEADER_HEIGHT) {
-        newTranslateY = -currentY; 
-        if (newTranslateY > 0) newTranslateY = 0;
-      }
       
       headerTranslateY.value = newTranslateY;
       lastScrollY.value = currentY;
@@ -1332,6 +1512,7 @@ export function HomeView({ user }: { user?: any }) {
       right: 0,
       zIndex: 10,
       backgroundColor: theme.headerBg,
+      paddingTop: topInset,
       paddingBottom: 8,
       borderBottomWidth: 1,
       borderBottomColor: theme.border
@@ -1349,14 +1530,56 @@ export function HomeView({ user }: { user?: any }) {
   };
   return (
     <View className="flex-1" style={{ backgroundColor: theme.bg }}>
+      <StatusBar style={theme.isDark ? 'light' : 'dark'} />
+
+      {/* Solid status bar fill so feed scrolling under the notch/status bar doesn't cause transparency or collisions on mobile */}
+      {Platform.OS !== 'web' && topInset > 0 && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: topInset,
+            backgroundColor: theme.headerBg,
+            zIndex: 25,
+          }}
+        />
+      )}
+
       <Animated.View style={headerStyle}>
-        <View className="px-5 pt-12 pb-2 flex-row items-center justify-between">
+        <View className="px-5 pt-2 pb-2 flex-row items-center justify-between">
           <View>
             <View className="flex-row items-baseline">
-              <Text className="font-extrabold text-[32px] tracking-tight leading-none font-serif" style={{ color: theme.text }}>talent</Text>
-              <Text className="font-extrabold text-[32px] leading-none ml-[1px] font-serif" style={{ color: theme.primary }}>.</Text>
+              <Text 
+                style={{ 
+                  color: theme.text,
+                  fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+                  fontWeight: '800',
+                  fontSize: 32,
+                  letterSpacing: -1.8,
+                  lineHeight: 34,
+                }}
+              >
+                talent
+              </Text>
+              <Text 
+                style={{ 
+                  color: theme.primary,
+                  fontWeight: '800',
+                  fontSize: 32,
+                  marginLeft: 1,
+                  lineHeight: 34,
+                }}
+              >
+                .
+              </Text>
             </View>
-            <Text className="text-[10px] tracking-[0.18em] uppercase font-bold text-white/50 mt-1">
+            <Text 
+              style={{ color: theme.textSecondary }}
+              className="text-[10px] tracking-[0.18em] uppercase font-bold mt-1 opacity-70"
+            >
               ABILITY TAKES THE STAGE
             </Text>
           </View>
@@ -1383,6 +1606,10 @@ export function HomeView({ user }: { user?: any }) {
                 activeOpacity={0.7}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  if (tab.toLowerCase() === 'clubs') {
+                    router.push('/shows?section=clubs' as any);
+                    return;
+                  }
                   setActiveFeedTab(tab);
                   scrollRef.current?.scrollTo({ y: 0, animated: true });
                 }}
@@ -1409,7 +1636,7 @@ export function HomeView({ user }: { user?: any }) {
       <Animated.ScrollView
         ref={scrollRef as any}
         className="flex-1"
-        contentContainerStyle={{ paddingTop: HEADER_HEIGHT + 6, paddingHorizontal: 0, paddingBottom: 100 }}
+        contentContainerStyle={{ paddingTop: totalHeaderHeight + 8, paddingHorizontal: 0, paddingBottom: 110 }}
         showsVerticalScrollIndicator={false}
         onScroll={scrollHandler}
         onMomentumScrollEnd={handleScroll}
@@ -1422,11 +1649,18 @@ export function HomeView({ user }: { user?: any }) {
             tintColor={theme.primary}
             colors={[theme.primary]}
             progressBackgroundColor={theme.cardBg}
-            progressViewOffset={Platform.OS === 'android' ? HEADER_HEIGHT + 10 : 0}
+            progressViewOffset={Platform.OS === 'android' ? totalHeaderHeight + 10 : 0}
           />
         }
       >
-        {activeFeedTab === 'Kept' && isLoadingSaved && filteredData.length === 0 ? (
+        {isLoading && filteredData.length === 0 ? (
+          <View className="items-center justify-center py-24 px-6">
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={{ color: theme.textSecondary }} className="font-medium text-[13px] mt-4">
+              Finding your next performance...
+            </Text>
+          </View>
+        ) : activeFeedTab === 'Kept' && isLoadingSaved && filteredData.length === 0 ? (
           <View className="items-center justify-center py-24 px-6">
             <ActivityIndicator size="large" color={theme.primary} />
             <Text style={{ color: theme.textSecondary }} className="font-medium text-[13px] mt-4">
@@ -1510,7 +1744,7 @@ export function HomeView({ user }: { user?: any }) {
                 >
                   <Sparkles color={theme.primary} size={15} />
                   <Text style={{ color: theme.textSecondary }} className="font-medium text-[13px] tracking-wide">
-                    You're all caught up on performances ✨
+                    You are all caught up on performances
                   </Text>
                 </View>
               </View>

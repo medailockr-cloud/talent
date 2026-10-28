@@ -12,7 +12,7 @@ import http from 'http';
 import { Server } from 'socket.io';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsDoc from 'swagger-jsdoc';
-import { cacheFeed, getCachedFeed, redis } from './utils/redis';
+import { cacheFeed, getCachedFeed, invalidateFeedCache, redis } from './utils/redis';
 import { cloudUpload } from './utils/cloudinary';
 import { convertToHLS, trimVideoFile } from './utils/ffmpeg';
 import { sendPushNotification } from './utils/notifications';
@@ -522,8 +522,14 @@ app.post('/api/videos/:id/comment', async (req, res) => {
 
     const comment = await prisma.comment.create({
       data: { text, userId, videoId },
-      include: { user: true }
+      include: { 
+        user: { 
+          select: { id: true, username: true, name: true, avatarUrl: true } 
+        } 
+      }
     });
+
+    await invalidateFeedCache();
     
     // Generate Notification
     if (video.authorId !== userId) {
@@ -2219,7 +2225,7 @@ app.get('/api/videos/:id/comments', async (req, res) => {
       skip: cursor ? 1 : 0,
       cursor: cursor ? { id: cursor } : undefined,
       orderBy: { createdAt: 'desc' },
-      include: { user: { select: { id: true, username: true, avatarUrl: true } } }
+      include: { user: { select: { id: true, username: true, name: true, avatarUrl: true } } }
     });
 
     let nextCursor: number | null = null;

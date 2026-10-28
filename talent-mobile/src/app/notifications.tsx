@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Image,
+  Platform,
 } from 'react-native';
 import {
   ChevronLeft,
@@ -19,11 +20,14 @@ import {
 import { useRouter } from 'expo-router';
 import { api, resolveMediaUrl } from '../utils/api';
 import { useThemeStore } from '../store/themeStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 
 export default function NotificationsScreen() {
   const router = useRouter();
   const { theme } = useThemeStore();
+  const insets = useSafeAreaInsets();
+  const topInset = insets.top > 0 ? insets.top : (Platform.OS === 'android' ? 28 : 20);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isMarkingAll, setIsMarkingAll] = useState(false);
@@ -130,8 +134,8 @@ export default function NotificationsScreen() {
     <View className="flex-1" style={{ backgroundColor: theme.bg }}>
       {/* Header */}
       <View
-        style={{ borderBottomColor: theme.border, backgroundColor: theme.bg }}
-        className="px-5 pt-12 pb-4 border-b flex-row items-center justify-between"
+        style={{ borderBottomColor: theme.border, backgroundColor: theme.bg, paddingTop: topInset + 6 }}
+        className="px-5 pb-4 border-b flex-row items-center justify-between"
       >
         <View className="flex-row items-center">
           <TouchableOpacity

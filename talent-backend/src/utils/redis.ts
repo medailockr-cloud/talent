@@ -18,7 +18,7 @@ export const redis = new Redis(redisUrl, {
 });
 
 // Suppress uncaught connection error spam when Redis is offline
-redis.on('error', (err) => {
+redis.on('error', (_err) => {
   // Silent fallback: caching functions already check if redis.status === 'ready'
 });
 
@@ -42,4 +42,17 @@ export const getCachedFeed = async (key: string) => {
     console.error('Redis fetch error:', err);
   }
   return null;
+};
+
+export const invalidateFeedCache = async () => {
+  try {
+    if (redis.status === 'ready') {
+      const keys = await redis.keys('feed_*');
+      if (keys.length > 0) {
+        await redis.del(...keys);
+      }
+    }
+  } catch (err) {
+    console.error('Redis cache invalidation error:', err);
+  }
 };

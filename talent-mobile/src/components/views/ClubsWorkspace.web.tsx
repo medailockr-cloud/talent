@@ -38,7 +38,7 @@ const blank = {
   city: 'Bengaluru',
   description: '',
   logoUrl: '',
-  coverUrl: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=1200&auto=format&fit=crop',
+  coverUrl: '',
   joinPolicy: 'approval' as 'approval' | 'open',
   title: '',
   kind: 'Practice' as ClubActivity['kind'],
@@ -467,7 +467,17 @@ export function ClubsWorkspace({
           <article className="cw-card" key={c.id}>
             <button className="cw-card-main" aria-label={`Open club ${c.name}`} onClick={() => open(c.id)}>
               <div className="cw-cover">
-                <img src={c.coverUrl || blank.coverUrl} alt={`${c.name} club cover`} loading="lazy" />
+                {c.coverUrl ? (
+                  <img src={c.coverUrl} alt={`${c.name} club cover`} loading="lazy" />
+                ) : (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      background: `radial-gradient(circle at 70% 30%, ${c.color || '#E91E76'}33 0%, #150914 100%)`,
+                    }}
+                  />
+                )}
                 <span className="cw-cover-label">
                   {c.joinPolicy === 'approval' ? 'Host approval' : 'Open to join'}
                 </span>
@@ -609,7 +619,17 @@ export function ClubsWorkspace({
           {club && mode === 'club' && (
             <>
               <div className="cw-detail-cover">
-                <img src={club.coverUrl || blank.coverUrl} alt={`${club.name} cover`} />
+                {club.coverUrl ? (
+                  <img src={club.coverUrl} alt={`${club.name} cover`} />
+                ) : (
+                  <div
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      background: `radial-gradient(circle at 70% 30%, ${club.color || '#E91E76'}44 0%, #150914 100%)`,
+                    }}
+                  />
+                )}
               </div>
               <div className="cw-detail-body">
                 <div className="cw-identity">

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Image, RefreshControl } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Image, RefreshControl, Platform } from 'react-native';
 import { Search, X, ChevronLeft, ChevronRight, User as UserIcon, Video as VideoIcon, MapPin, Star, Heart, Sparkles } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { api } from '../utils/api';
 import { useThemeStore } from '../store/themeStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 
 interface UserResult {
@@ -37,6 +38,8 @@ interface VideoResult {
 export default function DiscoverScreen() {
   const router = useRouter();
   const { theme } = useThemeStore();
+  const insets = useSafeAreaInsets();
+  const topInset = insets.top > 0 ? insets.top : (Platform.OS === 'android' ? 28 : 20);
   const params = useLocalSearchParams();
   const [searchQuery, setSearchQuery] = useState((params.q as string) || '');
   const [category, setCategory] = useState('');
@@ -89,8 +92,8 @@ export default function DiscoverScreen() {
     <View className="flex-1" style={{ backgroundColor: theme.bg }}>
       {/* Header */}
       <View 
-        style={{ borderBottomColor: theme.border }}
-        className="px-4 pt-12 pb-3 border-b flex-row items-center gap-3"
+        style={{ borderBottomColor: theme.border, paddingTop: topInset + 6 }}
+        className="px-4 pb-3 border-b flex-row items-center gap-3"
       >
         <TouchableOpacity 
           onPress={() => {

@@ -3,6 +3,8 @@ import { DarkTheme, DefaultTheme, ThemeProvider, Slot, useRouter, useSegments } 
 import * as SplashScreen from 'expo-splash-screen';
 import { useColorScheme } from 'react-native';
 import { useEffect, useState } from 'react';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
 
@@ -40,8 +42,12 @@ export default function RootLayout() {
   if (!isReady || isLoading) return null; // Or a splash loading screen
 
   return (
-    <ThemeProvider value={theme.isDark ? DarkTheme : DefaultTheme}>
-      <Slot />
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider value={theme.isDark ? DarkTheme : DefaultTheme}>
+        <StatusBar style={theme.isDark ? 'light' : 'dark'} />
+        <Slot />
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
+

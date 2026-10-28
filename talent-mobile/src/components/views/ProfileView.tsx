@@ -78,6 +78,7 @@ import { useAuthStore } from "../../store/authStore";
 import { useThemeStore, THEMES, ThemeId, ORDERED_THEME_IDS } from "../../store/themeStore";
 import { useKeptStore } from "../../store/keptStore";
 import { FollowersModal } from "../ui/FollowersModal";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import io from "socket.io-client";
 
 const coverImg = "";
@@ -951,6 +952,8 @@ export function ProfileView({
   onBack?: () => void;
 }) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const topInset = insets.top > 0 ? insets.top : (Platform.OS === 'android' ? 28 : 20);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeSettingView, setActiveSettingView] = useState<string | null>(
     null,
@@ -1674,8 +1677,8 @@ export function ProfileView({
       >
         {/* Top Actions */}
         <View 
-          className="flex-row justify-between items-center px-4 pt-14 pb-4"
-          style={{ backgroundColor: theme.headerBg }}
+          className="flex-row justify-between items-center px-4 pb-4"
+          style={{ backgroundColor: theme.headerBg, paddingTop: topInset + 8 }}
         >
           <TouchableOpacity
             onPress={() => {

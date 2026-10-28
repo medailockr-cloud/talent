@@ -2210,10 +2210,27 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         </TouchableOpacity>
 
         <View className="flex-row items-baseline">
-          <Text className="font-bold text-[32px] tracking-tight leading-none font-serif" style={{ color: theme.text }}>
+          <Text
+            style={{
+              color: theme.text,
+              fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+              fontWeight: '800',
+              fontSize: 32,
+              letterSpacing: -1.8,
+              lineHeight: 34,
+            }}
+          >
             talent
           </Text>
-          <Text className="font-bold text-[32px] leading-none ml-[1px] font-serif" style={{ color: theme.primary }}>
+          <Text
+            style={{
+              color: theme.primary,
+              fontWeight: '800',
+              fontSize: 32,
+              marginLeft: 1,
+              lineHeight: 34,
+            }}
+          >
             .
           </Text>
         </View>

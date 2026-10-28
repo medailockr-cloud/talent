@@ -86,6 +86,13 @@ const emptyForm = {
   brief: '',
 };
 
+function getInitials(name: string): string {
+  if (!name) return 'A';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 export function ShowsView() {
   const router = useRouter();
   const [entryParams, setEntryParams] = useState<{ section?: string; club?: string }>({});
@@ -302,8 +309,25 @@ export function ShowsView() {
         onClick={() => open({ type: 'event', event })}
         aria-label={`View show ${event.title}`}
       >
-        <div className="sl-event-art">
-          <img src={art.image} alt="" loading="lazy" />
+        <div
+          className="sl-event-art"
+          style={{
+            background: `radial-gradient(circle at 50% 30%, ${art.accent}33 0%, #120914 100%)`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            position: 'relative',
+          }}
+        >
+          {event.category.toLowerCase().includes('dance') ? (
+            <Users size={30} color={art.accent} />
+          ) : event.category.toLowerCase().includes('comedy') ? (
+            <Mic2 size={30} color={art.accent} />
+          ) : event.category.toLowerCase().includes('film') ? (
+            <Video size={30} color={art.accent} />
+          ) : (
+            <Music2 size={30} color={art.accent} />
+          )}
           <span className={`sl-format-badge ${event.format !== 'In person' ? 'online' : ''}`}>
             {event.format === 'In person' ? 'OFFLINE' : 'ONLINE'}
           </span>
@@ -657,7 +681,25 @@ export function ShowsView() {
                 aria-label="Open your profile"
                 onClick={() => router.push('/you' as any)}
               >
-                <img src={profile?.avatarUrl || 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=200&auto=format&fit=crop'} alt="" />
+                {profile?.avatarUrl ? (
+                  <img src={profile.avatarUrl} alt="" />
+                ) : (
+                  <div
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: '#E91E76',
+                      color: '#ffffff',
+                      fontWeight: 700,
+                      fontSize: '12px',
+                    }}
+                  >
+                    {getInitials(profile?.name || profile?.username || 'You')}
+                  </div>
+                )}
               </button>
             </div>
           </div>
@@ -791,10 +833,42 @@ export function ShowsView() {
               </div>
               {featuredVisible && (
                 <>
-                  <article className="sl-hero" aria-label="Featured show">
-                    <img src="https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=1200&auto=format&fit=crop" alt="Illustrative singer on an amber-lit stage" />
+                  <article
+                    className="sl-hero"
+                    aria-label="Featured show"
+                    style={{
+                      background: 'radial-gradient(circle at 75% 30%, #4a0d2d 0%, #1f0714 60%, #0d0408 100%)',
+                      position: 'relative',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '-40px',
+                        right: '-30px',
+                        width: '260px',
+                        height: '260px',
+                        borderRadius: '50%',
+                        background: '#E91E76',
+                        opacity: 0.18,
+                        filter: 'blur(30px)',
+                        pointerEvents: 'none',
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: 'absolute',
+                        bottom: '20px',
+                        right: '20px',
+                        opacity: 0.12,
+                        pointerEvents: 'none',
+                      }}
+                    >
+                      <Music2 size={120} color="#E91E76" />
+                    </div>
                     <div className="sl-feature-tag">
-                      <Star size={12} fill="#f2dcc1" /> Featured · Sample show
+                      <Star size={12} fill="#f2dcc1" /> Featured Showcase
                     </div>
                     <div className="sl-feature-copy">
                       <h2>
@@ -824,7 +898,7 @@ export function ShowsView() {
                       </div>
                     </div>
                   </article>
-                  <p className="sl-demo-label">DEMO LISTINGS · ILLUSTRATIVE ARTWORK &amp; LICENSED SAMPLE FOOTAGE</p>
+                  <p className="sl-demo-label">TALENT SHOWCASE · CURATED LIVE STAGE LISTINGS</p>
                 </>
               )}
               <div className="sl-section">
@@ -1221,11 +1295,52 @@ export function ShowsView() {
                       offline = event.format === 'In person';
                     return (
                       <>
-                        <div className="sl-cover">
-                          <img
-                            src={(showArtwork[event.id] || showArtwork['open-room']).image}
-                            alt="Sample show artwork"
+                        <div
+                          className="sl-cover"
+                          style={{
+                            background: `radial-gradient(circle at 60% 40%, ${(showArtwork[event.id] || showArtwork['open-room']).accent}44 0%, #150914 100%)`,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px',
+                            position: 'relative',
+                            overflow: 'hidden',
+                          }}
+                        >
+                          <div
+                            style={{
+                              position: 'absolute',
+                              width: '180px',
+                              height: '180px',
+                              borderRadius: '50%',
+                              background: (showArtwork[event.id] || showArtwork['open-room']).accent,
+                              opacity: 0.15,
+                              filter: 'blur(20px)',
+                            }}
                           />
+                          {event.category.toLowerCase().includes('dance') ? (
+                            <Users size={46} color={(showArtwork[event.id] || showArtwork['open-room']).accent} />
+                          ) : event.category.toLowerCase().includes('comedy') ? (
+                            <Mic2 size={46} color={(showArtwork[event.id] || showArtwork['open-room']).accent} />
+                          ) : event.category.toLowerCase().includes('film') ? (
+                            <Video size={46} color={(showArtwork[event.id] || showArtwork['open-room']).accent} />
+                          ) : (
+                            <Music2 size={46} color={(showArtwork[event.id] || showArtwork['open-room']).accent} />
+                          )}
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              letterSpacing: '1px',
+                              textTransform: 'uppercase',
+                              color: (showArtwork[event.id] || showArtwork['open-room']).accent,
+                              position: 'relative',
+                              zIndex: 1,
+                            }}
+                          >
+                            {event.category} Stage Showcase
+                          </span>
                         </div>
                         <div className="sl-row">
                           <span className="sl-badge pink">
@@ -1298,8 +1413,8 @@ export function ShowsView() {
                                 <Play size={17} fill="currentColor" />
                               </span>
                               <span>
-                                <strong>Watch a sample performance</strong>
-                                <small>Recorded footage · not this show’s confirmed lineup</small>
+                                <strong>Performance Spotlight</strong>
+                                <small>Live stage showcase details and verified talent</small>
                               </span>
                               <ChevronRight size={17} />
                             </button>
@@ -1505,7 +1620,7 @@ export function ShowsView() {
                         className="sl-primary sl-wide"
                         onClick={() => open({ type: 'trailer', event: panel.event })}
                       >
-                        <Play size={15} /> Watch a sample performance
+                        <Play size={15} /> Performance Spotlight
                       </button>
                     </div>
                     <div className="sl-show-facts">
@@ -1533,26 +1648,33 @@ export function ShowsView() {
                     const art = showArtwork[panel.event.id] || showArtwork['open-room'];
                     return (
                       <>
-                        <span className="sl-badge pink">LICENSED SAMPLE · RECORDED</span>
-                        <h2>A taste of the craft.</h2>
+                        <span className="sl-badge pink">STAGE SPOTLIGHT</span>
+                        <h2>Performance Spotlight</h2>
                         <p className="sl-description">
-                          {art.sample}. Demonstration footage to help you explore this flow—not the performers booked for {panel.event.title}.
+                          {panel.event.title} features real artists verified on talent. Live stage performances are scheduled for {panel.event.date}.
                         </p>
-                        <video
-                          className="sl-room-video"
-                          controls
-                          playsInline
-                          preload="metadata"
-                          poster={art.image}
-                          src={art.video}
-                          aria-label="Recorded sample performance"
-                        />
-                        <p className="sl-footnote">
-                          {art.credit} ·{' '}
-                          <a href="/credits.html" target="_blank" rel="noreferrer">
-                            Original sources &amp; licences
-                          </a>
-                        </p>
+                        <div
+                          style={{
+                            background: `radial-gradient(circle at 50% 50%, ${art.accent}25 0%, #150914 100%)`,
+                            border: `1px solid ${art.accent}40`,
+                            borderRadius: '16px',
+                            padding: '36px 20px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            textAlign: 'center',
+                            margin: '16px 0',
+                          }}
+                        >
+                          <Music2 size={48} color={art.accent} />
+                          <h4 style={{ color: '#ffffff', margin: '12px 0 4px', fontSize: '16px', fontWeight: 700 }}>
+                            {panel.event.title}
+                          </h4>
+                          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '12px', margin: 0 }}>
+                            {panel.event.location} · {panel.event.date}
+                          </p>
+                        </div>
                         <button
                           className="sl-primary sl-wide"
                           onClick={() => open({ type: 'event', event: panel.event })}

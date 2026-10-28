@@ -6,6 +6,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useThemeStore } from '../../store/themeStore';
 import { Image, View, Text, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 
 export default function TabsLayout() {
   const { user } = useAuthStore();
@@ -40,10 +41,14 @@ export default function TabsLayout() {
 
   const isCreateRoute = pathname ? pathname.includes('create') : false;
   const hideTabBar = (isTabBarHidden && isCreateRoute) || (isWeb && (!!pathname?.includes('flips') || !!pathname?.includes('shows')));
+  const isFlipsRoute = pathname ? pathname.includes('flips') : false;
+  const statusBarStyle = isFlipsRoute ? 'light' : (theme.isDark ? 'light' : 'dark');
 
   return (
-    <Tabs
-      screenOptions={{
+    <>
+      <StatusBar style={statusBarStyle} />
+      <Tabs
+        screenOptions={{
         headerShown: false,
         tabBarStyle: hideTabBar ? { display: 'none' } : defaultTabBarStyle,
         tabBarLabel: ({ color, children }) => (
@@ -119,6 +124,7 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+    </>
   );
 }
 

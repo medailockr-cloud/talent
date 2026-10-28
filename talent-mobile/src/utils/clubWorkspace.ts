@@ -30,20 +30,11 @@ export type ClubActivity = {
   exchangeStatus?: 'proposed' | 'confirmed';
 };
 
-const covers = [
-  'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1520523839898-50712825e3a7?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=800&auto=format&fit=crop',
-];
-
 export const workspaceClubs: WorkspaceClub[] = clubs.map((c, i) => ({
   ...c,
   ownerId: 101 + i,
   joinPolicy: i % 2 === 0 ? 'approval' : 'open',
-  coverUrl: covers[i % covers.length],
+  coverUrl: undefined,
 }));
 
 export const clubRequestId = (clubId: string, userId: number) => `${clubId}:${userId}`;

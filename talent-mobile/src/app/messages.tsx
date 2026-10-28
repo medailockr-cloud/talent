@@ -28,12 +28,15 @@ import {
 import { api } from '../utils/api';
 import { useThemeStore } from '../store/themeStore';
 import { useAuthStore } from '../store/authStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 
 export default function MessagesScreen() {
   const router = useRouter();
   const { theme } = useThemeStore();
   const { user: currentUser } = useAuthStore();
+  const insets = useSafeAreaInsets();
+  const topInset = insets.top > 0 ? insets.top : (Platform.OS === 'android' ? 28 : 20);
 
   const [conversations, setConversations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -289,7 +292,7 @@ export default function MessagesScreen() {
   };
 
   return (
-    <View className="flex-1 px-5 pt-12" style={{ backgroundColor: theme.bg }}>
+    <View className="flex-1 px-5" style={{ backgroundColor: theme.bg, paddingTop: topInset + 6 }}>
       {/* Header */}
       <View className="flex-row items-center justify-between pb-4">
         <TouchableOpacity
