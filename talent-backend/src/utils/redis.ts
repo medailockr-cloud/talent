@@ -1,4 +1,6 @@
 import Redis from 'ioredis';
+import { createAdapter } from '@socket.io/redis-adapter';
+import type { Server } from 'socket.io';
 
 // Create a robust Redis client that doesn't crash if Redis isn't running locally
 // In production, configure process.env.REDIS_URL
@@ -54,5 +56,33 @@ export const invalidateFeedCache = async () => {
     }
   } catch (err) {
     console.error('Redis cache invalidation error:', err);
+  }
+};
+
+/**
+ * Attaches the Redis adapter to Socket.IO for multi-instance scaling in production (e.g. Cloud Run).
+ */
+export const setupSocketRedisAdapter = (io: Server) => {
+  // Check if REDIS_URL is explicitly configured for production
+  if (process.env.REDIS_URL) {
+    try {
+      const pubClient = new Redis(redisUrl, {
+        enableOfflineQueue: false,
+        maxRetriesPerRequest: null,
+      });
+      const subClient = pubClient.duplicate();
+
+      pubClient.on('error', () => {
+        // Catch connection errors if Redis is restarting
+      });
+      subClient.on('error', () => {
+        // Catch connection errors if Redis is restarting
+      });
+
+      io.adapter(createAdapter(pubClient, subClient));
+      console.log('Socket.IO Redis adapter enabled for multi-instance clustering.');
+    } catch (err) {
+      console.warn('Failed to configure Socket.IO Redis adapter, continuing in standalone mode:', err);
+    }
   }
 };

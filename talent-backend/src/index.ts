@@ -12,7 +12,8 @@ import http from 'http';
 import { Server } from 'socket.io';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsDoc from 'swagger-jsdoc';
-import { cacheFeed, getCachedFeed, invalidateFeedCache, redis } from './utils/redis';
+import { cacheFeed, getCachedFeed, invalidateFeedCache, redis, setupSocketRedisAdapter } from './utils/redis';
+import { isCloudStorageEnabled, uploadFileToStorage } from './utils/cloudStorage';
 import { cloudUpload } from './utils/cloudinary';
 import { convertToHLS, trimVideoFile } from './utils/ffmpeg';
 import { sendPushNotification } from './utils/notifications';
@@ -41,6 +42,7 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*' }
 });
+setupSocketRedisAdapter(io);
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-jwt-key-for-development-only';
 const PORT = process.env.PORT || 3000;
 const BASE_URL = (process.env.BASE_URL || '').replace(/\/$/, '') || `http://localhost:${PORT}`;
@@ -70,8 +72,20 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-app.use(cors());
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? (process.env.CORS_ORIGIN === '*' ? '*' : process.env.CORS_ORIGIN.split(',').map((o: string) => o.trim()))
+  : '*';
+
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json());
+
+// Container and service health check endpoints for Cloud Run / Docker
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
 
 // Authentication Middleware
 const requireAuth = (req: Request, res: Response, next: NextFunction): void => {

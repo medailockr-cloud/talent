@@ -2,13 +2,18 @@ import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import path from 'path';
 import fs from 'fs';
+import { isCloudStorageEnabled, uploadHlsDirectoryToStorage } from './cloudStorage';
 
-// Set the path to the ffmpeg binary so it works automatically on Windows/Mac/Linux
-ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+// Prefer system ffmpeg binary (e.g. in Docker / Linux container) or fallback to installer path
+if (process.env.FFMPEG_PATH) {
+  ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH);
+} else if (ffmpegInstaller && ffmpegInstaller.path) {
+  ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+}
 
-export const convertToHLS = (inputPath: string, videoId: number) => {
+export const convertToHLS = (inputPath: string, videoId: number): Promise<string> => {
   return new Promise((resolve, reject) => {
-    // We will save the HLS output inside the uploads/hls directory
+    // Generate HLS files in local temporary directory
     const hlsDir = path.join(__dirname, '../../uploads/hls', videoId.toString());
     
     if (!fs.existsSync(hlsDir)) {
@@ -19,18 +24,31 @@ export const convertToHLS = (inputPath: string, videoId: number) => {
 
     ffmpeg(inputPath)
       .outputOptions([
-        '-profile:v baseline', // baseline profile (level 3.0) for H.264 video codec
-        '-level 3.0', 
-        '-s 640x360',          // convert to 360p for adaptive streaming (can add more resolutions)
-        '-start_number 0',     // start the first .ts segment at index 0
-        '-hls_time 10',        // 10 second playlist length
-        '-hls_list_size 0',    // Maxmimum number of playlist entries (0 means all entries/infinite)
-        '-f hls'               // HLS format
+        '-profile:v baseline',
+        '-level 3.0',
+        '-s 640x360',
+        '-start_number 0',
+        '-hls_time 10',
+        '-hls_list_size 0',
+        '-f hls'
       ])
       .output(outputPath)
-      .on('end', () => {
-        console.log(`HLS conversion finished for video ${videoId}`);
-        resolve(`/uploads/hls/${videoId}/index.m3u8`);
+      .on('end', async () => {
+        console.log(`HLS conversion finished locally for video ${videoId}`);
+        try {
+          if (isCloudStorageEnabled()) {
+            const cloudUrl = await uploadHlsDirectoryToStorage(hlsDir, videoId);
+            // Clean up temporary local directory to preserve container storage
+            fs.rmSync(hlsDir, { recursive: true, force: true });
+            resolve(cloudUrl);
+          } else {
+            resolve(`/uploads/hls/${videoId}/index.m3u8`);
+          }
+        } catch (uploadError) {
+          console.error(`Error uploading HLS files for video ${videoId}:`, uploadError);
+          // Fallback to local path if cloud upload fails
+          resolve(`/uploads/hls/${videoId}/index.m3u8`);
+        }
       })
       .on('error', (err) => {
         console.error(`Error converting video ${videoId} to HLS:`, err);
@@ -75,4 +93,3 @@ export const trimVideoFile = (
       .run();
   });
 };
-

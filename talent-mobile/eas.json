@@ -10,14 +10,21 @@
     },
     "preview": {
       "distribution": "internal",
+      "channel": "preview",
       "android": {
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://talent-5c9u.onrender.com/api"
+        "EXPO_PUBLIC_API_URL": "https://talent-backend-placeholder.run.app/api"
       }
     },
-    "production": {}
+    "production": {
+      "channel": "production",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://talent-backend-placeholder.run.app/api"
+      }
+    }
   },
   "submit": {
     "production": {}
