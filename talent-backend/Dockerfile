@@ -10,9 +10,9 @@ WORKDIR /app
 
 # Install OpenSSL and dependencies required for Prisma engine compilation
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
-    openssl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+  openssl \
+  ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency manifests
 COPY package*.json ./
@@ -41,10 +41,10 @@ ENV PORT=3000
 
 # Install ffmpeg, openssl, and ca-certificates for production media processing
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    openssl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+  ffmpeg \
+  openssl \
+  ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 
 # Copy package manifests and install only production dependencies
 COPY package*.json ./

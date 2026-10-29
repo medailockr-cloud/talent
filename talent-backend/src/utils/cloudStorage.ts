@@ -50,7 +50,7 @@ export const uploadFileToStorage = async (
 
   const cleanDestination = destinationPath.replace(/^\//, '');
   const bucket = client.bucket(bucketName);
-  
+
   await bucket.upload(localFilePath, {
     destination: cleanDestination,
     metadata: contentType ? { contentType } : undefined,
@@ -112,8 +112,8 @@ export const uploadHlsDirectoryToStorage = async (
     const contentType = file.endsWith('.m3u8')
       ? 'application/vnd.apple.mpegurl'
       : file.endsWith('.ts')
-      ? 'video/MP2T'
-      : undefined;
+        ? 'video/MP2T'
+        : undefined;
 
     await bucket.upload(fullPath, {
       destination,

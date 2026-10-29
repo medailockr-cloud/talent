@@ -7,11 +7,11 @@ import fs from 'fs';
 const connection = process.env.REDIS_URL
   ? { url: process.env.REDIS_URL, maxRetriesPerRequest: null, enableOfflineQueue: false }
   : {
-      host: process.env.REDIS_HOST || '127.0.0.1',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-      maxRetriesPerRequest: null,
-      enableOfflineQueue: false,
-    };
+    host: process.env.REDIS_HOST || '127.0.0.1',
+    port: parseInt(process.env.REDIS_PORT || '6379'),
+    maxRetriesPerRequest: null,
+    enableOfflineQueue: false,
+  };
 
 export const videoQueue = new Queue('video-transcoding', { connection });
 
@@ -28,7 +28,7 @@ export const videoWorker = new Worker('video-transcoding', async (job) => {
 
     // If cloud storage is enabled and the original local upload file still exists, clean it up to preserve container disk
     if (isCloudStorageEnabled() && inputPath && fs.existsSync(inputPath)) {
-      fs.unlink(inputPath, () => {});
+      fs.unlink(inputPath, () => { });
     }
   } catch (error) {
     console.error(`[BullMQ Worker] Error processing video ${videoId}:`, error);

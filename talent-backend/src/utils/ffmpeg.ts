@@ -15,7 +15,7 @@ export const convertToHLS = (inputPath: string, videoId: number): Promise<string
   return new Promise((resolve, reject) => {
     // Generate HLS files in local temporary directory
     const hlsDir = path.join(__dirname, '../../uploads/hls', videoId.toString());
-    
+
     if (!fs.existsSync(hlsDir)) {
       fs.mkdirSync(hlsDir, { recursive: true });
     }
