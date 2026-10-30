@@ -15,14 +15,14 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://talent-backend-placeholder.run.app/api"
+        "EXPO_PUBLIC_API_URL": "https://talent-git-186968698522.asia-south1.run.app/api"
       }
     },
     "production": {
       "channel": "production",
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://talent-backend-placeholder.run.app/api"
+        "EXPO_PUBLIC_API_URL": "https://talent-git-186968698522.asia-south1.run.app/api"
       }
     }
   },
