@@ -61,28 +61,38 @@ export const invalidateFeedCache = async () => {
 
 /**
  * Attaches the Redis adapter to Socket.IO for multi-instance scaling in production (e.g. Cloud Run).
+ * Gracefully falls back to standalone in-memory Socket.IO if Redis is unreachable or absent.
  */
 export const setupSocketRedisAdapter = (io: Server) => {
-  // Check if REDIS_URL is explicitly configured for production
-  if (process.env.REDIS_URL) {
-    try {
-      const pubClient = new Redis(redisUrl, {
-        enableOfflineQueue: false,
-        maxRetriesPerRequest: null,
-      });
-      const subClient = pubClient.duplicate();
+  if (!process.env.REDIS_URL) {
+    return;
+  }
 
-      pubClient.on('error', () => {
-        // Catch connection errors if Redis is restarting
-      });
-      subClient.on('error', () => {
-        // Catch connection errors if Redis is restarting
-      });
+  try {
+    const pubClient = new Redis(redisUrl, {
+      lazyConnect: true,
+      connectTimeout: 3000,
+      maxRetriesPerRequest: null,
+      retryStrategy: () => null, // Do not hang retrying on server boot if Redis is down
+    });
+    const subClient = pubClient.duplicate();
 
-      io.adapter(createAdapter(pubClient, subClient));
-      console.log('Socket.IO Redis adapter enabled for multi-instance clustering.');
-    } catch (err) {
-      console.warn('Failed to configure Socket.IO Redis adapter, continuing in standalone mode:', err);
-    }
+    pubClient.on('error', (err) => {
+      // Suppress connection errors if Redis is restarting or offline
+    });
+    subClient.on('error', (err) => {
+      // Suppress connection errors if Redis is restarting or offline
+    });
+
+    Promise.all([pubClient.connect(), subClient.connect()])
+      .then(() => {
+        io.adapter(createAdapter(pubClient, subClient));
+        console.log('Socket.IO Redis adapter enabled for multi-instance clustering.');
+      })
+      .catch((err) => {
+        console.warn('Redis unavailable for Socket.IO adapter. Operating in standalone in-memory mode:', err.message);
+      });
+  } catch (err: any) {
+    console.warn('Failed to configure Socket.IO Redis adapter, continuing in standalone mode:', err?.message || err);
   }
 };
