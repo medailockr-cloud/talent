@@ -1,0 +1,9 @@
+node_modules
+.git
+.github
+.vscode
+talent-mobile
+talent_
+sample
+*.log
+.DS_Store
