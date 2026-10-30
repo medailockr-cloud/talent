@@ -4,15 +4,16 @@ import type { Server } from 'socket.io';
 
 // Create a robust Redis client that doesn't crash if Redis isn't running locally
 // In production, configure process.env.REDIS_URL
-const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
+const redisUrl = process.env.REDIS_URL;
 
-export const redis = new Redis(redisUrl, {
+export const redis = new Redis(redisUrl || 'redis://127.0.0.1:6379', {
+  lazyConnect: !redisUrl,
   enableOfflineQueue: false,
   connectTimeout: 1500,
   maxRetriesPerRequest: null,
   retryStrategy(times) {
     // Stop retrying quickly if there's no redis server available locally
-    if (times > 2) {
+    if (!redisUrl || times > 2) {
       return null;
     }
     return Math.min(times * 50, 500);
@@ -69,7 +70,7 @@ export const setupSocketRedisAdapter = (io: Server) => {
   }
 
   try {
-    const pubClient = new Redis(redisUrl, {
+    const pubClient = new Redis(process.env.REDIS_URL!, {
       lazyConnect: true,
       connectTimeout: 3000,
       maxRetriesPerRequest: null,

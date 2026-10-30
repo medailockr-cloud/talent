@@ -74,6 +74,7 @@ import {
 import * as Haptics from "expo-haptics";
 import { Switch } from "react-native";
 import { api, resolveMediaUrl, BACKEND_URL } from "../../utils/api";
+import { AppVideoPlayer } from "../ui/AppVideoPlayer";
 import { useAuthStore } from "../../store/authStore";
 import { useThemeStore, THEMES, ThemeId, ORDERED_THEME_IDS } from "../../store/themeStore";
 import { useKeptStore } from "../../store/keptStore";
@@ -114,7 +115,7 @@ function VideoPlayerModal({
   onClose: () => void;
 }) {
   const videoRef = useRef<any>(null);
-  const isImg = isMediaImage(url);
+  const isImg = isMediaImage(resolveMediaUrl(url));
 
   useEffect(() => {
     if (!isImg && Platform.OS === 'web' && videoRef.current) {
@@ -158,7 +159,7 @@ function VideoPlayerModal({
             />
           ) : (
             <Image
-              source={{ uri: url }}
+              source={{ uri: resolveMediaUrl(url) }}
               className="w-full h-[80%] rounded-2xl"
               resizeMode="contain"
             />
@@ -166,17 +167,20 @@ function VideoPlayerModal({
         ) : Platform.OS === "web" ? (
           <video
             ref={videoRef}
-            src={url}
+            src={resolveMediaUrl(url)}
             controls
             autoPlay
             playsInline
             style={{ width: "100%", maxHeight: "80vh", outline: "none" }}
           />
         ) : (
-          <View className="flex-1 items-center justify-center">
-            <Text className="text-white text-center px-4">
-              Playing media: {url}
-            </Text>
+          <View className="w-full h-[80%] justify-center items-center overflow-hidden rounded-2xl">
+            <AppVideoPlayer
+              src={resolveMediaUrl(url)}
+              isPlaying={true}
+              isMuted={false}
+              style={{ width: "100%", height: "100%" }}
+            />
           </View>
         )}
       </View>
@@ -584,14 +588,14 @@ function ProfileFeedVideoCard({
         {isMediaImage(video.videoUrl) ? (
           Platform.OS === "web" ? (
             <img
-              src={video.videoUrl}
+              src={resolveMediaUrl(video.videoUrl)}
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
               alt="Performance"
             />
           ) : (
             <View className="flex-1 items-center justify-center bg-black">
               <Image
-                source={{ uri: video.videoUrl }}
+                source={{ uri: resolveMediaUrl(video.videoUrl) }}
                 className="w-full h-full opacity-90 absolute"
                 resizeMode="cover"
               />
@@ -600,19 +604,22 @@ function ProfileFeedVideoCard({
         ) : Platform.OS === "web" ? (
           <video
             ref={videoRef}
-            src={video.videoUrl}
+            src={resolveMediaUrl(video.videoUrl)}
             autoPlay
             loop
             muted={!isPlaying}
             playsInline
-            poster={video.videoThumb}
+            poster={resolveMediaUrl(video.videoThumb)}
             style={{ width: "100%", height: "100%", objectFit: "cover" }}
           />
         ) : (
-          <View className="flex-1 items-center justify-center bg-black">
-            <Image
-              source={{ uri: video.videoThumb }}
-              className="w-full h-full opacity-90 absolute"
+          <View className="w-full h-full bg-black overflow-hidden">
+            <AppVideoPlayer
+              src={resolveMediaUrl(video.videoUrl)}
+              poster={resolveMediaUrl(video.videoThumb)}
+              isPlaying={isPlaying}
+              isMuted={!isPlaying}
+              style={{ width: "100%", height: "100%" }}
             />
           </View>
         )}
@@ -2161,12 +2168,12 @@ export function ProfileView({
                 }
 
                 const featuredId = String(featuredVideo.id);
-                const featuredVideoUrl = featuredVideo.url || featuredVideo.videoUrl || "";
+                const featuredVideoUrl = resolveMediaUrl(featuredVideo.url || featuredVideo.videoUrl || "");
                 const featuredTitle = editedTitles[featuredId] || featuredVideo.title || "Acoustic Sunset Sessions";
                 const isImg = isMediaImage(featuredVideoUrl);
                 const featuredCategory = featuredVideo.category || (isImg ? "Visual Art" : "Performance");
                 const featuredViews = featuredVideo.views ? `${featuredVideo.views} views` : "3.2M views";
-                const posterUrl = featuredVideo.thumbnailUrl || featuredVideo.img || featuredVideo.url || "";
+                const posterUrl = resolveMediaUrl(featuredVideo.thumbnailUrl || featuredVideo.img || featuredVideo.url || "");
 
                 return (
                   <TouchableOpacity
@@ -2388,7 +2395,7 @@ export function ProfileView({
                         {perf.isImg ? (
                           Platform.OS === "web" ? (
                             <img
-                              src={perf.videoUrl || perf.img}
+                              src={resolveMediaUrl(perf.videoUrl || perf.img)}
                               style={{
                                 width: "100%",
                                 height: "100%",
@@ -2398,19 +2405,19 @@ export function ProfileView({
                             />
                           ) : (
                             <Image
-                              source={{ uri: perf.videoUrl || perf.img }}
+                              source={{ uri: resolveMediaUrl(perf.videoUrl || perf.img) }}
                               className="w-full h-full opacity-90"
                               resizeMode="cover"
                             />
                           )
                         ) : Platform.OS === "web" ? (
                           <video
-                            src={perf.videoUrl}
+                            src={resolveMediaUrl(perf.videoUrl)}
                             autoPlay
                             loop
                             muted
                             playsInline
-                            poster={perf.img}
+                            poster={resolveMediaUrl(perf.img)}
                             style={{
                               width: "100%",
                               height: "100%",
@@ -2419,7 +2426,7 @@ export function ProfileView({
                           />
                         ) : (
                           <Image
-                            source={{ uri: perf.img }}
+                            source={{ uri: resolveMediaUrl(perf.img || perf.videoUrl) }}
                             className="w-full h-full opacity-80"
                           />
                         )}

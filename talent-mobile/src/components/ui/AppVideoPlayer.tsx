@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { View, StyleSheet, Image } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import { resolveMediaUrl } from '../../utils/api';
 
 export interface AppVideoPlayerProps {
   src: string;
@@ -25,7 +26,10 @@ export function AppVideoPlayer({
   onError,
   style,
 }: AppVideoPlayerProps) {
-  const player = useVideoPlayer(src || '', (p) => {
+  const resolvedSrc = resolveMediaUrl(src || '');
+  const resolvedPoster = poster ? resolveMediaUrl(poster) : undefined;
+
+  const player = useVideoPlayer(resolvedSrc, (p) => {
     p.loop = true;
     p.muted = isMuted;
     p.timeUpdateEventInterval = 0.25;
@@ -68,16 +72,16 @@ export function AppVideoPlayer({
     } catch (e) {}
   }, [player, onTimeUpdate]);
 
-  if (!src) {
-    return poster ? (
-      <Image source={{ uri: poster }} style={[StyleSheet.absoluteFill, style]} resizeMode="cover" />
+  if (!resolvedSrc) {
+    return resolvedPoster ? (
+      <Image source={{ uri: resolvedPoster }} style={[StyleSheet.absoluteFill, style]} resizeMode="cover" />
     ) : null;
   }
 
   return (
     <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }, style]}>
-      {poster && (
-        <Image source={{ uri: poster }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+      {resolvedPoster && (
+        <Image source={{ uri: resolvedPoster }} style={StyleSheet.absoluteFill} resizeMode="cover" />
       )}
       <VideoView
         player={player}

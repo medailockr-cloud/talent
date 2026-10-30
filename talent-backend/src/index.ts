@@ -45,7 +45,22 @@ const io = new Server(server, {
 setupSocketRedisAdapter(io);
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-jwt-key-for-development-only';
 const PORT = process.env.PORT || 3000;
-const BASE_URL = (process.env.BASE_URL || '').replace(/\/$/, '') || `http://localhost:${PORT}`;
+const CLOUD_RUN_BACKEND_URL = 'https://talent-git-186968698522.asia-south1.run.app';
+const BASE_URL = (process.env.BASE_URL || '').replace(/\/$/, '') || (process.env.NODE_ENV === 'production' || process.env.K_SERVICE ? CLOUD_RUN_BACKEND_URL : `http://localhost:${PORT}`);
+
+export const getRequestBaseUrl = (req?: Request): string => {
+  if (process.env.BASE_URL) {
+    return process.env.BASE_URL.replace(/\/$/, '');
+  }
+  if (req) {
+    const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
+    const host = req.get('host');
+    if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+      return `${proto}://${host}`;
+    }
+  }
+  return BASE_URL;
+};
 
 const swaggerOptions = {
   swaggerDefinition: {
@@ -389,7 +404,8 @@ app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
     }
 
     // If cloudUpload is active, the URL is provided by Cloudinary via req.file.path
-    const url = cloudUpload ? uploadedFile.path : `${BASE_URL}/uploads/${uploadedFile.filename}`;
+    const effectiveBase = getRequestBaseUrl(req);
+    const url = cloudUpload ? uploadedFile.path : `${effectiveBase}/uploads/${uploadedFile.filename}`;
 
     // Extract hashtags from title or description
     const textToParse = `${title || ''} ${description || ''}`;
@@ -786,7 +802,8 @@ app.put('/api/profile/me', requireAuth, upload.single('avatar'), async (req, res
     if (quote !== undefined) updateData.quote = quote;
     
     if (req.file) {
-      updateData.avatarUrl = `${BASE_URL}/uploads/${req.file.filename}`;
+      const effectiveBase = getRequestBaseUrl(req);
+      updateData.avatarUrl = `${effectiveBase}/uploads/${req.file.filename}`;
     }
 
     const updatedUser = await prisma.user.update({
@@ -2351,8 +2368,8 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`🚀 Backend server is running on http://localhost:${PORT}`);
-  console.log(`📝 Swagger API Docs available at http://localhost:${PORT}/api-docs`);
+  console.log(`Backend server is running on ${BASE_URL}`);
+  console.log(`Swagger API Docs available at ${BASE_URL}/api-docs`);
 });
 
 // --- Shows Routes ---

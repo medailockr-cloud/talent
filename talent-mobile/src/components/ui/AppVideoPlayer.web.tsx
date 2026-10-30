@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { AppVideoPlayerProps } from './AppVideoPlayer';
+import { resolveMediaUrl } from '../../utils/api';
 
 export function AppVideoPlayer({
   src,
@@ -14,6 +15,8 @@ export function AppVideoPlayer({
 }: AppVideoPlayerProps) {
   const internalRef = useRef<HTMLVideoElement | null>(null);
   const refToUse = externalRef || internalRef;
+  const resolvedSrc = resolveMediaUrl(src || '');
+  const resolvedPoster = poster ? resolveMediaUrl(poster) : undefined;
 
   useEffect(() => {
     const el = refToUse.current;
@@ -27,17 +30,17 @@ export function AppVideoPlayer({
         } catch (e) {}
       }
     }
-  }, [isPlaying, isMuted, src]);
+  }, [isPlaying, isMuted, resolvedSrc]);
 
   return (
     <video
       ref={refToUse}
-      src={src}
+      src={resolvedSrc}
       autoPlay={isPlaying}
       loop
       muted={isMuted}
       playsInline
-      poster={poster || undefined}
+      poster={resolvedPoster}
       onTimeUpdate={(e: any) => {
         if (e?.target) onTimeUpdate?.(e.target.currentTime);
       }}
