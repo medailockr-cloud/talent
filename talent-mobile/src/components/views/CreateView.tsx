@@ -1743,7 +1743,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       const is413 = err?.response?.status === 413 || (typeof err?.message === "string" && err.message.includes("413"));
       const serverMsg =
         is413
-          ? "Video file is too large to publish (Cloud Run limit is 28 MB). Please trim the video or record a shorter clip."
+          ? "Video file exceeds upload size limit. Please trim the video or choose a smaller clip."
           : err?.response?.data?.error ||
             err?.message ||
             "Upload failed. Please try again.";
@@ -1868,11 +1868,11 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
-        if (asset.fileSize && asset.fileSize > 28 * 1024 * 1024) {
+        if (asset.fileSize && asset.fileSize > 250 * 1024 * 1024) {
           const mb = (asset.fileSize / (1024 * 1024)).toFixed(1);
           Alert.alert(
             "Video Too Large",
-            `Selected video is ${mb} MB. Maximum allowed size is 28 MB. Please trim or select a smaller video.`
+            `Selected video is ${mb} MB. Maximum allowed size is 250 MB. Please trim or select a smaller video.`
           );
           return;
         }
@@ -1926,11 +1926,11 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
-        if (asset.fileSize && asset.fileSize > 28 * 1024 * 1024) {
+        if (asset.fileSize && asset.fileSize > 250 * 1024 * 1024) {
           const mb = (asset.fileSize / (1024 * 1024)).toFixed(1);
           Alert.alert(
             "File Too Large",
-            `Selected file is ${mb} MB. Maximum allowed size is 28 MB. Please trim or choose a smaller file.`
+            `Selected file is ${mb} MB. Maximum allowed size is 250 MB. Please trim or choose a smaller file.`
           );
           return;
         }

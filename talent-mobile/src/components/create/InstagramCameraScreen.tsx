@@ -363,7 +363,7 @@ export function InstagramCameraScreen({
 
         const recordPromise = cameraRef.current.recordAsync({
           maxDuration: isBoomerang ? 3 : maxDuration,
-          maxFileSize: 25 * 1024 * 1024,
+          maxFileSize: 100 * 1024 * 1024,
         });
 
         recordPromise
@@ -462,11 +462,11 @@ export function InstagramCameraScreen({
       });
       if (!res.canceled && res.assets && res.assets.length > 0) {
         const asset = res.assets[0];
-        if (asset.fileSize && asset.fileSize > 28 * 1024 * 1024) {
+        if (asset.fileSize && asset.fileSize > 250 * 1024 * 1024) {
           const mb = (asset.fileSize / (1024 * 1024)).toFixed(1);
           Alert.alert(
             "File Too Large",
-            `Selected file is ${mb} MB. Maximum upload size allowed is 28 MB. Please choose a shorter or trimmed clip.`
+            `Selected file is ${mb} MB. Maximum upload size allowed is 250 MB. Please choose a smaller clip.`
           );
           return;
         }
