@@ -363,6 +363,7 @@ export function InstagramCameraScreen({
 
         const recordPromise = cameraRef.current.recordAsync({
           maxDuration: isBoomerang ? 3 : maxDuration,
+          maxFileSize: 25 * 1024 * 1024,
         });
 
         recordPromise
@@ -532,6 +533,7 @@ export function InstagramCameraScreen({
             flash={flashMode}
             zoom={zoom}
             mode={mode === "PHOTO" || mode === "POST" ? "picture" : "video"}
+            videoQuality="720p"
           >
             {/* Composition Grid Overlay */}
             {showGrid && (

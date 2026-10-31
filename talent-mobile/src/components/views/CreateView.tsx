@@ -1692,7 +1692,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     } else {
       try {
         setIsRecording(true);
-        const video = await cameraRef.current.recordAsync({ maxDuration: 60 });
+        const video = await cameraRef.current.recordAsync({ maxDuration: 60, maxFileSize: 25 * 1024 * 1024 });
         if (video && video.uri) {
           setRecordedVideoUri(video.uri);
           setMediaType("video");
@@ -1741,9 +1741,11 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       clearInterval(interval);
       console.error("Upload failed:", err);
       const serverMsg =
-        err?.response?.data?.error ||
-        err?.message ||
-        "Upload failed. Please try again.";
+        err?.response?.status === 413
+          ? "Video file is too large to publish. Cloud Run accepts up to 28 MB. Please trim the video or record a shorter clip."
+          : err?.response?.data?.error ||
+            err?.message ||
+            "Upload failed. Please try again.";
       Alert.alert("Upload Error", serverMsg);
       setStep("SUMMARY"); // revert on error
     }
@@ -1775,6 +1777,21 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         }
         if (trimEnd > 0 && duration > 0 && trimEnd < duration) {
           formData.append("trimEnd", String(trimEnd));
+        }
+      }
+
+      if (Platform.OS !== "web" && recordedVideoUri) {
+        try {
+          const testRes = await fetch(recordedVideoUri);
+          const blob = await testRes.blob();
+          if (blob.size > 28 * 1024 * 1024) {
+            const sizeMb = (blob.size / (1024 * 1024)).toFixed(1);
+            throw new Error(`Video file is too large (${sizeMb} MB). Maximum allowed size is 28 MB. Please trim the video before publishing.`);
+          }
+        } catch (sizeErr: any) {
+          if (sizeErr.message?.includes("too large")) {
+            throw sizeErr;
+          }
         }
       }
 
@@ -1815,7 +1832,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Videos,
         allowsEditing: true,
-        quality: 1,
+        quality: 0.8,
+        videoMaxDuration: 60,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
