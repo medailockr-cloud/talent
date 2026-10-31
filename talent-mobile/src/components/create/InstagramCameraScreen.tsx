@@ -363,7 +363,7 @@ export function InstagramCameraScreen({
 
         const recordPromise = cameraRef.current.recordAsync({
           maxDuration: isBoomerang ? 3 : maxDuration,
-          maxFileSize: 100 * 1024 * 1024,
+          maxFileSize: 150 * 1024 * 1024,
         });
 
         recordPromise

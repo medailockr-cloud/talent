@@ -148,7 +148,7 @@ export const generateUploadSignedUrl = async (
   const [uploadUrl] = await file.getSignedUrl({
     version: 'v4',
     action: 'write',
-    expires: Date.now() + 15 * 60 * 1000,
+    expires: Date.now() + 30 * 60 * 1000,
   });
 
   const publicUrl = getPublicStorageUrl(destinationPath);

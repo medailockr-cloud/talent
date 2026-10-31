@@ -71,11 +71,13 @@ export const uploadToStorageDirectly = async (
 ): Promise<void> => {
   const res = await fetch(localUri);
   const blob = await res.blob();
+  const effectiveType = blob.type || contentType || 'video/mp4';
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', uploadUrl);
-    xhr.setRequestHeader('Content-Type', contentType);
+    xhr.timeout = 15 * 60 * 1000; // 15 minutes timeout for 100MB+ uploads
+    xhr.setRequestHeader('Content-Type', effectiveType);
 
     if (xhr.upload && onProgress) {
       xhr.upload.onprogress = (event) => {
@@ -90,7 +92,8 @@ export const uploadToStorageDirectly = async (
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve();
       } else {
-        reject(new Error(`Storage upload failed with status ${xhr.status}: ${xhr.statusText}`));
+        const errorDetail = xhr.responseText ? xhr.responseText.slice(0, 300) : xhr.statusText;
+        reject(new Error(`Storage upload failed with status ${xhr.status}: ${errorDetail}`));
       }
     };
 
@@ -99,7 +102,7 @@ export const uploadToStorageDirectly = async (
     };
 
     xhr.ontimeout = () => {
-      reject(new Error('Timeout during direct storage upload'));
+      reject(new Error('Upload timed out. Please check your internet connection.'));
     };
 
     xhr.send(blob);

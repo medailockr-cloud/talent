@@ -92,8 +92,8 @@ const allowedOrigins = process.env.CORS_ORIGIN
   : '*';
 
 app.use(cors({ origin: allowedOrigins, credentials: true }));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json({ limit: '150mb' }));
+app.use(express.urlencoded({ extended: true, limit: '150mb' }));
 
 // Container and service health check endpoints for Cloud Run / Docker
 app.get('/health', (req, res) => {
@@ -139,8 +139,8 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: {
-    fileSize: 50 * 1024 * 1024,
-    fieldSize: 25 * 1024 * 1024,
+    fileSize: 150 * 1024 * 1024,
+    fieldSize: 50 * 1024 * 1024,
   },
 });
 

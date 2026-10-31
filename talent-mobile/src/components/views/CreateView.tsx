@@ -1863,8 +1863,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Videos,
         allowsEditing: true,
-        quality: 0.8,
-        videoMaxDuration: 60,
+        quality: 0.85,
+        videoMaxDuration: 300,
         videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
       });
 
@@ -1922,7 +1922,8 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
         allowsEditing: true,
-        quality: 0.8,
+        quality: 0.85,
+        videoMaxDuration: 300,
         videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
       });
 
