@@ -82,7 +82,7 @@ import * as Haptics from "expo-haptics";
 import { useVideoPlayer, VideoView } from "expo-video";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
-import { api } from "../../utils/api";
+import { api, requestSignedUploadUrl, uploadToStorageDirectly } from "../../utils/api";
 import { useUIStore } from "../../store/uiStore";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -1758,6 +1758,55 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         throw new Error("No media selected to publish.");
       }
 
+      const isImg = mediaType === "image";
+      const filename = isImg ? "photo.jpg" : "video.mp4";
+      const filetype = isImg ? "image/jpeg" : "video/mp4";
+      let directPublicUrl: string | null = null;
+
+      // Method 1: Attempt direct upload to Google Cloud Storage via Signed URL (Bypasses Cloud Run 32MB limit)
+      try {
+        const signedInfo = await requestSignedUploadUrl(
+          filename,
+          filetype,
+          isImg ? "images" : "videos"
+        );
+        if (signedInfo?.uploadUrl) {
+          console.log("Uploading directly to Google Cloud Storage via Signed URL...");
+          await uploadToStorageDirectly(
+            signedInfo.uploadUrl,
+            recordedVideoUri,
+            filetype,
+            (pct) => setUploadProgress(Math.min(95, pct))
+          );
+          directPublicUrl = signedInfo.publicUrl;
+          console.log("Direct storage upload successful:", directPublicUrl);
+        }
+      } catch (signedErr) {
+        console.warn("Direct signed URL upload unavailable or failed, falling back to server upload:", signedErr);
+      }
+
+      if (directPublicUrl) {
+        console.log("Saving video metadata to database...");
+        await api.post("/videos", {
+          title: title.trim() || "Untitled Performance",
+          description: captionText.trim() || "",
+          soundtrack: selectedSoundTrack !== "none" ? selectedSoundTrack : undefined,
+          category,
+          subCategory,
+          purpose,
+          location,
+          allowJudging,
+          allowComments,
+          privacy: visibility.toUpperCase(),
+          filter: activeFilter,
+          trimStart: trimStart > 0 ? trimStart : undefined,
+          trimEnd: trimEnd > 0 && duration > 0 && trimEnd < duration ? trimEnd : undefined,
+          url: directPublicUrl,
+        });
+        return;
+      }
+
+      // Fallback: Multipart upload through backend
       const formData = new FormData();
       formData.append("title", title.trim() || "Untitled Performance");
       formData.append("description", captionText.trim() || "");
@@ -1781,25 +1830,6 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         }
       }
 
-      if (Platform.OS !== "web" && recordedVideoUri) {
-        try {
-          const testRes = await fetch(recordedVideoUri);
-          const blob = await testRes.blob();
-          if (blob.size > 28 * 1024 * 1024) {
-            const sizeMb = (blob.size / (1024 * 1024)).toFixed(1);
-            throw new Error(`Video file is too large (${sizeMb} MB). Maximum allowed size is 28 MB. Please trim the video before publishing.`);
-          }
-        } catch (sizeErr: any) {
-          if (sizeErr.message?.includes("too large")) {
-            throw sizeErr;
-          }
-        }
-      }
-
-      const isImg = mediaType === "image";
-      const filename = isImg ? "photo.jpg" : "video.mp4";
-      const filetype = isImg ? "image/jpeg" : "video/mp4";
-
       if (Platform.OS === "web") {
         let blob: Blob;
         try {
@@ -1818,9 +1848,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         } as any);
       }
 
-      console.log("Sending media to server...");
-      // Do NOT explicitly set 'Content-Type': 'multipart/form-data'.
-      // Axios and the browser automatically attach the multipart boundary required by Multer.
+      console.log("Sending media to server fallback...");
       await api.post("/videos", formData, { timeout: 120000 });
     } catch (e) {
       console.error("submitToServer error:", e);

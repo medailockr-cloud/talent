@@ -54,6 +54,58 @@ export const api = axios.create({
   timeout: 60000,
 });
 
+export const requestSignedUploadUrl = async (
+  filename: string,
+  contentType: string,
+  folder: 'videos' | 'images' | 'avatars' = 'videos'
+): Promise<{ uploadUrl: string; publicUrl: string; destinationPath: string }> => {
+  const res = await api.post('/upload/signed-url', { filename, contentType, folder });
+  return res.data;
+};
+
+export const uploadToStorageDirectly = async (
+  uploadUrl: string,
+  localUri: string,
+  contentType: string,
+  onProgress?: (progress: number) => void
+): Promise<void> => {
+  const res = await fetch(localUri);
+  const blob = await res.blob();
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', uploadUrl);
+    xhr.setRequestHeader('Content-Type', contentType);
+
+    if (xhr.upload && onProgress) {
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && event.total > 0) {
+          const percent = Math.round((event.loaded / event.total) * 100);
+          onProgress(percent);
+        }
+      };
+    }
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+      } else {
+        reject(new Error(`Storage upload failed with status ${xhr.status}: ${xhr.statusText}`));
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error('Network error during direct storage upload'));
+    };
+
+    xhr.ontimeout = () => {
+      reject(new Error('Timeout during direct storage upload'));
+    };
+
+    xhr.send(blob);
+  });
+};
+
 // Interceptor to automatically attach JWT token to every request
 api.interceptors.request.use(
   async (config) => {

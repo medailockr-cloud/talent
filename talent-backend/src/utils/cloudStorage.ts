@@ -125,6 +125,38 @@ export const uploadHlsDirectoryToStorage = async (
   return getPublicStorageUrl(`hls/${videoId}/index.m3u8`);
 };
 
+export const generateUploadSignedUrl = async (
+  filename: string,
+  contentType: string,
+  folder: 'videos' | 'images' | 'avatars' = 'videos'
+): Promise<{ uploadUrl: string; publicUrl: string; destinationPath: string }> => {
+  if (!isCloudStorageEnabled()) {
+    throw new Error('Google Cloud Storage is not enabled');
+  }
+
+  const client = getStorageClient();
+  if (!client) {
+    throw new Error('Cloud storage client is unavailable');
+  }
+
+  const ext = path.extname(filename) || (folder === 'images' ? '.jpg' : '.mp4');
+  const basename = path.basename(filename, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
+  const destinationPath = `${folder}/${Date.now()}-${basename}${ext}`;
+  const bucket = client.bucket(bucketName);
+  const file = bucket.file(destinationPath);
+
+  const [uploadUrl] = await file.getSignedUrl({
+    version: 'v4',
+    action: 'write',
+    expires: Date.now() + 15 * 60 * 1000,
+    contentType: contentType || (folder === 'images' ? 'image/jpeg' : 'video/mp4'),
+  });
+
+  const publicUrl = getPublicStorageUrl(destinationPath);
+
+  return { uploadUrl, publicUrl, destinationPath };
+};
+
 
 export const deleteFileFromStorage = async (fileUrl: string): Promise<boolean> => {
   if (!fileUrl) return false;

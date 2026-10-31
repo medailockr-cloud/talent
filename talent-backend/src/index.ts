@@ -13,7 +13,7 @@ import { Server } from 'socket.io';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsDoc from 'swagger-jsdoc';
 import { cacheFeed, getCachedFeed, invalidateFeedCache, redis, setupSocketRedisAdapter } from './utils/redis';
-import { isCloudStorageEnabled, uploadFileToStorage, deleteFileFromStorage } from './utils/cloudStorage';
+import { isCloudStorageEnabled, uploadFileToStorage, deleteFileFromStorage, generateUploadSignedUrl } from './utils/cloudStorage';
 import { cloudUpload } from './utils/cloudinary';
 import { convertToHLS, trimVideoFile } from './utils/ffmpeg';
 import { sendPushNotification } from './utils/notifications';
@@ -352,9 +352,28 @@ const uploadFields = [
 ];
 const uploadMiddleware = cloudUpload ? cloudUpload.fields(uploadFields) : upload.fields(uploadFields);
 
+// Direct Signed URL Generation Endpoint (Bypasses Cloud Run 32MB limit)
+app.post('/api/upload/signed-url', requireAuth, async (req, res) => {
+  try {
+    const { filename, contentType, folder } = req.body;
+    if (!filename) {
+      return res.status(400).json({ error: 'filename is required' });
+    }
+
+    const targetFolder = folder === 'avatars' ? 'avatars' : folder === 'images' ? 'images' : 'videos';
+    const mime = contentType || (targetFolder === 'images' ? 'image/jpeg' : 'video/mp4');
+
+    const result = await generateUploadSignedUrl(filename, mime, targetFolder);
+    res.json(result);
+  } catch (error: any) {
+    console.error('Error generating signed upload URL:', error);
+    res.status(500).json({ error: error.message || 'Failed to generate signed upload URL' });
+  }
+});
+
 app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
   try {
-    const { title, description, category, subCategory, purpose, location, allowJudging, allowComments, privacy, trimStart, trimEnd } = req.body;
+    const { title, description, category, subCategory, purpose, location, allowJudging, allowComments, privacy, trimStart, trimEnd, url: directUrl } = req.body;
     
     // Resolve valid authorId
     let authorId = req.userId!;
@@ -376,16 +395,18 @@ app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
         (req.files as any)['file']?.[0]
       ) : (Array.isArray(req.files) ? req.files[0] : null));
     
-    if (!uploadedFile) {
-      return res.status(400).json({ error: 'No media file provided' });
+    if (!uploadedFile && !directUrl) {
+      return res.status(400).json({ error: 'No media file or direct URL provided' });
     }
 
     // Apply trimming if requested on local video upload
-    const isImageFile = uploadedFile.mimetype?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(uploadedFile.filename || '');
+    const isImageFile = uploadedFile
+      ? (uploadedFile.mimetype?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(uploadedFile.filename || ''))
+      : isImageMedia(directUrl);
     const startSec = trimStart ? parseFloat(trimStart) : 0;
     const endSec = trimEnd ? parseFloat(trimEnd) : 0;
 
-    if (!cloudUpload && uploadedFile.path && !isImageFile && (startSec > 0 || (endSec > 0 && endSec > startSec))) {
+    if (uploadedFile && !cloudUpload && uploadedFile.path && !isImageFile && (startSec > 0 || (endSec > 0 && endSec > startSec))) {
       try {
         const trimmedPath = `${uploadedFile.path}_trimmed.mp4`;
         await trimVideoFile(uploadedFile.path, trimmedPath, startSec, endSec);
@@ -410,10 +431,12 @@ app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
       }
     }
 
-    // If cloudUpload is active, the URL is provided by Cloudinary via req.file.path
+    // Determine final media URL
     const effectiveBase = getRequestBaseUrl(req);
     let url: string;
-    if (cloudUpload) {
+    if (directUrl) {
+      url = directUrl;
+    } else if (cloudUpload) {
       url = uploadedFile.path;
     } else if (isCloudStorageEnabled()) {
       try {
@@ -822,6 +845,7 @@ app.put('/api/profile/me', requireAuth, upload.single('avatar'), async (req, res
     if (title !== undefined) updateData.title = title;
     if (location !== undefined) updateData.location = location;
     if (quote !== undefined) updateData.quote = quote;
+    if (req.body.avatarUrl) updateData.avatarUrl = req.body.avatarUrl;
     
     if (req.file) {
       const effectiveBase = getRequestBaseUrl(req);
