@@ -2,12 +2,15 @@ import React, { useEffect } from 'react';
 import { View, StyleSheet, Image } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { resolveMediaUrl } from '../../utils/api';
+import { MediaFilterOverlay } from './MediaFilterOverlay';
 
 export interface AppVideoPlayerProps {
   src: string;
   poster?: string;
   isPlaying: boolean;
   isMuted: boolean;
+  filter?: string | null;
+  filterIntensity?: number | null;
   onTimeUpdate?: (currentTime: number) => void;
   onLoadedMetadata?: (duration: number) => void;
   onError?: () => void;
@@ -21,6 +24,8 @@ export function AppVideoPlayer({
   poster,
   isPlaying,
   isMuted,
+  filter,
+  filterIntensity,
   onTimeUpdate,
   onLoadedMetadata,
   onError,
@@ -74,7 +79,10 @@ export function AppVideoPlayer({
 
   if (!resolvedSrc) {
     return resolvedPoster ? (
-      <Image source={{ uri: resolvedPoster }} style={[StyleSheet.absoluteFill, style]} resizeMode="cover" />
+      <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }, style]}>
+        <Image source={{ uri: resolvedPoster }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        <MediaFilterOverlay filter={filter} filterIntensity={filterIntensity} />
+      </View>
     ) : null;
   }
 
@@ -89,6 +97,7 @@ export function AppVideoPlayer({
         contentFit="cover"
         nativeControls={false}
       />
+      <MediaFilterOverlay filter={filter} filterIntensity={filterIntensity} />
     </View>
   );
 }

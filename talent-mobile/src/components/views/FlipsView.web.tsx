@@ -5,6 +5,8 @@ import { api, resolveMediaUrl } from '../../utils/api';
 import { useKeptStore } from '../../store/keptStore';
 import { useCommunityStore } from '../../store/communityStore';
 import { useThemeStore } from '../../store/themeStore';
+import { getEffectiveFilterCss } from '../../constants/filters';
+import { MediaFilterOverlay } from '../ui/MediaFilterOverlay';
 
 export const FLIPS_DATA: any[] = [];
 
@@ -809,7 +811,9 @@ function FlipSlide({
           onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
           onError={() => setFailed(true)}
           aria-label={`${name} performance video`}
+          style={{ filter: getEffectiveFilterCss(video.filter, video.filterIntensity) }}
         />
+        <MediaFilterOverlay filter={video.filter} filterIntensity={video.filterIntensity} />
 
         <div className="talent-shade" />
 

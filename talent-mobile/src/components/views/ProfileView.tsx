@@ -75,6 +75,8 @@ import * as Haptics from "expo-haptics";
 import { Switch } from "react-native";
 import { api, resolveMediaUrl, BACKEND_URL } from "../../utils/api";
 import { AppVideoPlayer } from "../ui/AppVideoPlayer";
+import { getEffectiveFilterCss } from "../../constants/filters";
+import { MediaFilterOverlay } from "../ui/MediaFilterOverlay";
 import { useAuthStore } from "../../store/authStore";
 import { useThemeStore, THEMES, ThemeId, ORDERED_THEME_IDS } from "../../store/themeStore";
 import { useKeptStore } from "../../store/keptStore";
@@ -109,13 +111,18 @@ const isJudgingAllowed = (val: any): boolean => {
 
 function VideoPlayerModal({
   url,
+  filter,
+  filterIntensity,
   onClose,
 }: {
   url: string;
+  filter?: string | null;
+  filterIntensity?: number | null;
   onClose: () => void;
 }) {
   const videoRef = useRef<any>(null);
   const isImg = isMediaImage(resolveMediaUrl(url));
+  const cssFilter = getEffectiveFilterCss(filter, filterIntensity);
 
   useEffect(() => {
     if (!isImg && Platform.OS === 'web' && videoRef.current) {
@@ -151,34 +158,42 @@ function VideoPlayerModal({
         </TouchableOpacity>
 
         {isImg ? (
-          Platform.OS === "web" ? (
-            <img
-              src={url}
-              style={{ maxWidth: "95vw", maxHeight: "85vh", objectFit: "contain", borderRadius: 16 }}
-              alt="Uploaded Media"
-            />
-          ) : (
-            <Image
-              source={{ uri: resolveMediaUrl(url) }}
-              className="w-full h-[80%] rounded-2xl"
-              resizeMode="contain"
-            />
-          )
+          <View style={{ position: "relative", alignItems: "center", justifyContent: "center" }}>
+            {Platform.OS === "web" ? (
+              <img
+                src={url}
+                style={{ maxWidth: "95vw", maxHeight: "85vh", objectFit: "contain", borderRadius: 16, filter: cssFilter !== "none" ? cssFilter : undefined }}
+                alt="Uploaded Media"
+              />
+            ) : (
+              <Image
+                source={{ uri: resolveMediaUrl(url) }}
+                className="w-full h-[80%] rounded-2xl"
+                resizeMode="contain"
+              />
+            )}
+            <MediaFilterOverlay filter={filter} filterIntensity={filterIntensity} />
+          </View>
         ) : Platform.OS === "web" ? (
-          <video
-            ref={videoRef}
-            src={resolveMediaUrl(url)}
-            controls
-            autoPlay
-            playsInline
-            style={{ width: "100%", maxHeight: "80vh", outline: "none" }}
-          />
+          <div style={{ position: "relative", width: "100%", maxHeight: "80vh", display: "flex", justifyContent: "center", alignItems: "center" }}>
+            <video
+              ref={videoRef}
+              src={resolveMediaUrl(url)}
+              controls
+              autoPlay
+              playsInline
+              style={{ width: "100%", maxHeight: "80vh", outline: "none", filter: cssFilter !== "none" ? cssFilter : undefined }}
+            />
+            <MediaFilterOverlay filter={filter} filterIntensity={filterIntensity} />
+          </div>
         ) : (
           <View className="w-full h-[80%] justify-center items-center overflow-hidden rounded-2xl">
             <AppVideoPlayer
               src={resolveMediaUrl(url)}
               isPlaying={true}
               isMuted={false}
+              filter={filter}
+              filterIntensity={filterIntensity}
               style={{ width: "100%", height: "100%" }}
             />
           </View>
@@ -497,7 +512,7 @@ function ProfileFeedVideoCard({
   playingVideoId: string | null;
   setPlayingVideoId: (id: string | null) => void;
   onPass: () => void;
-  onMaximize?: (url: string) => void;
+  onMaximize?: (url: string, filter?: string | null, filterIntensity?: number | null) => void;
   onTalk?: () => void;
   onOptions?: (video: any) => void;
 }) {
@@ -589,7 +604,7 @@ function ProfileFeedVideoCard({
           Platform.OS === "web" ? (
             <img
               src={resolveMediaUrl(video.videoUrl)}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              style={{ width: "100%", height: "100%", objectFit: "cover", filter: getEffectiveFilterCss(video.filter, video.filterIntensity) }}
               alt="Performance"
             />
           ) : (
@@ -599,19 +614,23 @@ function ProfileFeedVideoCard({
                 className="w-full h-full opacity-90 absolute"
                 resizeMode="cover"
               />
+              <MediaFilterOverlay filter={video.filter} filterIntensity={video.filterIntensity} />
             </View>
           )
         ) : Platform.OS === "web" ? (
-          <video
-            ref={videoRef}
-            src={resolveMediaUrl(video.videoUrl)}
-            autoPlay
-            loop
-            muted={!isPlaying}
-            playsInline
-            poster={resolveMediaUrl(video.videoThumb)}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          />
+          <div style={{ position: "relative", width: "100%", height: "100%" }}>
+            <video
+              ref={videoRef}
+              src={resolveMediaUrl(video.videoUrl)}
+              autoPlay
+              loop
+              muted={!isPlaying}
+              playsInline
+              poster={resolveMediaUrl(video.videoThumb)}
+              style={{ width: "100%", height: "100%", objectFit: "cover", filter: getEffectiveFilterCss(video.filter, video.filterIntensity) }}
+            />
+            <MediaFilterOverlay filter={video.filter} filterIntensity={video.filterIntensity} />
+          </div>
         ) : (
           <View className="w-full h-full bg-black overflow-hidden">
             <AppVideoPlayer
@@ -619,6 +638,8 @@ function ProfileFeedVideoCard({
               poster={resolveMediaUrl(video.videoThumb)}
               isPlaying={isPlaying}
               isMuted={!isPlaying}
+              filter={video.filter}
+              filterIntensity={video.filterIntensity}
               style={{ width: "100%", height: "100%" }}
             />
           </View>
@@ -642,7 +663,7 @@ function ProfileFeedVideoCard({
           className="absolute top-1/2 left-1/2 -ml-7 -mt-7 w-14 h-14 rounded-full bg-black/40 border border-white/80 items-center justify-center"
           onPress={() => {
             if (isMediaImage(video.videoUrl)) {
-              if (onMaximize && video.videoUrl) onMaximize(video.videoUrl);
+              if (onMaximize && video.videoUrl) onMaximize(video.videoUrl, video.filter, video.filterIntensity);
             } else {
               setPlayingVideoId(isPlaying ? null : video.id);
             }
@@ -663,7 +684,7 @@ function ProfileFeedVideoCard({
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               if (onMaximize && video.videoUrl) {
-                onMaximize(video.videoUrl);
+                onMaximize(video.videoUrl, video.filter, video.filterIntensity);
               }
             }}
             className="w-8 h-8 rounded-lg bg-black/60 border border-white/20 items-center justify-center"
@@ -978,7 +999,11 @@ export function ProfileView({
       useKeptStore.getState().fetchKept();
     }
   }, [activeTab]);
-  const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null);
+  const [activeVideoMedia, setActiveVideoMedia] = useState<{ url: string; filter?: string | null; filterIntensity?: number | null } | null>(null);
+  const activeVideoUrl = activeVideoMedia?.url || null;
+  const setActiveVideoUrl = (url: string | null) => {
+    setActiveVideoMedia(url ? { url } : null);
+  };
   const [activeShowModal, setActiveShowModal] = useState<any | null>(null);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isScoreBreakdownOpen, setIsScoreBreakdownOpen] = useState(false);
@@ -1498,9 +1523,9 @@ export function ProfileView({
     }
   };
 
-  const playVideo = (url: string) => {
+  const playVideo = (url: string, filter?: string | null, filterIntensity?: number | null) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setActiveVideoUrl(url);
+    setActiveVideoMedia({ url, filter, filterIntensity });
   };
 
   if (isProfileFeedOpen) {
@@ -1554,6 +1579,8 @@ export function ProfileView({
                     videoThumb: videoThumb,
                     duration: video.duration || "0:58",
                     videoUrl: video.url || "",
+                    filter: video.filter,
+                    filterIntensity: video.filterIntensity,
                     userRating: video.userRating,
                     allowJudging: video.allowJudging,
                     allowComments: video.allowComments,
@@ -1561,7 +1588,7 @@ export function ProfileView({
                   playingVideoId={playingVideoId}
                   setPlayingVideoId={setPlayingVideoId}
                   onPass={() => {}}
-                  onMaximize={(url) => setActiveVideoUrl(url)}
+                  onMaximize={(url, filter, filterIntensity) => playVideo(url, filter, filterIntensity)}
                   onTalk={() => {
                     setIsProfileFeedOpen(false);
                     const targetUserId = profileData?.id || user?.id || 1;
@@ -1641,10 +1668,12 @@ export function ProfileView({
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.bg }}>
-      {activeVideoUrl && (
+      {activeVideoMedia && (
         <VideoPlayerModal
-          url={activeVideoUrl}
-          onClose={() => setActiveVideoUrl(null)}
+          url={activeVideoMedia.url}
+          filter={activeVideoMedia.filter}
+          filterIntensity={activeVideoMedia.filterIntensity}
+          onClose={() => setActiveVideoMedia(null)}
         />
       )}
 
@@ -2336,6 +2365,8 @@ export function ProfileView({
                               ? v.url
                               : (v.thumbnailUrl || ""),
                             videoUrl: v.url,
+                            filter: v.filter,
+                            filterIntensity: v.filterIntensity,
                             isImg,
                             allowJudging: v.allowJudging,
                             allowComments: v.allowComments,
@@ -2381,7 +2412,7 @@ export function ProfileView({
                     return (
                       <TouchableOpacity
                         key={perf.id || i}
-                        onPress={() => playVideo(perf.videoUrl)}
+                        onPress={() => playVideo(perf.videoUrl, perf.filter, perf.filterIntensity)}
                         activeOpacity={0.8}
                         style={
                           isPinned
@@ -2400,35 +2431,46 @@ export function ProfileView({
                                 width: "100%",
                                 height: "100%",
                                 objectFit: "cover",
+                                filter: getEffectiveFilterCss(perf.filter, perf.filterIntensity),
                               }}
                               alt={perf.title}
                             />
                           ) : (
-                            <Image
-                              source={{ uri: resolveMediaUrl(perf.videoUrl || perf.img) }}
-                              className="w-full h-full opacity-90"
-                              resizeMode="cover"
-                            />
+                            <View className="w-full h-full">
+                              <Image
+                                source={{ uri: resolveMediaUrl(perf.videoUrl || perf.img) }}
+                                className="w-full h-full opacity-90"
+                                resizeMode="cover"
+                              />
+                              <MediaFilterOverlay filter={perf.filter} filterIntensity={perf.filterIntensity} />
+                            </View>
                           )
                         ) : Platform.OS === "web" ? (
-                          <video
-                            src={resolveMediaUrl(perf.videoUrl)}
-                            autoPlay
-                            loop
-                            muted
-                            playsInline
-                            poster={resolveMediaUrl(perf.img)}
-                            style={{
-                              width: "100%",
-                              height: "100%",
-                              objectFit: "cover",
-                            }}
-                          />
+                          <div style={{ position: "relative", width: "100%", height: "100%" }}>
+                            <video
+                              src={resolveMediaUrl(perf.videoUrl)}
+                              autoPlay
+                              loop
+                              muted
+                              playsInline
+                              poster={resolveMediaUrl(perf.img)}
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover",
+                                filter: getEffectiveFilterCss(perf.filter, perf.filterIntensity),
+                              }}
+                            />
+                            <MediaFilterOverlay filter={perf.filter} filterIntensity={perf.filterIntensity} />
+                          </div>
                         ) : (
-                          <Image
-                            source={{ uri: resolveMediaUrl(perf.img || perf.videoUrl) }}
-                            className="w-full h-full opacity-80"
-                          />
+                          <View className="w-full h-full">
+                            <Image
+                              source={{ uri: resolveMediaUrl(perf.img || perf.videoUrl) }}
+                              className="w-full h-full opacity-80"
+                            />
+                            <MediaFilterOverlay filter={perf.filter} filterIntensity={perf.filterIntensity} />
+                          </View>
                         )}
                         <View className="absolute inset-0 bg-black/40" />
 
@@ -2678,7 +2720,7 @@ export function ProfileView({
                       activeOpacity={0.85}
                       onPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setActiveVideoUrl(perfUrl);
+                        playVideo(perfUrl, perf.filter, perf.filterIntensity);
                       }}
                       style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
                       className="rounded-[20px] p-3 border shadow-md flex-row items-center gap-3"
@@ -2686,11 +2728,17 @@ export function ProfileView({
                       {/* Video Thumbnail */}
                       <View className="w-24 h-28 rounded-[14px] bg-black overflow-hidden relative border border-white/10 items-center justify-center">
                         {isImg ? (
-                          <Image source={{ uri: perfUrl }} className="w-full h-full" resizeMode="cover" />
+                          <View className="w-full h-full">
+                            <Image source={{ uri: perfUrl }} className="w-full h-full" resizeMode="cover" />
+                            <MediaFilterOverlay filter={perf.filter} filterIntensity={perf.filterIntensity} />
+                          </View>
                         ) : (
                           <>
                             {perf.videoThumb || perf.thumbnailUrl ? (
-                              <Image source={{ uri: perf.videoThumb || perf.thumbnailUrl }} className="w-full h-full" resizeMode="cover" />
+                              <View className="w-full h-full">
+                                <Image source={{ uri: perf.videoThumb || perf.thumbnailUrl }} className="w-full h-full" resizeMode="cover" />
+                                <MediaFilterOverlay filter={perf.filter} filterIntensity={perf.filterIntensity} />
+                              </View>
                             ) : (
                               <View className="flex-1 w-full bg-neutral-900 items-center justify-center" />
                             )}

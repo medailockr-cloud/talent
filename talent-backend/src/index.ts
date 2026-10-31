@@ -236,6 +236,8 @@ app.get('/api/feed', async (req, res) => {
       allowJudging: !((v as any).allowJudging === false || (v as any).allowJudging === 'false' || (v as any).allowJudging === 0 || (v as any).allowJudging === '0'),
       allowComments: !((v as any).allowComments === false || (v as any).allowComments === 'false' || (v as any).allowComments === 0 || (v as any).allowComments === '0'),
       privacy: v.privacy || 'PUBLIC',
+      filter: v.filter || null,
+      filterIntensity: v.filterIntensity ?? null,
       author: v.author.name || v.author.username,
       authorAvatar: v.author.avatarUrl,
       authorId: v.author.id,
@@ -373,7 +375,7 @@ app.post('/api/upload/signed-url', requireAuth, async (req, res) => {
 
 app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
   try {
-    const { title, description, category, subCategory, purpose, location, allowJudging, allowComments, privacy, trimStart, trimEnd, url: directUrl } = req.body;
+    const { title, description, category, subCategory, purpose, location, allowJudging, allowComments, privacy, trimStart, trimEnd, url: directUrl, filter, filterIntensity } = req.body;
     
     // Resolve valid authorId
     let authorId = req.userId!;
@@ -471,6 +473,8 @@ app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
         allowJudging: !(allowJudging === false || allowJudging === 'false' || allowJudging === 0 || allowJudging === '0'),
         allowComments: !(allowComments === false || allowComments === 'false' || allowComments === 0 || allowComments === '0'),
         privacy: privacy ? String(privacy).toUpperCase() : 'PUBLIC',
+        filter: filter ? String(filter) : null,
+        filterIntensity: (filterIntensity !== undefined && filterIntensity !== null) ? parseFloat(String(filterIntensity)) : null,
         authorId,
         hashtags: {
           connectOrCreate: tags.map(tag => ({
@@ -1155,6 +1159,8 @@ app.get('/api/leaderboard', async (req: any, res: any) => {
         id: v.id,
         title: v.title,
         url: v.url,
+        filter: v.filter || null,
+        filterIntensity: v.filterIntensity ?? null,
         category: v.category || 'General',
         views: v.views,
         likesCount,
@@ -1401,6 +1407,8 @@ app.get('/api/discover', async (req, res) => {
       description: v.description,
       category: v.category,
       subCategory: v.subCategory,
+      filter: v.filter || null,
+      filterIntensity: v.filterIntensity ?? null,
       authorId: v.author.id,
       author: v.author.name || v.author.username,
       authorUsername: v.author.username,
@@ -2170,6 +2178,8 @@ app.get('/api/videos/saved', async (req, res) => {
         allowJudging: (v as any).allowJudging ?? true,
         allowComments: (v as any).allowComments ?? true,
         privacy: v.privacy || 'PUBLIC',
+        filter: v.filter || null,
+        filterIntensity: v.filterIntensity ?? null,
         author: authorName,
         authorAvatar: authorObj?.avatarUrl || null,
         authorId: authorObj?.id || null,

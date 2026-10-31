@@ -92,6 +92,8 @@ interface FlipItem {
   applaudCount: number;
   talentScore: number;
   isVerified: boolean;
+  filter?: string | null;
+  filterIntensity?: number | null;
   comments: Array<{ id: string; author: string; text: string }>;
 }
 
@@ -272,6 +274,8 @@ function FlipSlideItem({
             poster={item.avatar || undefined}
             isPlaying={isActive && isPlaying}
             isMuted={isMuted}
+            filter={item.filter}
+            filterIntensity={item.filterIntensity}
             videoRef={videoRef}
             onTimeUpdate={(t) => setCurrentTime(t)}
             onLoadedMetadata={(d) => setDuration(d)}
@@ -826,6 +830,8 @@ export function FlipsView() {
       applaudCount: v.applauds || v.applaudCount || 0,
       talentScore: v.userRating ?? v.avgRating ?? v.rating ?? 9.2,
       isVerified: Boolean(v.isVerified ?? v.author?.isVerified ?? true),
+      filter: v.filter || null,
+      filterIntensity: v.filterIntensity ?? null,
       comments: v.comments || [],
     }));
   }, [feedVideos]);

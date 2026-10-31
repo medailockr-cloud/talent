@@ -530,6 +530,8 @@ function FeedVideoCard({
           poster={video.videoThumb || video.thumbnailUrl || ''}
           isPlaying={isPlaying}
           isMuted={!isPlaying || isMuted}
+          filter={video.filter}
+          filterIntensity={video.filterIntensity}
           videoRef={videoRef}
           onTimeUpdate={(t) => setCurrentTime(t)}
           onLoadedMetadata={(d) => setDuration(d)}

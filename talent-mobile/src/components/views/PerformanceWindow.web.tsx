@@ -11,6 +11,8 @@ import {PerformanceStyles,timeLabel} from '../ui/PerformanceSurface.web';
 import {JudgeControl} from '../ui/JudgeControl.web';
 import {TalkPanel} from '../ui/TalkPanel.web';
 import {PerformanceWindowStyles} from './PerformanceWindowStyles.web';
+import {getEffectiveFilterCss} from '../../constants/filters';
+import {MediaFilterOverlay} from '../ui/MediaFilterOverlay';
 
 type Pane='Moments'|'Conversation'|'Talent Passport';
 export function PerformanceWindow(){
@@ -65,7 +67,8 @@ function WindowPlayer({video,entryTime,onBack}:{video:any;entryTime:number;onBac
  <div className="pw-eyebrow"><span>THE PERFORMANCE</span><span>Licensed sample</span></div>
  <div className="pw-media" ref={mediaBox}>
  <img className="pw-backdrop" src={video.thumbnailUrl||video.videoThumb} alt="" aria-hidden="true"/>
- <video ref={player} src={video.url||video.videoUrl} poster={video.thumbnailUrl||video.videoThumb} playsInline muted={muted} preload="auto" loop={!loop} onLoadedMetadata={e=>metadata(e.currentTarget)} onTimeUpdate={e=>updateTime(e.currentTarget)} onError={()=>setFailed(true)} aria-label={`${video.title} performance`} />
+ <video ref={player} src={video.url||video.videoUrl} poster={video.thumbnailUrl||video.videoThumb} playsInline muted={muted} preload="auto" loop={!loop} onLoadedMetadata={e=>metadata(e.currentTarget)} onTimeUpdate={e=>updateTime(e.currentTarget)} onError={()=>setFailed(true)} aria-label={`${video.title} performance`} style={{ filter: getEffectiveFilterCss(video.filter, video.filterIntensity) }} />
+ <MediaFilterOverlay filter={video.filter} filterIntensity={video.filterIntensity} />
  <button className="pw-touch" aria-label={paused||blocked?'Play performance':'Pause performance'} aria-pressed={!paused&&!blocked} onClick={togglePlay} onKeyDown={e=>{if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();setLoop(null);seek(time+(e.key==='ArrowRight'?5:-5));}}}/>
  <div className="pw-media-top"><span>{video.category} · PERFORMANCE</span><button aria-label={full?'Return to normal view':'Open full screen'} onClick={()=>void fullScreen()}>{full?<X size={19}/>:<Expand size={19}/>}<small>{full?'Normal view':'Full screen'}</small></button></div>
  {(paused||blocked)&&!failed&&<div className="pw-play-indicator" aria-hidden="true"><Play size={32} fill="white"/></div>}
