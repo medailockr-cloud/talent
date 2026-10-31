@@ -2,7 +2,7 @@ import { Storage } from '@google-cloud/storage';
 import path from 'path';
 import fs from 'fs';
 
-const bucketName = process.env.GCS_BUCKET_NAME || '';
+const bucketName = process.env.GCS_BUCKET_NAME || 'talent-media-production';
 const cdnBaseUrl = (process.env.CDN_BASE_URL || '').replace(/\/$/, '');
 
 let storageClient: Storage | null = null;
@@ -53,7 +53,7 @@ export const uploadFileToStorage = async (
 
   await bucket.upload(localFilePath, {
     destination: cleanDestination,
-    metadata: contentType ? { contentType } : undefined,
+    metadata: { contentType: contentType || undefined, cacheControl: 'public, max-age=31536000' },
     resumable: false,
   });
 

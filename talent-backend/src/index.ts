@@ -413,6 +413,7 @@ app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
         const destFolder = isImageFile ? 'images' : 'videos';
         const destPath = `${destFolder}/${uploadedFile.filename}`;
         url = await uploadFileToStorage(uploadedFile.path, destPath, uploadedFile.mimetype);
+        if (uploadedFile.path && fs.existsSync(uploadedFile.path)) { fs.unlink(uploadedFile.path, () => {}); }
       } catch (storageErr) {
         console.warn('Google Cloud Storage upload failed, falling back to local storage URL:', storageErr);
         url = `${effectiveBase}/uploads/${uploadedFile.filename}`;
@@ -821,6 +822,7 @@ app.put('/api/profile/me', requireAuth, upload.single('avatar'), async (req, res
         try {
           const destPath = `avatars/${req.file.filename}`;
           updateData.avatarUrl = await uploadFileToStorage(req.file.path, destPath, req.file.mimetype);
+          if (req.file.path && fs.existsSync(req.file.path)) { fs.unlink(req.file.path, () => {}); }
         } catch (storageErr) {
           console.warn('Google Cloud Storage avatar upload failed, falling back to local storage URL:', storageErr);
           updateData.avatarUrl = `${effectiveBase}/uploads/${req.file.filename}`;
