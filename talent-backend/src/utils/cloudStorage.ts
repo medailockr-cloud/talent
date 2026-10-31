@@ -149,7 +149,6 @@ export const generateUploadSignedUrl = async (
     version: 'v4',
     action: 'write',
     expires: Date.now() + 15 * 60 * 1000,
-    contentType: contentType || (folder === 'images' ? 'image/jpeg' : 'video/mp4'),
   });
 
   const publicUrl = getPublicStorageUrl(destinationPath);

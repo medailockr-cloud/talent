@@ -1781,8 +1781,10 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
           directPublicUrl = signedInfo.publicUrl;
           console.log("Direct storage upload successful:", directPublicUrl);
         }
-      } catch (signedErr) {
-        console.warn("Direct signed URL upload unavailable or failed, falling back to server upload:", signedErr);
+      } catch (signedErr: any) {
+        console.error("Direct storage upload failed:", signedErr);
+        const errMsg = signedErr?.response?.data?.error || signedErr?.message || "Storage upload failed";
+        throw new Error(`Cloud Storage upload failed: ${errMsg}`);
       }
 
       if (directPublicUrl) {
