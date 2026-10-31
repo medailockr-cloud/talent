@@ -131,7 +131,7 @@ function VideoPlayerModal({
         p.catch(() => {
           if (videoRef.current) {
             videoRef.current.muted = true;
-            videoRef.current.play().catch(() => {});
+            videoRef.current.play().catch(() => { });
           }
         });
       }
@@ -603,14 +603,14 @@ function ProfileFeedVideoCard({
         {isMediaImage(video.videoUrl) ? (
           Platform.OS === "web" ? (
             <img
-              src={resolveMediaUrl(video.videoUrl)}
+              src={video.videoUrl}
               style={{ width: "100%", height: "100%", objectFit: "cover", filter: getEffectiveFilterCss(video.filter, video.filterIntensity) }}
               alt="Performance"
             />
           ) : (
             <View className="flex-1 items-center justify-center bg-black">
               <Image
-                source={{ uri: resolveMediaUrl(video.videoUrl) }}
+                source={{ uri: video.videoUrl }}
                 className="w-full h-full opacity-90 absolute"
                 resizeMode="cover"
               />
@@ -635,7 +635,7 @@ function ProfileFeedVideoCard({
           <View className="w-full h-full bg-black overflow-hidden">
             <AppVideoPlayer
               src={resolveMediaUrl(video.videoUrl)}
-              poster={resolveMediaUrl(video.videoThumb)}
+              poster={video.videoThumb}
               isPlaying={isPlaying}
               isMuted={!isPlaying}
               filter={video.filter}
@@ -700,7 +700,7 @@ function ProfileFeedVideoCard({
 
         {isJudgingActive && (
           <View className="absolute inset-0 bg-black/60 items-center justify-center z-20">
-            <Text 
+            <Text
               className="text-white text-[72px] font-bold tracking-tighter"
               style={{ textShadowColor: 'rgba(0,0,0,0.7)', textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 12 }}
             >
@@ -804,8 +804,8 @@ function ProfileFeedVideoCard({
           <TouchableOpacity
             onPress={async () => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              api.post(`/videos/${video.id}/share`).catch(() => {});
-              const shareUrl = typeof window !== 'undefined' && window.location 
+              api.post(`/videos/${video.id}/share`).catch(() => { });
+              const shareUrl = typeof window !== 'undefined' && window.location
                 ? `${window.location.origin}/video/${video.id}`
                 : `https://talent.app/video/${video.id}`;
               if (Platform.OS === 'web') {
@@ -854,7 +854,7 @@ function ProfileFeedVideoCard({
           <TouchableOpacity activeOpacity={1} onPress={() => setShowJudgeModal(false)} className="flex-1 bg-black/75 justify-end items-center">
             <TouchableOpacity activeOpacity={1} onPress={(e: any) => e.stopPropagation?.()} className="bg-[#171922] w-full max-w-md rounded-t-3xl pb-10 pt-5 px-6 border-t border-white/10">
               <View className="w-10 h-1 bg-white/20 rounded-full self-center mb-5" />
-              
+
               <View className="flex-row items-center justify-between mb-3">
                 <View className="flex-row items-center gap-2">
                   <Gauge color="#E91E76" size={20} />
@@ -884,7 +884,7 @@ function ProfileFeedVideoCard({
 
               {/* Score Stepper Controls (- / +) */}
               <View className="flex-row items-center justify-center gap-4 my-4">
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={() => {
                     const next = Math.max(1.0, parseFloat((tempScore - 0.5).toFixed(1)));
                     setTempScore(next);
@@ -896,7 +896,7 @@ function ProfileFeedVideoCard({
                   <Text className="text-white text-sm font-bold">-0.5</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={() => {
                     const next = Math.max(1.0, parseFloat((tempScore - 0.1).toFixed(1)));
                     setTempScore(next);
@@ -908,7 +908,7 @@ function ProfileFeedVideoCard({
                   <Text className="text-white text-sm font-bold">-0.1</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={() => {
                     const next = Math.min(10.0, parseFloat((tempScore + 0.1).toFixed(1)));
                     setTempScore(next);
@@ -920,7 +920,7 @@ function ProfileFeedVideoCard({
                   <Text className="text-white text-sm font-bold">+0.1</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={() => {
                     const next = Math.min(10.0, parseFloat((tempScore + 0.5).toFixed(1)));
                     setTempScore(next);
@@ -1110,7 +1110,7 @@ export function ProfileView({
         typeof postId === "number" ||
         (!isNaN(Number(postId)) && !String(postId).startsWith("dummy") && !String(postId).startsWith("featured"))
       ) {
-        await api.put(`/videos/${postId}`, { 
+        await api.put(`/videos/${postId}`, {
           title: newTitle,
           allowJudging: editAllowJudging,
           allowComments: editAllowComments
@@ -1121,8 +1121,8 @@ export function ProfileView({
       setProfileData((prev: any) => {
         if (!prev) return prev;
         const updatedVideos = (prev.videos || []).map((v: any) =>
-          String(v.id) === String(postId) 
-            ? { ...v, title: newTitle, allowJudging: editAllowJudging, allowComments: editAllowComments } 
+          String(v.id) === String(postId)
+            ? { ...v, title: newTitle, allowJudging: editAllowJudging, allowComments: editAllowComments }
             : v
         );
         return { ...prev, videos: updatedVideos };
@@ -1137,8 +1137,8 @@ export function ProfileView({
       setProfileData((prev: any) => {
         if (!prev) return prev;
         const updatedVideos = (prev.videos || []).map((v: any) =>
-          String(v.id) === String(postId) 
-            ? { ...v, title: newTitle, allowJudging: editAllowJudging, allowComments: editAllowComments } 
+          String(v.id) === String(postId)
+            ? { ...v, title: newTitle, allowJudging: editAllowJudging, allowComments: editAllowComments }
             : v
         );
         return { ...prev, videos: updatedVideos };
@@ -1186,7 +1186,7 @@ export function ProfileView({
     if (!selectedPostForOptions) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.clipboard) {
-      await navigator.clipboard.writeText(`https://talent.app/video/${selectedPostForOptions.id}`).catch(() => {});
+      await navigator.clipboard.writeText(`https://talent.app/video/${selectedPostForOptions.id}`).catch(() => { });
     }
     Alert.alert("Copied", "Link copied to clipboard!");
     setIsPostOptionsModalVisible(false);
@@ -1277,10 +1277,10 @@ export function ProfileView({
       }
 
       const res = await api.put("/profile/me", formData);
-      
+
       const updatedProfile = res.data;
       setProfileData({ ...profileData, ...updatedProfile });
-      
+
       if (checkAuth) {
         await checkAuth();
       }
@@ -1331,7 +1331,7 @@ export function ProfileView({
       if (status === 401 || status === 404) {
         console.log(`Profile fetch (${endpoint}): status ${status} (unauthenticated or removed).`);
         if (isViewingSelf) {
-          useAuthStore.getState().logout().catch(() => {});
+          useAuthStore.getState().logout().catch(() => { });
         }
         setProfileData(null);
       } else {
@@ -1587,7 +1587,7 @@ export function ProfileView({
                   }}
                   playingVideoId={playingVideoId}
                   setPlayingVideoId={setPlayingVideoId}
-                  onPass={() => {}}
+                  onPass={() => { }}
                   onMaximize={(url, filter, filterIntensity) => playVideo(url, filter, filterIntensity)}
                   onTalk={() => {
                     setIsProfileFeedOpen(false);
@@ -1633,11 +1633,11 @@ export function ProfileView({
   if (!profileData && !isLoading) {
     return (
       <View className="flex-1 items-center justify-center p-6" style={{ backgroundColor: theme.bg }}>
-        <View 
+        <View
           style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
           className="w-full max-w-[360px] p-8 rounded-3xl border items-center text-center shadow-xl"
         >
-          <View 
+          <View
             style={{ backgroundColor: `${theme.primary}15`, borderColor: `${theme.primary}30` }}
             className="w-20 h-20 rounded-full border items-center justify-center mb-5"
           >
@@ -1686,11 +1686,11 @@ export function ProfileView({
               prevShows.map((s: any) =>
                 s.id === showId
                   ? {
-                      ...s,
-                      isVisiting: isBooked,
-                      isBooked: isBooked,
-                      visiting: Math.max(0, (s.visiting || 0) + (isBooked ? 1 : -1)),
-                    }
+                    ...s,
+                    isVisiting: isBooked,
+                    isBooked: isBooked,
+                    visiting: Math.max(0, (s.visiting || 0) + (isBooked ? 1 : -1)),
+                  }
                   : s,
               ),
             );
@@ -1712,7 +1712,7 @@ export function ProfileView({
         }
       >
         {/* Top Actions */}
-        <View 
+        <View
           className="flex-row justify-between items-center px-4 pb-4"
           style={{ backgroundColor: theme.headerBg, paddingTop: topInset + 8 }}
         >
@@ -1767,7 +1767,7 @@ export function ProfileView({
               }
             }}
           >
-            <View 
+            <View
               style={{ borderColor: theme.primary, backgroundColor: theme.surfaceBg }}
               className="w-[100px] h-[100px] rounded-full overflow-hidden border-[2px] shadow-lg"
             >
@@ -1778,9 +1778,9 @@ export function ProfileView({
               />
             </View>
             {/* Online Dot */}
-            <View 
+            <View
               style={{ borderColor: theme.bg }}
-              className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-[#00E575] border-[2.5px]" 
+              className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-[#00E575] border-[2.5px]"
             />
           </TouchableOpacity>
         </View>
@@ -1790,7 +1790,7 @@ export function ProfileView({
           <View className="items-center">
             {/* Name & Badge */}
             <View className="flex-row items-center justify-center gap-2">
-              <Text 
+              <Text
                 className="text-[32px] font-serif font-bold tracking-tight text-center"
                 style={{ color: theme.text }}
               >
@@ -1838,7 +1838,7 @@ export function ProfileView({
 
             {/* Quote / Caption */}
             {Boolean(profileData?.quote || profileData?.bio) && (
-              <Text 
+              <Text
                 className="text-[15px] italic text-center mt-3 px-6 leading-6 opacity-90"
                 style={{ color: theme.text }}
               >
@@ -1849,7 +1849,7 @@ export function ProfileView({
 
           {/* Metrics 4-Grid Cards */}
           <View className="flex-row gap-2 mt-5">
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setIsScoreBreakdownOpen(true)}
               style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
               className="flex-1 p-3 rounded-2xl border items-start min-h-[72px] justify-between">
@@ -1898,7 +1898,7 @@ export function ProfileView({
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => {
                 setFollowersModalTab('followers');
                 setIsFansModalOpen(true);
@@ -2001,7 +2001,7 @@ export function ProfileView({
                 </Text>
               </TouchableOpacity>
             ))}
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => {
                 if (isOwnProfile) {
                   setIsEditingProfile(true);
@@ -2021,7 +2021,7 @@ export function ProfileView({
         </View>
 
         {/* Tabs */}
-        <View 
+        <View
           className="flex-row border-b mb-6 px-4 justify-between"
           style={{ borderBottomColor: theme.border }}
         >
@@ -2032,7 +2032,7 @@ export function ProfileView({
             }}
             className={`flex-1 items-center pb-3 flex-row justify-center gap-2 ${activeTab !== "Performances" ? "opacity-60" : ""}`}
           >
-            <View 
+            <View
               className="flex-row items-center gap-2 pb-1"
               style={activeTab === "Performances" ? { borderBottomWidth: 3, borderBottomColor: theme.primary } : undefined}
             >
@@ -2056,7 +2056,7 @@ export function ProfileView({
             }}
             className={`flex-1 items-center pb-3 flex-row justify-center gap-2 ${activeTab !== "Kept" ? "opacity-60" : ""}`}
           >
-            <View 
+            <View
               className="flex-row items-center gap-2 pb-1"
               style={activeTab === "Kept" ? { borderBottomWidth: 3, borderBottomColor: theme.primary } : undefined}
             >
@@ -2080,7 +2080,7 @@ export function ProfileView({
             }}
             className={`flex-1 items-center pb-3 flex-row justify-center gap-2 ${activeTab !== "Shows" ? "opacity-60" : ""}`}
           >
-            <View 
+            <View
               className="flex-row items-center gap-2 pb-1"
               style={activeTab === "Shows" ? { borderBottomWidth: 3, borderBottomColor: theme.primary } : undefined}
             >
@@ -2103,7 +2103,7 @@ export function ProfileView({
             }}
             className={`flex-1 items-center pb-3 flex-row justify-center gap-2 ${activeTab !== "About" ? "opacity-60" : ""}`}
           >
-            <View 
+            <View
               className="flex-row items-center gap-2 pb-1"
               style={activeTab === "About" ? { borderBottomWidth: 3, borderBottomColor: theme.primary } : undefined}
             >
@@ -2129,7 +2129,7 @@ export function ProfileView({
                   Featured Performance
                 </Text>
                 <View className="flex-row gap-2">
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       setIsProfileFeedOpen(true);
@@ -2141,7 +2141,7 @@ export function ProfileView({
                       Live View
                     </Text>
                   </TouchableOpacity>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       router.push('/create');
@@ -2197,12 +2197,12 @@ export function ProfileView({
                 }
 
                 const featuredId = String(featuredVideo.id);
-                const featuredVideoUrl = resolveMediaUrl(featuredVideo.url || featuredVideo.videoUrl || "");
+                const featuredVideoUrl = featuredVideo.url || featuredVideo.videoUrl || "";
                 const featuredTitle = editedTitles[featuredId] || featuredVideo.title || "Acoustic Sunset Sessions";
                 const isImg = isMediaImage(featuredVideoUrl);
                 const featuredCategory = featuredVideo.category || (isImg ? "Visual Art" : "Performance");
                 const featuredViews = featuredVideo.views ? `${featuredVideo.views} views` : "3.2M views";
-                const posterUrl = resolveMediaUrl(featuredVideo.thumbnailUrl || featuredVideo.img || featuredVideo.url || "");
+                const posterUrl = featuredVideo.thumbnailUrl || featuredVideo.img || featuredVideo.url || "";
 
                 return (
                   <TouchableOpacity
@@ -2246,7 +2246,7 @@ export function ProfileView({
                     <View className="absolute inset-0 bg-black/40" />
 
                     {/* Featured Badge */}
-                    <View 
+                    <View
                       style={{ backgroundColor: theme.primary }}
                       className="absolute top-4 left-4 px-3 py-1.5 rounded-md flex-row items-center gap-1.5 shadow-sm z-10"
                     >
@@ -2255,8 +2255,8 @@ export function ProfileView({
                         {pinnedVideoId === featuredId
                           ? "PINNED • FEATURED TAKE"
                           : isImg
-                          ? "LATEST UPLOAD • TAP TO VIEW FULL"
-                          : "FEATURED • TAP TO PLAY FULL"}
+                            ? "LATEST UPLOAD • TAP TO VIEW FULL"
+                            : "FEATURED • TAP TO PLAY FULL"}
                       </Text>
                     </View>
 
@@ -2418,15 +2418,15 @@ export function ProfileView({
                           isPinned
                             ? { borderColor: theme.primary, borderWidth: 2 }
                             : i === 0 && !pinnedVideoId
-                            ? { borderColor: theme.primary, borderWidth: 2 }
-                            : { borderColor: theme.border, borderWidth: 1 }
+                              ? { borderColor: theme.primary, borderWidth: 2 }
+                              : { borderColor: theme.border, borderWidth: 1 }
                         }
                         className="w-[140px] h-[190px] rounded-[16px] overflow-hidden relative"
                       >
                         {perf.isImg ? (
                           Platform.OS === "web" ? (
                             <img
-                              src={resolveMediaUrl(perf.videoUrl || perf.img)}
+                              src={perf.videoUrl || perf.img}
                               style={{
                                 width: "100%",
                                 height: "100%",
@@ -2567,105 +2567,105 @@ export function ProfileView({
               >
                 {(shows && shows.length > 0 ? (
                   shows.map((show, i) => {
-                  const date = new Date(show.date);
-                  const dateM = date.getDate().toString();
-                  const dateD = date
-                    .toLocaleString("default", { month: "short" })
-                    .toUpperCase();
+                    const date = new Date(show.date);
+                    const dateM = date.getDate().toString();
+                    const dateD = date
+                      .toLocaleString("default", { month: "short" })
+                      .toUpperCase();
 
-                  return (
-                    <TouchableOpacity
-                      key={show.id || i}
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setActiveShowModal(show);
-                      }}
-                      activeOpacity={0.8}
-                      style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
-                      className="w-[300px] border rounded-2xl flex-col overflow-hidden"
-                    >
-                      <View className="p-4 flex-row items-center gap-4">
-                        <View 
-                          style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
-                          className="items-center w-[48px] h-[52px] border rounded-xl justify-center"
-                        >
-                          <Text className="font-bold text-[18px] leading-5" style={{ color: theme.text }}>
-                            {dateM}
-                          </Text>
-                          <Text className="text-[10px] font-bold" style={{ color: theme.primary }}>
-                            {dateD}
-                          </Text>
-                        </View>
-                        <View className="w-14 h-14 rounded-xl overflow-hidden bg-black/10">
-                          {show.image ? (
-                            <Image
-                              source={{ uri: show.image }}
-                              className="w-full h-full opacity-80"
-                            />
-                          ) : null}
-                        </View>
-                        <View className="flex-1">
-                          <Text
-                            className="font-bold text-[15px] mb-1"
-                            style={{ color: theme.text }}
-                            numberOfLines={1}
+                    return (
+                      <TouchableOpacity
+                        key={show.id || i}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setActiveShowModal(show);
+                        }}
+                        activeOpacity={0.8}
+                        style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
+                        className="w-[300px] border rounded-2xl flex-col overflow-hidden"
+                      >
+                        <View className="p-4 flex-row items-center gap-4">
+                          <View
+                            style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
+                            className="items-center w-[48px] h-[52px] border rounded-xl justify-center"
                           >
-                            {show.title}
-                          </Text>
-                          <View className="flex-row items-center gap-1">
-                            <MapPin color={theme.primary} size={12} />
+                            <Text className="font-bold text-[18px] leading-5" style={{ color: theme.text }}>
+                              {dateM}
+                            </Text>
+                            <Text className="text-[10px] font-bold" style={{ color: theme.primary }}>
+                              {dateD}
+                            </Text>
+                          </View>
+                          <View className="w-14 h-14 rounded-xl overflow-hidden bg-black/10">
+                            {show.image ? (
+                              <Image
+                                source={{ uri: show.image }}
+                                className="w-full h-full opacity-80"
+                              />
+                            ) : null}
+                          </View>
+                          <View className="flex-1">
                             <Text
-                              className="text-[12px]"
-                              style={{ color: theme.textSecondary }}
+                              className="font-bold text-[15px] mb-1"
+                              style={{ color: theme.text }}
                               numberOfLines={1}
                             >
-                              {show.location}
+                              {show.title}
                             </Text>
+                            <View className="flex-row items-center gap-1">
+                              <MapPin color={theme.primary} size={12} />
+                              <Text
+                                className="text-[12px]"
+                                style={{ color: theme.textSecondary }}
+                                numberOfLines={1}
+                              >
+                                {show.location}
+                              </Text>
+                            </View>
                           </View>
                         </View>
-                      </View>
-                      <View 
-                        style={{ borderTopColor: theme.border, backgroundColor: theme.surfaceBg }}
-                        className="px-4 py-3 border-t flex-row items-center justify-between"
-                      >
-                        <View className="flex-row items-center gap-1.5">
-                          <User color={theme.primary} size={14} />
-                          <Text className="text-[12px]" style={{ color: theme.textSecondary }}>
-                            {show.visiting} visiting
-                          </Text>
+                        <View
+                          style={{ borderTopColor: theme.border, backgroundColor: theme.surfaceBg }}
+                          className="px-4 py-3 border-t flex-row items-center justify-between"
+                        >
+                          <View className="flex-row items-center gap-1.5">
+                            <User color={theme.primary} size={14} />
+                            <Text className="text-[12px]" style={{ color: theme.textSecondary }}>
+                              {show.visiting} visiting
+                            </Text>
+                          </View>
+                          {show.isVisiting ? (
+                            <View className="bg-[#10b981]/10 px-3 py-1.5 rounded-full border border-[#10b981]/30 flex-row items-center gap-1">
+                              <CheckCircle color="#10b981" size={12} />
+                              <Text className="text-[#10b981] text-[11px] font-bold">
+                                You're Visiting
+                              </Text>
+                            </View>
+                          ) : (
+                            <View
+                              style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}
+                              className="px-3 py-1.5 rounded-full border"
+                            >
+                              <Text className="text-[11px] font-bold" style={{ color: theme.text }}>
+                                RSVP
+                              </Text>
+                            </View>
+                          )}
                         </View>
-                        {show.isVisiting ? (
-                          <View className="bg-[#10b981]/10 px-3 py-1.5 rounded-full border border-[#10b981]/30 flex-row items-center gap-1">
-                            <CheckCircle color="#10b981" size={12} />
-                            <Text className="text-[#10b981] text-[11px] font-bold">
-                              You're Visiting
-                            </Text>
-                          </View>
-                        ) : (
-                          <View 
-                            style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}
-                            className="px-3 py-1.5 rounded-full border"
-                          >
-                            <Text className="text-[11px] font-bold" style={{ color: theme.text }}>
-                              RSVP
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })
-              ) : (
-                <View
-                  style={{ borderColor: theme.border, backgroundColor: theme.surfaceBg }}
-                  className="py-5 px-6 rounded-2xl border border-dashed items-center justify-center my-1"
-                >
-                  <Calendar color={theme.textSecondary} size={24} />
-                  <Text className="text-[13px] font-bold mt-2" style={{ color: theme.text }}>
-                    No Upcoming Shows
-                  </Text>
-                </View>
-              ))}
+                      </TouchableOpacity>
+                    );
+                  })
+                ) : (
+                  <View
+                    style={{ borderColor: theme.border, backgroundColor: theme.surfaceBg }}
+                    className="py-5 px-6 rounded-2xl border border-dashed items-center justify-center my-1"
+                  >
+                    <Calendar color={theme.textSecondary} size={24} />
+                    <Text className="text-[13px] font-bold mt-2" style={{ color: theme.text }}>
+                      No Upcoming Shows
+                    </Text>
+                  </View>
+                ))}
               </ScrollView>
             </View>
           </View>
@@ -2696,7 +2696,7 @@ export function ProfileView({
                 style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}
                 className="mx-5 rounded-[24px] items-center justify-center border p-8"
               >
-                <View 
+                <View
                   style={{ backgroundColor: `${theme.primary}15`, borderColor: `${theme.primary}30` }}
                   className="w-14 h-14 rounded-full border items-center justify-center mb-3"
                 >
@@ -2876,7 +2876,7 @@ export function ProfileView({
                   );
                 })
               ) : (
-                <View 
+                <View
                   style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
                   className="items-center justify-center p-8 border rounded-[24px]"
                 >
@@ -2896,7 +2896,7 @@ export function ProfileView({
         {activeTab === "About" && (
           <View className="px-5 mb-8">
             {/* Artist Bio */}
-            <View 
+            <View
               style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
               className="border rounded-xl p-5 mb-4"
             >
@@ -2943,7 +2943,7 @@ export function ProfileView({
             </TouchableOpacity>
 
             {/* Streaming & Socials */}
-            <View 
+            <View
               style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
               className="border rounded-xl p-5 mb-6"
             >
@@ -3109,7 +3109,7 @@ export function ProfileView({
           <View className="flex-1" style={{ backgroundColor: theme.bg }}>
             {activeSettingView === null ? (
               <>
-                <View 
+                <View
                   className="flex-row items-center justify-between px-5 pt-14 pb-4 border-b"
                   style={{ borderBottomColor: theme.border }}
                 >
@@ -3225,7 +3225,7 @@ export function ProfileView({
               </>
             ) : activeSettingView === "appearance" ? (
               <>
-                <View 
+                <View
                   className="flex-row items-center justify-between px-5 pt-14 pb-4 border-b"
                   style={{ backgroundColor: theme.bg, borderBottomColor: theme.border }}
                 >
@@ -3246,7 +3246,7 @@ export function ProfileView({
                       </Text>
                     </View>
                   </View>
-                  <View 
+                  <View
                     className="px-2.5 py-1 rounded-full flex-row items-center gap-1.5"
                     style={{ backgroundColor: theme.primary + '20', borderWidth: 1, borderColor: theme.primary + '40' }}
                   >
@@ -3263,16 +3263,16 @@ export function ProfileView({
                     <Text className="text-[12px] font-bold tracking-wider uppercase mb-3" style={{ color: theme.textSecondary }}>
                       LIVE THEME PREVIEW
                     </Text>
-                    <View 
+                    <View
                       className="rounded-2xl p-4 mb-6 border relative overflow-hidden"
-                      style={{ 
-                        backgroundColor: theme.cardBg, 
+                      style={{
+                        backgroundColor: theme.cardBg,
                         borderColor: theme.borderStrong,
                       }}
                     >
                       <View className="flex-row items-center justify-between mb-3">
                         <View className="flex-row items-center gap-2.5">
-                          <View 
+                          <View
                             className="w-10 h-10 rounded-full items-center justify-center"
                             style={{ backgroundColor: theme.surfaceBg, borderWidth: 1.5, borderColor: theme.primary }}
                           >
@@ -3291,7 +3291,7 @@ export function ProfileView({
                             </Text>
                           </View>
                         </View>
-                        <View 
+                        <View
                           className="px-3 py-1 rounded-full"
                           style={{ backgroundColor: theme.primary }}
                         >
@@ -3354,8 +3354,8 @@ export function ProfileView({
                               backgroundColor: isActive
                                 ? theme.primary
                                 : theme.isDark
-                                ? "rgba(255,255,255,0.06)"
-                                : "rgba(0,0,0,0.04)",
+                                  ? "rgba(255,255,255,0.06)"
+                                  : "rgba(0,0,0,0.04)",
                               borderColor: isActive ? theme.primary : theme.border,
                             }}
                           >
@@ -3397,13 +3397,13 @@ export function ProfileView({
                                 ? "#141419"
                                 : "#F4F4F5"
                               : itemTheme.isDark
-                              ? "#0D0E12"
-                              : "#FFFFFF",
+                                ? "#0D0E12"
+                                : "#FFFFFF",
                             borderColor: isSelected
                               ? itemTheme.primary
                               : itemTheme.isDark
-                              ? "rgba(255,255,255,0.08)"
-                              : "#E4E4E7",
+                                ? "rgba(255,255,255,0.08)"
+                                : "#E4E4E7",
                             borderWidth: isSelected ? 2 : 1,
                           }}
                         >
@@ -3448,14 +3448,14 @@ export function ProfileView({
                                         id === "light"
                                           ? `${itemTheme.primary}20`
                                           : itemTheme.isDark
-                                          ? "rgba(255, 255, 255, 0.08)"
-                                          : "rgba(0, 0, 0, 0.05)",
+                                            ? "rgba(255, 255, 255, 0.08)"
+                                            : "rgba(0, 0, 0, 0.05)",
                                       borderColor:
                                         id === "light"
                                           ? `${itemTheme.primary}40`
                                           : itemTheme.isDark
-                                          ? "rgba(255, 255, 255, 0.15)"
-                                          : "rgba(0, 0, 0, 0.1)",
+                                            ? "rgba(255, 255, 255, 0.15)"
+                                            : "rgba(0, 0, 0, 0.1)",
                                     }}
                                   >
                                     <Text
@@ -3465,8 +3465,8 @@ export function ProfileView({
                                           id === "light"
                                             ? itemTheme.primary
                                             : itemTheme.isDark
-                                            ? "#E5E7EB"
-                                            : "#4B5563",
+                                              ? "#E5E7EB"
+                                              : "#4B5563",
                                       }}
                                     >
                                       {itemTheme.badge}
@@ -3519,8 +3519,8 @@ export function ProfileView({
                               borderColor: isSelected
                                 ? itemTheme.primary
                                 : itemTheme.isDark
-                                ? "#4B5563"
-                                : "#D1D5DB",
+                                  ? "#4B5563"
+                                  : "#D1D5DB",
                               backgroundColor: isSelected ? itemTheme.primary : "transparent",
                             }}
                           >
@@ -3543,7 +3543,7 @@ export function ProfileView({
               </>
             ) : activeSettingView === "privacy" ? (
               <>
-                <View 
+                <View
                   className="flex-row items-center justify-between px-5 pt-14 pb-4 border-b"
                   style={{ borderBottomColor: theme.border }}
                 >
@@ -3618,7 +3618,7 @@ export function ProfileView({
       {isInviteModalOpen && (
         <Modal visible={true} transparent={true} animationType="slide">
           <View className="flex-1 justify-end bg-black/60">
-            <View 
+            <View
               style={{ backgroundColor: theme.cardBg, borderTopColor: theme.border }}
               className="w-full rounded-t-3xl border-t flex-col pb-8 pt-4 px-5"
             >
@@ -3636,7 +3636,7 @@ export function ProfileView({
                 </TouchableOpacity>
               </View>
 
-              <View 
+              <View
                 style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
                 className="border rounded-xl p-4 mb-4"
               >
@@ -3657,7 +3657,7 @@ export function ProfileView({
                 </View>
               </View>
 
-              <View 
+              <View
                 style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
                 className="border rounded-xl p-4 mb-6"
               >
@@ -3710,7 +3710,7 @@ export function ProfileView({
       {isScoreBreakdownOpen && (
         <Modal visible={true} transparent={true} animationType="slide">
           <View className="flex-1 justify-end bg-black/60">
-            <View 
+            <View
               style={{ backgroundColor: theme.cardBg, borderTopColor: theme.border }}
               className="w-full rounded-t-3xl border-t flex-col pb-8 pt-4 px-5"
             >
@@ -3731,7 +3731,7 @@ export function ProfileView({
                 </TouchableOpacity>
               </View>
 
-              <View 
+              <View
                 style={{ backgroundColor: theme.surfaceBg, borderColor: theme.border }}
                 className="border rounded-xl p-4 mb-4"
               >
@@ -3781,11 +3781,11 @@ export function ProfileView({
       {isEditingProfile && (
         <Modal visible={true} transparent={true} animationType="slide">
           <View className="flex-1 justify-end bg-black/50">
-            <View 
+            <View
               style={{ backgroundColor: theme.cardBg, borderTopColor: theme.border }}
               className="w-full h-[80%] rounded-t-3xl border-t flex-col shadow-2xl"
             >
-              <View 
+              <View
                 style={{ borderBottomColor: theme.border }}
                 className="flex-row justify-between items-center p-5 border-b"
               >
@@ -3803,7 +3803,7 @@ export function ProfileView({
 
               <ScrollView className="flex-1 p-5">
                 <View className="items-center mb-6">
-                  <View 
+                  <View
                     style={{ borderColor: theme.primary, backgroundColor: theme.surfaceBg }}
                     className="w-[96px] h-[96px] rounded-full border-2 overflow-hidden mb-3 relative"
                   >
@@ -3840,11 +3840,10 @@ export function ProfileView({
                           className="px-2.5 py-1 rounded-full border"
                         >
                           <Text
-                            className={`text-[10px] ${
-                              editAvatarFilter === f
-                                ? "text-white font-bold"
-                                : "font-medium"
-                            }`}
+                            className={`text-[10px] ${editAvatarFilter === f
+                              ? "text-white font-bold"
+                              : "font-medium"
+                              }`}
                             style={editAvatarFilter !== f ? { color: theme.textSecondary } : undefined}
                           >
                             {f}
@@ -4185,7 +4184,7 @@ export function ProfileView({
               <Text className="text-[18px] font-bold text-center mb-2" style={{ color: theme.text }}>
                 Delete Performance?
               </Text>
-              
+
               <Text className="text-[13px] text-center mb-6 leading-relaxed" style={{ color: theme.textSecondary }}>
                 Are you sure you want to delete{"\n"}
                 <Text className="font-bold" style={{ color: theme.text }}>
@@ -4389,7 +4388,7 @@ function SettingsRow({
       }}
     >
       <View className="flex-row items-center gap-4">
-        <View 
+        <View
           style={{ backgroundColor: theme.surfaceBg }}
           className="w-[40px] h-[40px] rounded-full items-center justify-center"
         >

@@ -516,3 +516,4 @@ export function getEffectiveFilterCss(
       : 0.85;
   return config.cssFilter(effIntensity);
 }
+
