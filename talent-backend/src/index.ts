@@ -405,7 +405,21 @@ app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
 
     // If cloudUpload is active, the URL is provided by Cloudinary via req.file.path
     const effectiveBase = getRequestBaseUrl(req);
-    const url = cloudUpload ? uploadedFile.path : `${effectiveBase}/uploads/${uploadedFile.filename}`;
+    let url: string;
+    if (cloudUpload) {
+      url = uploadedFile.path;
+    } else if (isCloudStorageEnabled()) {
+      try {
+        const destFolder = isImageFile ? 'images' : 'videos';
+        const destPath = `${destFolder}/${uploadedFile.filename}`;
+        url = await uploadFileToStorage(uploadedFile.path, destPath, uploadedFile.mimetype);
+      } catch (storageErr) {
+        console.warn('Google Cloud Storage upload failed, falling back to local storage URL:', storageErr);
+        url = `${effectiveBase}/uploads/${uploadedFile.filename}`;
+      }
+    } else {
+      url = `${effectiveBase}/uploads/${uploadedFile.filename}`;
+    }
 
     // Extract hashtags from title or description
     const textToParse = `${title || ''} ${description || ''}`;
@@ -803,7 +817,17 @@ app.put('/api/profile/me', requireAuth, upload.single('avatar'), async (req, res
     
     if (req.file) {
       const effectiveBase = getRequestBaseUrl(req);
-      updateData.avatarUrl = `${effectiveBase}/uploads/${req.file.filename}`;
+      if (isCloudStorageEnabled()) {
+        try {
+          const destPath = `avatars/${req.file.filename}`;
+          updateData.avatarUrl = await uploadFileToStorage(req.file.path, destPath, req.file.mimetype);
+        } catch (storageErr) {
+          console.warn('Google Cloud Storage avatar upload failed, falling back to local storage URL:', storageErr);
+          updateData.avatarUrl = `${effectiveBase}/uploads/${req.file.filename}`;
+        }
+      } else {
+        updateData.avatarUrl = `${effectiveBase}/uploads/${req.file.filename}`;
+      }
     }
 
     const updatedUser = await prisma.user.update({
