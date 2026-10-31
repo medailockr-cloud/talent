@@ -13,7 +13,7 @@ import { Server } from 'socket.io';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsDoc from 'swagger-jsdoc';
 import { cacheFeed, getCachedFeed, invalidateFeedCache, redis, setupSocketRedisAdapter } from './utils/redis';
-import { isCloudStorageEnabled, uploadFileToStorage } from './utils/cloudStorage';
+import { isCloudStorageEnabled, uploadFileToStorage, deleteFileFromStorage } from './utils/cloudStorage';
 import { cloudUpload } from './utils/cloudinary';
 import { convertToHLS, trimVideoFile } from './utils/ffmpeg';
 import { sendPushNotification } from './utils/notifications';
@@ -1524,6 +1524,11 @@ app.delete('/api/videos/:id', requireAuth, async (req, res) => {
     const currentUser = await prisma.user.findUnique({ where: { id: currentUserId } });
     if (video.authorId !== currentUserId && currentUser?.role !== 'ADMIN') {
       return res.status(403).json({ error: 'Unauthorized to delete this video' });
+    }
+
+    // Delete media file permanently from Cloud Storage or container disk
+    if (video.url) {
+      deleteFileFromStorage(video.url).catch(() => {});
     }
 
     // Delete related records safely

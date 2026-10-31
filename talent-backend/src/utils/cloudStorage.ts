@@ -125,3 +125,32 @@ export const uploadHlsDirectoryToStorage = async (
   return getPublicStorageUrl(`hls/${videoId}/index.m3u8`);
 };
 
+export const deleteFileFromStorage = async (fileUrl?: string | null): Promise<void> => {
+  if (!fileUrl) return;
+
+  try {
+    if (isCloudStorageEnabled() && fileUrl.includes('storage.googleapis.com')) {
+      const client = getStorageClient();
+      if (!client) return;
+
+      const urlObj = new URL(fileUrl);
+      const parts = urlObj.pathname.replace(/^\//, '').split('/');
+      const targetBucket = parts[0];
+      const objectPath = parts.slice(1).join('/');
+
+      if (targetBucket && objectPath) {
+        await client.bucket(targetBucket).file(objectPath).delete({ ignoreNotFound: true });
+      }
+    } else if (fileUrl.includes('/uploads/')) {
+      const filename = fileUrl.split('/uploads/').pop();
+      if (filename) {
+        const localPath = path.join(__dirname, '../uploads', filename);
+        if (fs.existsSync(localPath)) {
+          fs.unlinkSync(localPath);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to delete file from storage:', err);
+  }
+};
