@@ -1551,7 +1551,7 @@ app.delete('/api/videos/:id', requireAuth, async (req, res) => {
 });
 
 // User API - Update Own Video / Performance Post
-app.put('/api/videos/:id', async (req, res) => {
+app.put('/api/videos/:id', requireAuth, async (req, res) => {
   try {
     const videoId = parseInt(req.params.id as string);
     if (isNaN(videoId)) {
@@ -1562,26 +1562,9 @@ app.put('/api/videos/:id', async (req, res) => {
       return res.status(404).json({ error: 'Video not found' });
     }
 
-    let currentUserId: number | null = null;
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      try {
-        const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET) as { userId: number };
-        currentUserId = decoded.userId;
-      } catch (e) {}
-    }
-
-    if (!currentUserId && process.env.NODE_ENV !== 'production') {
-      const defaultUser = await prisma.user.findFirst();
-      currentUserId = defaultUser?.id || video.authorId;
-    }
-
-    if (!currentUserId) {
-      return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
-    }
-
+    const currentUserId = req.userId;
     const currentUser = await prisma.user.findUnique({ where: { id: currentUserId } });
-    if (video.authorId !== currentUserId && currentUser?.role !== 'ADMIN' && process.env.NODE_ENV === 'production') {
+    if (video.authorId !== currentUserId && currentUser?.role !== 'ADMIN') {
       return res.status(403).json({ error: 'Unauthorized to update this video' });
     }
     const { title, description, privacy, allowJudging, allowComments } = req.body;

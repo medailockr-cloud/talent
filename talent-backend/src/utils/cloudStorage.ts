@@ -125,32 +125,52 @@ export const uploadHlsDirectoryToStorage = async (
   return getPublicStorageUrl(`hls/${videoId}/index.m3u8`);
 };
 
-export const deleteFileFromStorage = async (fileUrl?: string | null): Promise<void> => {
-  if (!fileUrl) return;
+
+export const deleteFileFromStorage = async (fileUrl: string): Promise<boolean> => {
+  if (!fileUrl) return false;
 
   try {
-    if (isCloudStorageEnabled() && fileUrl.includes('storage.googleapis.com')) {
+    // 1. If it's a Google Cloud Storage URL for our bucket:
+    if (bucketName && (fileUrl.includes(`storage.googleapis.com/${bucketName}`) || (cdnBaseUrl && fileUrl.startsWith(cdnBaseUrl)))) {
       const client = getStorageClient();
-      if (!client) return;
+      if (!client) return false;
 
-      const urlObj = new URL(fileUrl);
-      const parts = urlObj.pathname.replace(/^\//, '').split('/');
-      const targetBucket = parts[0];
-      const objectPath = parts.slice(1).join('/');
-
-      if (targetBucket && objectPath) {
-        await client.bucket(targetBucket).file(objectPath).delete({ ignoreNotFound: true });
-      }
-    } else if (fileUrl.includes('/uploads/')) {
-      const filename = fileUrl.split('/uploads/').pop();
-      if (filename) {
-        const localPath = path.join(__dirname, '../uploads', filename);
-        if (fs.existsSync(localPath)) {
-          fs.unlinkSync(localPath);
+      let relativePath = '';
+      if (cdnBaseUrl && fileUrl.startsWith(cdnBaseUrl)) {
+        relativePath = fileUrl.replace(cdnBaseUrl, '').replace(/^\//, '');
+      } else {
+        const marker = `storage.googleapis.com/${bucketName}/`;
+        const idx = fileUrl.indexOf(marker);
+        if (idx !== -1) {
+          relativePath = fileUrl.substring(idx + marker.length);
         }
+      }
+
+      if (relativePath) {
+        const bucket = client.bucket(bucketName);
+        if (relativePath.includes('hls/')) {
+          const hlsPrefix = relativePath.substring(0, relativePath.lastIndexOf('/') + 1);
+          await bucket.deleteFiles({ prefix: hlsPrefix });
+        } else {
+          await bucket.file(relativePath).delete({ ignoreNotFound: true });
+        }
+        return true;
+      }
+    }
+
+    // 2. If it's a local container /uploads file:
+    const uploadsMatch = fileUrl.match(/\/uploads\/([^?#]+)/);
+    if (uploadsMatch) {
+      const localFilename = uploadsMatch[1];
+      const localFilePath = path.join(__dirname, '../../uploads', localFilename);
+      if (fs.existsSync(localFilePath)) {
+        fs.unlink(localFilePath, () => {});
+        return true;
       }
     }
   } catch (err) {
     console.warn('Failed to delete file from storage:', err);
   }
+
+  return false;
 };
