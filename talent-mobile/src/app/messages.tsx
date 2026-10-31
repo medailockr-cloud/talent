@@ -25,7 +25,7 @@ import {
   Check,
   CheckCheck,
 } from 'lucide-react-native';
-import { api } from '../utils/api';
+import { api, resolveMediaUrl } from '../utils/api';
 import { useThemeStore } from '../store/themeStore';
 import { useAuthStore } from '../store/authStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -224,7 +224,7 @@ export default function MessagesScreen() {
           <Image
             source={{
               uri:
-                item.user.avatarUrl ||
+                resolveMediaUrl(item.user.avatarUrl) ||
                 `https://ui-avatars.com/api/?name=${encodeURIComponent(
                   item.user.name || item.user.username || 'User'
                 )}&background=208AEF&color=fff`,
@@ -495,7 +495,7 @@ export default function MessagesScreen() {
                   <Image
                     source={{
                       uri:
-                        item.avatarUrl ||
+                        resolveMediaUrl(item.avatarUrl) ||
                         `https://ui-avatars.com/api/?name=${encodeURIComponent(
                           item.name || item.username || 'User'
                         )}&background=208AEF&color=fff`,

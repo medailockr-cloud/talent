@@ -31,7 +31,7 @@ import {
   Smile,
 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
-import { api, BACKEND_URL } from '../../utils/api';
+import { api, BACKEND_URL, resolveMediaUrl } from '../../utils/api';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
 import * as Haptics from 'expo-haptics';
@@ -472,7 +472,7 @@ export default function ChatScreen() {
           <Image
             source={{
               uri:
-                otherUser?.avatarUrl ||
+                resolveMediaUrl(otherUser?.avatarUrl) ||
                 `https://ui-avatars.com/api/?name=${encodeURIComponent(
                   otherUser?.name || otherUser?.username || 'User'
                 )}&background=208AEF&color=fff`,
@@ -636,7 +636,7 @@ export default function ChatScreen() {
                 <Image
                   source={{
                     uri:
-                      otherUser?.avatarUrl ||
+                      resolveMediaUrl(otherUser?.avatarUrl) ||
                       `https://ui-avatars.com/api/?name=${encodeURIComponent(
                         otherUser?.name || otherUser?.username || 'User'
                       )}&background=208AEF&color=fff`,
@@ -691,7 +691,7 @@ export default function ChatScreen() {
             <Image
               source={{
                 uri:
-                  otherUser?.avatarUrl ||
+                  resolveMediaUrl(otherUser?.avatarUrl) ||
                   `https://ui-avatars.com/api/?name=${encodeURIComponent(
                     otherUser?.name || otherUser?.username || 'User'
                   )}&background=208AEF&color=fff`,

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Image, RefreshControl, Platform } from 'react-native';
 import { Search, X, ChevronLeft, ChevronRight, User as UserIcon, Video as VideoIcon, MapPin, Star, Heart, Sparkles } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { api } from '../utils/api';
+import { api, resolveMediaUrl } from '../utils/api';
 import { useThemeStore } from '../store/themeStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -280,7 +280,7 @@ export default function DiscoverScreen() {
                       className="flex-row items-center gap-3.5 mb-2.5 p-3 rounded-2xl border"
                     >
                       <Image 
-                        source={{ uri: user.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || user.username || 'User')}&background=E91E76&color=fff` }} 
+                        source={{ uri: resolveMediaUrl(user.avatarUrl) || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || user.username || 'User')}&background=E91E76&color=fff` }} 
                         className="w-12 h-12 rounded-full" 
                       />
                       <View className="flex-1">
@@ -339,7 +339,7 @@ export default function DiscoverScreen() {
                       className="flex-row items-center gap-3.5 mb-2.5 p-3 rounded-2xl border"
                     >
                       <Image 
-                        source={{ uri: video.authorAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(video.author || 'Artist')}&background=E91E76&color=fff` }} 
+                        source={{ uri: resolveMediaUrl(video.authorAvatar) || `https://ui-avatars.com/api/?name=${encodeURIComponent(video.author || 'Artist')}&background=E91E76&color=fff` }} 
                         className="w-12 h-12 rounded-full" 
                       />
                       <View className="flex-1">
