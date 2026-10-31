@@ -1740,9 +1740,10 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
     } catch (err: any) {
       clearInterval(interval);
       console.error("Upload failed:", err);
+      const is413 = err?.response?.status === 413 || (typeof err?.message === "string" && err.message.includes("413"));
       const serverMsg =
-        err?.response?.status === 413
-          ? "Video file is too large to publish. Cloud Run accepts up to 28 MB. Please trim the video or record a shorter clip."
+        is413
+          ? "Video file is too large to publish (Cloud Run limit is 28 MB). Please trim the video or record a shorter clip."
           : err?.response?.data?.error ||
             err?.message ||
             "Upload failed. Please try again.";
@@ -1834,10 +1835,19 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
         allowsEditing: true,
         quality: 0.8,
         videoMaxDuration: 60,
+        videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
+        if (asset.fileSize && asset.fileSize > 28 * 1024 * 1024) {
+          const mb = (asset.fileSize / (1024 * 1024)).toFixed(1);
+          Alert.alert(
+            "Video Too Large",
+            `Selected video is ${mb} MB. Maximum allowed size is 28 MB. Please trim or select a smaller video.`
+          );
+          return;
+        }
         setRecordedVideoUri(asset.uri);
         setMediaType("video");
         setTrimStart(0);
@@ -1863,7 +1873,7 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        quality: 1,
+        quality: 0.85,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -1882,11 +1892,20 @@ export function CreateView({ onClose }: { onClose?: () => void }) {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
         allowsEditing: true,
-        quality: 1,
+        quality: 0.8,
+        videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
+        if (asset.fileSize && asset.fileSize > 28 * 1024 * 1024) {
+          const mb = (asset.fileSize / (1024 * 1024)).toFixed(1);
+          Alert.alert(
+            "File Too Large",
+            `Selected file is ${mb} MB. Maximum allowed size is 28 MB. Please trim or choose a smaller file.`
+          );
+          return;
+        }
         setRecordedVideoUri(asset.uri);
         const isImg =
           asset.type === "image" ||

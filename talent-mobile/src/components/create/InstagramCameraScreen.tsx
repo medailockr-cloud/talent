@@ -457,10 +457,19 @@ export function InstagramCameraScreen({
       const res = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
         allowsEditing: false,
-        quality: 1,
+        quality: 0.8,
+        videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
       });
       if (!res.canceled && res.assets && res.assets.length > 0) {
         const asset = res.assets[0];
+        if (asset.fileSize && asset.fileSize > 28 * 1024 * 1024) {
+          const mb = (asset.fileSize / (1024 * 1024)).toFixed(1);
+          Alert.alert(
+            "File Too Large",
+            `Selected file is ${mb} MB. Maximum upload size allowed is 28 MB. Please choose a shorter or trimmed clip.`
+          );
+          return;
+        }
         const rawDur = (asset.duration && asset.duration > 0) ? Math.round(asset.duration / 100) / 10 : undefined;
         onMediaCaptured({
           uri: asset.uri,

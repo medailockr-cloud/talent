@@ -11,30 +11,26 @@ export const getBackendBaseUrl = (): string => {
     return process.env.EXPO_PUBLIC_API_URL.replace(/\/api\/?$/, '');
   }
 
-  // When running in production or standalone native build (e.g. EAS build APK), default to Cloud Run
-  if (!__DEV__) {
-    return CLOUD_RUN_BACKEND_URL;
-  }
+  // Only if developer explicitly requested a local backend override:
+  if (process.env.EXPO_PUBLIC_USE_LOCAL_BACKEND === 'true') {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location) {
+      const hostname = window.location.hostname;
+      const protocol = window.location.protocol || 'http:';
+      if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+        return `${protocol}//${hostname}:3000`;
+      }
+    }
 
-  // On Web (browser) in development:
-  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location) {
-    const hostname = window.location.hostname;
-    const protocol = window.location.protocol || 'http:';
-    if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
-      return `${protocol}//${hostname}:3000`;
+    const hostUri = Constants.expoConfig?.hostUri || (Constants as any)?.manifest2?.extra?.expoGo?.debuggerHost;
+    if (hostUri) {
+      const ip = hostUri.split(':')[0];
+      if (ip && ip !== 'localhost' && ip !== '127.0.0.1') {
+        return `http://${ip}:3000`;
+      }
     }
   }
 
-  // On Native (Expo Go in development):
-  const hostUri = Constants.expoConfig?.hostUri || (Constants as any)?.manifest2?.extra?.expoGo?.debuggerHost;
-  if (hostUri) {
-    const ip = hostUri.split(':')[0];
-    if (ip && ip !== 'localhost' && ip !== '127.0.0.1') {
-      return `http://${ip}:3000`;
-    }
-  }
-
-  // Default fallback for preview/standalone builds and Cloud Run production:
+  // Default everywhere to production Google Cloud Run:
   return CLOUD_RUN_BACKEND_URL;
 };
 
