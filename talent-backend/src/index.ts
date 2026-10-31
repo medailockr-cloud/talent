@@ -491,8 +491,8 @@ app.post('/api/videos', requireAuth, uploadMiddleware, async (req, res) => {
       }
     } catch (e) {}
     
-    // Trigger HLS Transcoding via BullMQ Background Worker if it's a local video upload (skip images)
-    if (!cloudUpload && uploadedFile.path && !isImageFile) {
+    // Trigger HLS Transcoding via BullMQ Background Worker if it's a local video upload (skip images and direct storage uploads)
+    if (!cloudUpload && uploadedFile?.path && !isImageFile) {
       try {
         videoQueue.add('transcode', { inputPath: uploadedFile.path, videoId: video.id }).catch((err: any) => {
           console.error('[BullMQ Worker] Transcoding queue error:', err);
